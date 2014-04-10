@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>comportex viz</title>
+<style>
+
+body {
+  background:#272822;
+}
+
+text {
+  font: bold 48px monospace;
+}
+
+.enter {
+  fill: green;
+}
+
+.update {
+  fill: #bbb;
+}
+
+.exit {
+  fill: brown;
+}
+
+</style>
+<body>
+  <div id="control-bar">
+    Sim ms:<input id="sim-ms" type="text"></input>
+    <button id="sim-control">Start sim</button>
+    <button id="sim-step">Step sim</button>
+  </div>
+  <div id="viz-node"></div>
+  <script type="text/javascript" src="d3/d3.js"></script>
+  <script type="text/javascript" src="out/deps/goog/base.js"></script>
+  <script type="text/javascript" src="out/viz1.js"></script>
+  <script type="text/javascript">goog.require("comportex.viz");</script>
+</body>
