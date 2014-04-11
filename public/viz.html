@@ -4,33 +4,35 @@
 <style>
 
 body {
-  background:#272822;
+  background:#eeeeee;
 }
 
-text {
-  font: bold 48px monospace;
-}
-
-.enter {
-  fill: green;
-}
-
-.update {
-  fill: #bbb;
-}
-
-.exit {
-  fill: brown;
+#control-bar fieldset {
+  float: left;
 }
 
 </style>
 <body>
   <div id="control-bar">
-    Sim ms:<input id="sim-ms" type="text"></input>
-    <button id="sim-control">Start sim</button>
-    <button id="sim-step">Step sim</button>
+    <fieldset>
+      <legend>Simulation</legend>
+      Rate ms:<input id="sim-ms" type="text" size="4"></input>
+      <button id="sim-control">Start</button>
+      <button id="sim-step">Step</button>
+    </fieldset>
+    <fieldset>
+      <legend>Display</legend>
+      Rate ms:<input id="animation-ms" type="text" size="4"></input>
+      <button id="animation-control">Start</button>
+      <button id="animation-step">Draw now</button>
+      <input id="display-connected-insyns" type="checkbox">Connected in-synapses
+      <input id="display-disconnected-insyns" type="checkbox">Disconnected in-synapses
+      <input id="display-active-columns" type="checkbox">Active columns
+      <input id="display-overlap-columns" type="checkbox">Overlap columns
+      <input id="display-inactive-columns" type="checkbox">Inactive columns
+    </fieldset>
   </div>
-  <div id="viz-node"></div>
+  <div id="viz"></div>
   <script type="text/javascript" src="d3/d3.js"></script>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/viz1.js"></script>
