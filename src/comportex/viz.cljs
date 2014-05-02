@@ -4,6 +4,9 @@
             [org.nfrac.comportex.util :as util]
             [strokes :refer [d3]]
             [goog.dom :as dom]
+            [goog.dom.forms :as forms]
+            goog.ui.Slider
+            goog.ui.Component.EventType
             [goog.events :as events]
             [cljs.core.async :refer [put! chan <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
@@ -24,6 +27,12 @@
                         :global-inhibition false
                         :stimulus-threshold 2
                         :duty-cycle-period 100)))
+
+(defn inputs-transform
+  [xs]
+  (mapv (fn [x]
+          (mod (inc x) numb-max))
+        xs))
 
 (defn add-noise
   [delta xs]
@@ -47,19 +56,13 @@
 (def sim-step-ms (atom 1000))
 (def animation-go? (atom false))
 (def animation-step-ms (atom 1000))
-(def display-options (atom {}))
+(def display-options (atom {:display-active-columns true}))
 
 (defn sim-step!
   []
-  (let [newin (swap! input-state (partial add-noise 5))
+  (let [newin (swap! input-state inputs-transform)
         newbits (efn newin)]
-    (println (str "inputs " newin))
-    (println (str "bits " (sort newbits)))
-    (let [newr (swap! r-state p/pooling-step newbits)
-          newom (:overlaps newr)
-          newac (:active-columns newr)]
-      (println "ac " (sort newac))
-      (println "om " (sort newom)))))
+    (swap! r-state p/pooling-step newbits)))
 
 (defn run-sim
   []
@@ -74,7 +77,7 @@
 
 (strokes/bootstrap)
 
-(def width 960)
+(def width 800)
 (def bitpx 5)
 (def inbits-height (* bitpx bit-width))
 (def rgn-height (* bitpx ncol))
@@ -144,7 +147,11 @@
                          (cond
                           (= x :active) "yellow"
                           (= x :inactive) "white"
-                          :else (-> d3 (.hsl 0 1 (- 1.0 (overlap-frac x))))))}))
+                          :else (-> d3 (.hsl 0 1 (- 1.0 (overlap-frac x))))))
+                 :stroke (fn [[_ x]]
+                           (cond
+                            (= x :active) "black"
+                            :else "transparent"))}))
 
     ;; ENTER
     (-> cols (.enter)
@@ -154,7 +161,8 @@
         (.append "circle")
         (.attr {:r 1})
         (.style {:fill "white"
-                 :stroke "black"}))
+                 :stroke "black"
+                 :stroke-width 1}))
 
     ;; EXIT
     (-> cols (.exit)
@@ -162,7 +170,8 @@
         (.transition)
         (.duration 500)
         (.attr {:r 1})
-        (.style {:fill "white"}))))
+        (.style {:fill "white"
+                 :stroke "transparent"}))))
 
 (defn d3-draw-insynapses [data]
   ;; DATA JOIN
@@ -206,6 +215,24 @@
         (.attr {:y2 0})
         (.remove))))
 
+(defn detail-text
+  []
+  (let [newin @input-state
+        newbits (efn newin)
+        newr @r-state
+        newom (:overlaps newr)
+        newac (:active-columns newr)]
+    (apply str
+           (interpose \newline
+                      ["# Input"
+                       newin
+                       "# Input bits"
+                       (sort newbits)
+                       "# Active columns"
+                       (sort newac)
+                       "# Overlaps map"
+                       (sort newom)]))))
+
 ;; use core.async to run simulation separately from animation
 
 (defn listen [el type]
@@ -213,6 +240,41 @@
     (events/listen el type
                    (fn [e] (put! out e)))
     out))
+
+(defn handle-sim-ms
+  [s]
+  (let [changes (listen s goog.ui.Component.EventType/CHANGE)
+        txt (dom/getElement "sim-ms-text")]
+    (go (while true
+          (let [e (<! changes)
+                newval (reset! sim-step-ms (.getValue s))]
+            (set! (.-innerHTML txt) newval))))))
+
+(defn handle-animation-ms
+  [s]
+  (let [changes (listen s goog.ui.Component.EventType/CHANGE)
+        txt (dom/getElement "animation-ms-text")]
+    (go (while true
+          (let [e (<! changes)
+                newval (reset! animation-step-ms (.getValue s))]
+            (set! (.-innerHTML txt) newval))))))
+
+(defn init-ui!
+  []
+  (let [s-sim (doto (goog.ui.Slider.)
+                (.setId "sim-ms-slider")
+                (.setMaximum 2000)
+                (.createDom)
+                (.render (dom/getElement "sim-ms-slider-box")))
+        s-anim (doto (goog.ui.Slider.)
+                 (.setId "animation-ms-slider")
+                 (.setMaximum 2000)
+                 (.createDom)
+                 (.render (dom/getElement "animation-ms-slider-box")))]
+    (handle-sim-ms s-sim)
+    (handle-animation-ms s-anim)
+    (.setValue s-sim @sim-step-ms)
+    (.setValue s-anim @animation-step-ms)))
 
 (defn handle-sim-control
   []
@@ -233,11 +295,19 @@
           (<! clicks)
           (sim-step!)))))
 
+(defn update-text-display
+  []
+  (let [ts-el (dom/getElement "sim-timestep")
+        info-el (dom/getElement "detail-text")]
+    (set! (.-innerHTML ts-el) (:timestep @r-state))
+    (forms/setValue info-el (detail-text))))
+
 (defn animation-step!
   []
   (let [newbits (efn @input-state)
         newr @r-state
         o @display-options]
+    (update-text-display)
     (d3-draw-inbits (vec newbits))
     (let [ac (:active-columns newr)
           om (:overlaps newr)
@@ -304,17 +374,19 @@
         btns (map dom/getElement ids)
         cs (map listen btns (repeat "click"))
         cm (zipmap cs ids)]
+    (doseq [[el id] (map vector btns ids)]
+      (forms/setValue el (get @display-options (keyword id))))
     (go (while true
           (let [[e c] (alts! (keys cm))
                 id (cm c)
-                on? (.-checked (.-currentTarget e))]
+                on? (forms/getValue (.-currentTarget e))]
+            (println "display opts:")
+            (println id)
+            (println on?)
+            (println display-options)
             (swap! display-options assoc (keyword id) on?))))))
 
-;; TODO click on columns to filter display
-;; TODO control to turn on all inputs (to see all synapses)
-;; TODO allow stepping back in time
-;; TODO text info output
-
+(init-ui!)
 (handle-sim-control)
 (handle-sim-step)
 (handle-animation-control)

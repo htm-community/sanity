@@ -7,32 +7,79 @@ body {
   background:#eeeeee;
 }
 
-#control-bar fieldset {
+#header {
+
+}
+
+#viz {
   float: left;
+  clear: left;
+}
+
+#sidebar {
+  float: left;
+}
+
+.slider-box {
+  display: inline-block;
+  vertical-align: middle;
+  width: 150px;
+  height: 20px;
+}
+
+.goog-slider-horizontal {
+  width: 100%;
+  height: 100%;
+  background-color: ThreeDFace;
+  position: relative;
+  overflow: hidden;
+}
+
+.goog-slider-horizontal
+.goog-slider-thumb {
+  top: 0;
+  width: 20px;
+  height: 100%;
+  position: absolute;
+  background-color: ThreeDShadow;
+  overflow: hidden;
+}
+
+#detail-text {
+  width: 80ex;
+  height: 60ex;
 }
 
 </style>
 <body>
-  <div id="control-bar">
+  <div id="viz"></div>
+  <div id="sidebar">
     <fieldset>
       <legend>Simulation</legend>
-      Rate ms:<input id="sim-ms" type="text" size="4"></input>
+      Timestep: <span id="sim-timestep"></span></br>
+      Step ms: <div id="sim-ms-slider-box" class="slider-box"></div>
+      <span id="sim-ms-text"></span>
       <button id="sim-control">Start</button>
       <button id="sim-step">Step</button>
     </fieldset>
     <fieldset>
-      <legend>Display</legend>
-      Rate ms:<input id="animation-ms" type="text" size="4"></input>
+      <legend>Animation</legend>
+      Step ms: <div id="animation-ms-slider-box" class="slider-box"></div>
+      <span id="animation-ms-text"></span>
       <button id="animation-control">Start</button>
       <button id="animation-step">Draw now</button>
-      <input id="display-connected-insyns" type="checkbox">Connected in-synapses
-      <input id="display-disconnected-insyns" type="checkbox">Disconnected in-synapses
-      <input id="display-active-columns" type="checkbox">Active columns
-      <input id="display-overlap-columns" type="checkbox">Overlap columns
-      <input id="display-inactive-columns" type="checkbox">Inactive columns
     </fieldset>
+    <fieldset>
+      <legend>Display</legend>
+      <label><input id="display-connected-insyns" type="checkbox">Connected in-synapses</label><br/>
+      <label><input id="display-disconnected-insyns" type="checkbox">Disconnected in-synapses</label><br/>
+      <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
+      <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
+      <label><input id="display-inactive-columns" type="checkbox">Inactive columns</label>
+    </fieldset>
+    <textarea id="detail-text">
+    </textarea>
   </div>
-  <div id="viz"></div>
   <script type="text/javascript" src="d3/d3.js"></script>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/viz1.js"></script>
