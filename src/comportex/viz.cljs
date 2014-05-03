@@ -31,7 +31,7 @@
 (defn inputs-transform
   [xs]
   (mapv (fn [x]
-          (mod (inc x) numb-max))
+          (mod (+ x 2) numb-max))
         xs))
 
 (defn add-noise
@@ -49,6 +49,15 @@
 (def efn
   (enc/map-encoder numb-bit-width
                    (enc/number-linear numb-bit-width numb-domain numb-span)))
+
+(defn dense
+  [is bits]
+  (loop [bs (transient (vec (repeat bits false)))
+         is is]
+    (if (seq is)
+      (recur (assoc! bs (first is) true)
+             (rest is))
+      (persistent! bs))))
 
 (def input-state (atom (vec (repeat n-in-items (/ numb-max 2)))))
 (def r-state (atom r-init))
@@ -83,6 +92,8 @@
 (def rgn-height (* bitpx ncol))
 (def height (max inbits-height rgn-height))
 
+(def keep-steps 10)
+
 (def inbits-svg
   (-> d3 (.select "#viz") (.append "svg")
       (.attr {:width width :height height})
@@ -103,75 +114,87 @@
               :transform (str "translate(240, 32)")})))
 
 
-(defn d3-draw-inbits [data]
+(defn d3-draw-inbits [data t-now]
   ;; DATA JOIN
   (let [bits (-> inbits-svg (.selectAll "g.inbit")
-                 (.data data identity))]
+                 (.data data (fn [[i t _]]
+                               (str i "t" t))))
+        inp-fill (fn [[_ _ on?]]
+                   (if on? "grey" "white"))
+        xform (fn [[i t _]]
+                (let [tdiff (- t-now t)]
+                  (str "translate(" (* tdiff bitpx) ","
+                       (* i bitpx) ")")))]
+
     ;; UPDATE
     (-> bits
+        (.attr {:transform xform})
         (.select "rect")
-        (.style {:fill "yellow"}))
+        (.style {:fill inp-fill
+                 :stroke "black"}))
 
     ;; ENTER
     (-> bits (.enter)
         (.append "g")
         (.attr {:class "inbit"
-                :transform #(str "translate(0," (* % bitpx) ")")})
+                :transform xform})
         (.append "rect")
         (.attr {:width bitpx
                 :height bitpx})
-        (.style {:fill "grey"
+        (.style {:fill inp-fill
                  :stroke "black"}))
 
     ;; EXIT
     (-> bits (.exit)
-        (.select "rect")
-        (.style {:fill "grey"}))))
+        (.remove))))
 
 (defn overlap-frac
   [x]
   (-> (/ (- x (:stimulus-threshold @r-state))
          10) ;; arbitrary scale
-      (min 0.95)
-      (max 0.05)))
+      (min 0.90)
+      (max 0.10)))
 
-(defn d3-draw-rgn [data]
+(defn d3-draw-rgn
+  [data t-now]
   ;; DATA JOIN
   (let [cols (-> rgn-svg (.selectAll "g.rgn")
-                 (.data data first))]
+                 (.data data (fn [[id t _]]
+                               (str id "t" t))))
+        col-fill (fn [[_ _ x]]
+                   (cond
+                    (= x :active) "red"
+                    (= x :inactive) "white"
+                    :else (-> d3 (.hsl 270 1 (- 1.0 (overlap-frac x))))))
+        col-stroke (fn [[_ _ x]]
+                     (cond
+                      (= x :active) "black"
+                      :else "grey"))
+        xform (fn [[i t _]]
+                (let [tdiff (- t-now t)]
+                  (str "translate(" (* tdiff bitpx) ","
+                       (* i bitpx) ")")))]
     ;; UPDATE
     (-> cols
+        (.attr {:transform xform})
         (.select "circle")
-        (.attr {:r (/ bitpx 2)})
-        (.style {:fill (fn [[_ x]]
-                         (cond
-                          (= x :active) "yellow"
-                          (= x :inactive) "white"
-                          :else (-> d3 (.hsl 0 1 (- 1.0 (overlap-frac x))))))
-                 :stroke (fn [[_ x]]
-                           (cond
-                            (= x :active) "black"
-                            :else "transparent"))}))
+        (.style {:fill col-fill
+                 :stroke "black"}))
 
     ;; ENTER
     (-> cols (.enter)
         (.append "g")
         (.attr {:class "rgn"
-                :transform #(str "translate(0," (* (first %) bitpx) ")")})
+                :transform xform})
         (.append "circle")
-        (.attr {:r 1})
-        (.style {:fill "white"
+        (.attr {:r (/ bitpx 2)})
+        (.style {:fill col-fill
                  :stroke "black"
                  :stroke-width 1}))
 
     ;; EXIT
     (-> cols (.exit)
-        (.select "circle")
-        (.transition)
-        (.duration 500)
-        (.attr {:r 1})
-        (.style {:fill "white"
-                 :stroke "transparent"}))))
+        (.remove))))
 
 (defn d3-draw-insynapses [data]
   ;; DATA JOIN
@@ -302,22 +325,32 @@
     (set! (.-innerHTML ts-el) (:timestep @r-state))
     (forms/setValue info-el (detail-text))))
 
+(def d3-inbits-data-q (atom (vec (repeat keep-steps nil))))
+(def d3-rgn-data-q (atom (vec (repeat keep-steps nil))))
+
 (defn animation-step!
   []
-  (let [newbits (efn @input-state)
-        newr @r-state
+  (let [newr @r-state
+        t (:timestep newr)
+        newbits (efn @input-state)
+        newarray (dense newbits bit-width)
+        newin-data (map list (range bit-width) (repeat t) newarray)
+        in-data (swap! d3-inbits-data-q (fn [q]
+                                          (conj (subvec q 1) newin-data)))
         o @display-options]
     (update-text-display)
-    (d3-draw-inbits (vec newbits))
+    (d3-draw-inbits (apply concat in-data) t)
     (let [ac (:active-columns newr)
           om (:overlaps newr)
           am (zipmap ac (repeat :active))
           em (zipmap (map :id (:columns newr)) (repeat :inactive))
-          m (cond-> {}
-                    (:display-inactive-columns o) (merge em)
+          m (cond-> em
                     (:display-overlap-columns o) (merge om)
-                    (:display-active-columns o) (merge am))]
-      (d3-draw-rgn (vec m))
+                    (:display-active-columns o) (merge am))
+          new-rgn-data (map list (keys m) (repeat t) (vals m))
+          rgn-data (swap! d3-rgn-data-q (fn [q]
+                                          (conj (subvec q 1) new-rgn-data)))]
+      (d3-draw-rgn (apply concat rgn-data) t)
       (let [syn-cols (select-keys (:columns newr) (keys m))
             syn-data (->> syn-cols
                           (mapcat (fn [[col-id col]]
@@ -332,11 +365,6 @@
                                              [[in-id col-id] perm])
                                            syns)))))]
         (d3-draw-insynapses syn-data)))))
-
-(defn init-display
-  []
-  (d3-draw-inbits (vec (range bit-width)))
-  (d3-draw-rgn (mapv vector (range ncol) (repeat :inactive))))
 
 (defn run-animation
   []
@@ -369,8 +397,7 @@
   (let [ids ["display-connected-insyns"
              "display-disconnected-insyns"
              "display-active-columns"
-             "display-overlap-columns"
-             "display-inactive-columns"]
+             "display-overlap-columns"]
         btns (map dom/getElement ids)
         cs (map listen btns (repeat "click"))
         cm (zipmap cs ids)]
@@ -380,10 +407,6 @@
           (let [[e c] (alts! (keys cm))
                 id (cm c)
                 on? (forms/getValue (.-currentTarget e))]
-            (println "display opts:")
-            (println id)
-            (println on?)
-            (println display-options)
             (swap! display-options assoc (keyword id) on?))))))
 
 (init-ui!)
@@ -392,4 +415,3 @@
 (handle-animation-control)
 (handle-animation-step)
 (handle-display-options)
-(init-display)
