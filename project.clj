@@ -4,9 +4,13 @@
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [com.cemerick/pprng "0.0.2"]
                  [org.clojure/clojurescript "0.0-2197"]
+                 [org.nfrac/comportex "0.1.0-SNAPSHOT"]
                  [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
+
+                 [rm-hull/monet "0.1.12"]
+                 
                  [net.drib/strokes "0.5.1"]
-                 [org.nfrac/comportex "0.1.0-SNAPSHOT"]]
+                 ]
   
   :plugins [[lein-cljsbuild "1.0.3"]]
 
