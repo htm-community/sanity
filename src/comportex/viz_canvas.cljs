@@ -68,11 +68,20 @@
 (def animation-step-ms (atom 1000))
 (def display-options (atom {:display-active-columns true}))
 
+;; keep recent time steps
+(def keep-steps 10)
+(def inbits-q (atom (vec (repeat keep-steps nil))))
+(def rgn-q (atom (vec (repeat keep-steps nil))))
+
 (defn sim-step!
   []
   (let [newin (swap! input-state inputs-transform)
-        newbits (efn newin)]
-    (swap! r-state p/pooling-step newbits)))
+        newbits (efn newin)
+        newrgn (swap! r-state p/pooling-step newbits)]
+    (swap! inbits-q (fn [q]
+                      (conj (subvec q 1) newbits)))
+    (swap! rgn-q (fn [q]
+                   (conj (subvec q 1) newrgn)))))
 
 (defn run-sim
   []
@@ -86,7 +95,9 @@
 (enable-console-print!)
 
 (def width 800)
-(def bitpx 5)
+(def bitpx 6)
+(def viz-cell-size-pct 0.9)
+(def viz-inbit-size-pct 0.9)
 (def inbits-height (* bitpx bit-width))
 (def rgn-height (* bitpx ncol))
 (def height (max inbits-height rgn-height))
@@ -97,8 +108,6 @@
 
 ;; TODO: set/get size of canvas element?
 (def canvas-ctx (c/get-context canvas-dom "2d"))
-
-(def keep-steps 10)
 
 (defn overlap-frac
   [x]
@@ -132,32 +141,41 @@
           :let [bits (data dt)]]
     (c/clear-rect ctx {:x dt :y 0 :w 1 :h bit-width})
     (c/fill-style ctx "#888")
+    (c/stroke-style ctx "#000")
     (c/stroke-width ctx 0.05)
     (doseq [b bits]
-      (c/fill-rect ctx {:x dt :y b :w 1 :h 1})
-      (c/stroke ctx)))
+      (c/fill-rect ctx {:x dt :y b :w viz-inbit-size-pct :h viz-inbit-size-pct})
+      (c/stroke-rect ctx {:x dt :y b :w viz-inbit-size-pct :h viz-inbit-size-pct})))
   (c/restore ctx)
   ctx)
+
+(defn rgn-column-states
+  [rgn]
+  (let [ac (:active-columns rgn)
+        om (:overlaps rgn)
+        am (zipmap ac (repeat :active))]
+    (merge om am)))
 
 (defn draw-rgn
   [ctx data t]
   (c/save ctx)
   (c/translate ctx 200 0)
+  (c/scale ctx bitpx bitpx)
+  (c/stroke-style ctx "#000")
+  (c/stroke-width ctx 0.05)
   (doseq [dt (range (count data))
           :let [m (data dt)]]
-    (c/stroke-style ctx "#000")
-    (c/stroke-width ctx 1.0)
     (c/fill-style ctx "#fff")
-    (doseq [[cid cval] m
-            :let [xpx (* dt bitpx)
-                  ypx (+ 5 (* cid bitpx))
-                  rpx (quot bitpx 2)]]
+    (doseq [cid (range ncol)]
+      (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* viz-cell-size-pct 0.5)})
+      (c/stroke ctx))
+    (doseq [[cid cval] m]
       (let [color (case cval
                     :inactive "#fff"
                     :active "#ff0"
                     (rgbhex (overlap-frac cval) 0 0))]
         (c/fill-style ctx color)
-        (c/circle ctx {:x xpx :y ypx :r rpx})
+        (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* viz-cell-size-pct 0.5)})
         (c/stroke ctx)
         )))
   (c/restore ctx)
@@ -254,31 +272,18 @@
     (set! (.-innerHTML ts-el) (:timestep @r-state))
     (forms/setValue info-el (detail-text))))
 
-(def inbits-data-q (atom (vec (repeat keep-steps nil))))
-(def rgn-data-q (atom (vec (repeat keep-steps nil))))
-
 (defn animation-step!
   []
   (let [newr @r-state
         t (:timestep newr)
         newbits (efn @input-state)
-        ;newarray (dense newbits bit-width)
-        in-data (swap! inbits-data-q (fn [q]
-                                       (conj (subvec q 1) newbits)))
         o @display-options]
     (update-text-display)
-    (draw-inbits canvas-ctx in-data t)
-    (let [ac (:active-columns newr)
-          om (:overlaps newr)
-          am (zipmap ac (repeat :active))
-          em (zipmap (map :id (:columns newr)) (repeat :inactive))
-          m (cond-> em
-                    (:display-overlap-columns o) (merge om)
-                    (:display-active-columns o) (merge am))
-          rgn-data (swap! rgn-data-q (fn [q]
-                                       (conj (subvec q 1) m)))]
+    (draw-inbits canvas-ctx @inbits-q t)
+    (let [rgn-data (mapv rgn-column-states @rgn-q)]
       (draw-rgn canvas-ctx rgn-data t)
-      (let [syn-cols (select-keys (:columns newr) (keys m))
+      (let [ac (:active-columns newr)
+            syn-cols (select-keys (:columns newr) ac)
             syn-data (->> syn-cols
                           (mapcat (fn [[col-id col]]
                                     (let [syns (cond-> {}
