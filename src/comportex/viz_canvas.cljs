@@ -13,14 +13,15 @@
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; initial CLA region
-(def numb-bit-width 64)
+(def numb-bits 64)
+(def numb-on-bits 11)
 (def numb-max 100)
 (def numb-min 0)
 (def numb-domain [numb-min numb-max])
-(def numb-span 8)
 (def n-in-items 3)
-(def bit-width (* numb-bit-width n-in-items))
+(def bit-width (* numb-bits n-in-items))
 (def ncol 200)
+
 (def r-init (p/region (assoc p/spatial-pooler-defaults
                         :ncol ncol
                         :input-size bit-width
@@ -48,8 +49,8 @@
   (repeatedly n-in-items #(util/rand-int numb-min numb-max)))
 
 (def efn
-  (enc/map-encoder numb-bit-width
-                   (enc/number-linear numb-bit-width numb-domain numb-span)))
+  (enc/juxtapose-encoder
+   (enc/linear-number-encoder numb-bits numb-on-bits numb-domain)))
 
 (defn dense
   [is bits]
@@ -69,7 +70,7 @@
 (def display-options (atom {:display-active-columns true}))
 
 ;; keep recent time steps
-(def keep-steps 10)
+(def keep-steps 50)
 (def inbits-q (atom (vec (repeat keep-steps nil))))
 (def rgn-q (atom (vec (repeat keep-steps nil))))
 
@@ -96,17 +97,17 @@
 
 (def width 800)
 (def bitpx 6)
-(def viz-cell-size-pct 0.9)
-(def viz-inbit-size-pct 0.9)
+(def fill% 0.9)
 (def inbits-height (* bitpx bit-width))
 (def rgn-height (* bitpx ncol))
 (def height (max inbits-height rgn-height))
 
 (def canvas-dom (dom/getElement "viz"))
+;; need to set canvas size in js not CSS, the latter delayed so
+;; get-context would see the wrong resolution here.
 (set! (.-width canvas-dom) width)
 (set! (.-height canvas-dom) 1000)
 
-;; TODO: set/get size of canvas element?
 (def canvas-ctx (c/get-context canvas-dom "2d"))
 
 (defn overlap-frac
@@ -133,19 +134,26 @@
   [r g b]
   (str "#" (hexit r) (hexit g) (hexit b)))
 
+(defn greyhex
+  [z]
+  (rgbhex z z z))
+
 (defn draw-inbits
   [ctx data t]
   (c/save ctx)
   (c/scale ctx bitpx bitpx)
+  (c/stroke-width ctx 0.05)
+  (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
           :let [bits (data dt)]]
+    (c/alpha ctx (/ dt (* keep-steps 1.2)))
     (c/clear-rect ctx {:x dt :y 0 :w 1 :h bit-width})
-    (c/fill-style ctx "#888")
-    (c/stroke-style ctx "#000")
-    (c/stroke-width ctx 0.05)
+    (c/fill-style ctx "#f00")
+    (doseq [b (range bit-width)]
+      (c/stroke-rect ctx {:x dt :y b :w fill% :h fill%}))
     (doseq [b bits]
-      (c/fill-rect ctx {:x dt :y b :w viz-inbit-size-pct :h viz-inbit-size-pct})
-      (c/stroke-rect ctx {:x dt :y b :w viz-inbit-size-pct :h viz-inbit-size-pct})))
+      (c/fill-rect ctx {:x dt :y b :w fill% :h fill%})
+      (c/stroke-rect ctx {:x dt :y b :w fill% :h fill%})))
   (c/restore ctx)
   ctx)
 
@@ -159,25 +167,27 @@
 (defn draw-rgn
   [ctx data t]
   (c/save ctx)
-  (c/translate ctx 200 0)
+  (c/translate ctx (* keep-steps bitpx 1.5) 0)
   (c/scale ctx bitpx bitpx)
-  (c/stroke-style ctx "#000")
   (c/stroke-width ctx 0.05)
+  (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
           :let [m (data dt)]]
+    (c/alpha ctx (/ dt (* keep-steps 1.2)))
+    (c/clear-rect ctx {:x dt :y 0 :w 1 :h ncol})
     (c/fill-style ctx "#fff")
     (doseq [cid (range ncol)]
-      (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* viz-cell-size-pct 0.5)})
+      (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* fill% 0.5)})
       (c/stroke ctx))
     (doseq [[cid cval] m]
-      (let [color (case cval
+      (let [of (overlap-frac cval)
+            color (case cval
                     :inactive "#fff"
-                    :active "#ff0"
-                    (rgbhex (overlap-frac cval) 0 0))]
+                    :active "#f00"
+                    (greyhex (- 1 of)))]
         (c/fill-style ctx color)
-        (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* viz-cell-size-pct 0.5)})
-        (c/stroke ctx)
-        )))
+        (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* fill% 0.5)})
+        (c/stroke ctx))))
   (c/restore ctx)
   ctx)
 
