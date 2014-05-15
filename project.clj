@@ -16,11 +16,11 @@
 
   :source-paths ["src"]
 
-  :cljsbuild {:builds [{:id "viz1"
+  :cljsbuild {:builds [{:id "viz"
                         :source-paths ["src"]
                         :compiler  {:optimizations :none
                                     :libs [""]
                                     :source-map true
                                     :output-dir "public/out/deps"
-                                    :output-to "public/out/viz1.js"}}
+                                    :output-to "public/out/comportex_viz.js"}}
                        ]})

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
-<title>comportex viz</title>
+<title>spatial pooling over a numeric range - comportex viz</title>
 <style>
 
 body {
@@ -56,6 +56,7 @@ body {
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
+    <h3>spatial pooling over a numeric range</h3>
     <fieldset>
       <legend>Simulation</legend>
       Timestep: <span id="sim-timestep"></span></br>
@@ -81,8 +82,7 @@ body {
     <textarea id="detail-text">
     </textarea>
   </div>
-  <script type="text/javascript" src="d3/d3.js"></script>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
-  <script type="text/javascript" src="out/viz1.js"></script>
-  <script type="text/javascript">goog.require("comportex.viz_canvas");</script>
+  <script type="text/javascript" src="out/comportex_viz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.sp_range");</script>
 </body>

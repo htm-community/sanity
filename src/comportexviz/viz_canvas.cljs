@@ -1,8 +1,5 @@
-(ns comportex.viz-canvas
-  (:require [org.nfrac.comportex.pooling :as p]
-            [org.nfrac.comportex.encoders :as enc]
-            [org.nfrac.comportex.util :as util]
-            [goog.dom :as dom]
+(ns comportexviz.viz-canvas
+  (:require [goog.dom :as dom]
             [goog.dom.forms :as forms]
             goog.ui.Slider
             goog.ui.Component.EventType
@@ -12,57 +9,9 @@
             [monet.core])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-;; initial CLA region
-(def numb-bits 64)
-(def numb-on-bits 11)
-(def numb-max 100)
-(def numb-min 0)
-(def numb-domain [numb-min numb-max])
-(def n-in-items 3)
-(def bit-width (* numb-bits n-in-items))
-(def ncol 200)
 
-(def r-init (p/region (assoc p/spatial-pooler-defaults
-                        :ncol ncol
-                        :input-size bit-width
-                        :potential-radius (quot bit-width 5)
-                        :global-inhibition false
-                        :stimulus-threshold 2
-                        :duty-cycle-period 100)))
+(def sim-chan (chan))
 
-(defn inputs-transform
-  [xs]
-  (mapv (fn [x]
-          (mod (+ x 2) numb-max))
-        xs))
-
-(defn add-noise
-  [delta xs]
-  (mapv (fn [x]
-          (-> (+ x (util/rand-int (- delta) (inc delta)))
-              (min numb-max)
-              (max numb-min)))
-        xs))
-
-(defn gen-ins
-  []
-  (repeatedly n-in-items #(util/rand-int numb-min numb-max)))
-
-(def efn
-  (enc/juxtapose-encoder
-   (enc/linear-number-encoder numb-bits numb-on-bits numb-domain)))
-
-(defn dense
-  [is bits]
-  (loop [bs (transient (vec (repeat bits false)))
-         is is]
-    (if (seq is)
-      (recur (assoc! bs (first is) true)
-             (rest is))
-      (persistent! bs))))
-
-(def input-state (atom (vec (repeat n-in-items (/ numb-max 2)))))
-(def r-state (atom r-init))
 (def sim-go? (atom false))
 (def sim-step-ms (atom 1000))
 (def animation-go? (atom false))
@@ -70,25 +19,26 @@
 (def display-options (atom {:display-active-columns true}))
 
 ;; keep recent time steps
-(def keep-steps 50)
-(def inbits-q (atom (vec (repeat keep-steps nil))))
-(def rgn-q (atom (vec (repeat keep-steps nil))))
+(def keep-steps (atom 50))
+(def steps (atom []))
 
-(defn sim-step!
+(defn- take-last-subvec
+  [v n]
+  (subvec v (max 0 (- (count v) n))))
+
+(defn take-step!
   []
-  (let [newin (swap! input-state inputs-transform)
-        newbits (efn newin)
-        newrgn (swap! r-state p/pooling-step newbits)]
-    (swap! inbits-q (fn [q]
-                      (conj (subvec q 1) newbits)))
-    (swap! rgn-q (fn [q]
-                   (conj (subvec q 1) newrgn)))))
+  (go
+   (let [x (<! sim-chan)]
+     (swap! steps (fn [q]
+                     (-> (conj q x)
+                         (take-last-subvec @keep-steps)))))))
 
 (defn run-sim
   []
   (go
    (while @sim-go?
-     (sim-step!)
+     (take-step!)
      (<! (timeout @sim-step-ms)))))
 
 ;; GRAPHIC DISPLAY
@@ -98,9 +48,6 @@
 (def width 800)
 (def bitpx 6)
 (def fill% 0.9)
-(def inbits-height (* bitpx bit-width))
-(def rgn-height (* bitpx ncol))
-(def height (max inbits-height rgn-height))
 
 (def canvas-dom (dom/getElement "viz"))
 ;; need to set canvas size in js not CSS, the latter delayed so
@@ -109,13 +56,6 @@
 (set! (.-height canvas-dom) 1000)
 
 (def canvas-ctx (c/get-context canvas-dom "2d"))
-
-(defn overlap-frac
-  [x]
-  (-> (/ (- x (:stimulus-threshold @r-state))
-         10) ;; arbitrary scale
-      (min 0.90)
-      (max 0.10)))
 
 (defn hexit
   [z]
@@ -136,17 +76,18 @@
 
 (defn greyhex
   [z]
-  (rgbhex z z z))
+  (let [x (hexit z)]
+    (str "#" x x x)))
 
 (defn draw-inbits
-  [ctx data t]
+  [ctx data bit-width]
   (c/save ctx)
   (c/scale ctx bitpx bitpx)
   (c/stroke-width ctx 0.05)
   (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
           :let [bits (data dt)]]
-    (c/alpha ctx (/ dt (* keep-steps 1.2)))
+    (c/alpha ctx (/ dt (* (count data) 1.2)))
     (c/clear-rect ctx {:x dt :y 0 :w 1 :h bit-width})
     (c/fill-style ctx "#f00")
     (doseq [b (range bit-width)]
@@ -165,26 +106,28 @@
     (merge om am)))
 
 (defn draw-rgn
-  [ctx data t]
+  [ctx data ncol]
   (c/save ctx)
-  (c/translate ctx (* keep-steps bitpx 1.5) 0)
+  (c/translate ctx (* @keep-steps bitpx 1.5) 0)
   (c/scale ctx bitpx bitpx)
   (c/stroke-width ctx 0.05)
   (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
           :let [m (data dt)]]
-    (c/alpha ctx (/ dt (* keep-steps 1.2)))
-    (c/clear-rect ctx {:x dt :y 0 :w 1 :h ncol})
+    (c/alpha ctx (/ dt (* (count data) 1.2)))
+    (c/clear-rect ctx {:x dt :y 0 :w 1 :h (count m)})
     (c/fill-style ctx "#fff")
-    (doseq [cid (range ncol)]
+    (doseq [cid (range (count m))]
       (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* fill% 0.5)})
       (c/stroke ctx))
     (doseq [[cid cval] m]
-      (let [of (overlap-frac cval)
-            color (case cval
+      (let [color (case cval
                     :inactive "#fff"
                     :active "#f00"
-                    (greyhex (- 1 of)))]
+                    (->> (/ cval 10)
+                         (min 1.0)
+                         (- 1)
+                         (greyhex)))]
         (c/fill-style ctx color)
         (c/circle ctx {:x (+ 0.5 dt) :y (+ 0.5 cid) :r (* fill% 0.5)})
         (c/stroke ctx))))
@@ -197,9 +140,10 @@
 
 (defn detail-text
   []
-  (let [newin @input-state
-        newbits (efn newin)
-        newr @r-state
+  (let [x (peek @steps)
+        newin (:input x)
+        newbits (:inbits x)
+        newr (:region x)
         newom (:overlaps newr)
         newac (:active-columns newr)]
     (apply str
@@ -239,7 +183,7 @@
                 newval (reset! animation-step-ms (.getValue s))]
             (set! (.-innerHTML txt) newval))))))
 
-(defn init-ui!
+(defn handle-sliders
   []
   (let [s-sim (doto (goog.ui.Slider.)
                 (.setId "sim-ms-slider")
@@ -273,24 +217,28 @@
         clicks (listen btn "click")]
     (go (while true
           (<! clicks)
-          (sim-step!)))))
+          (take-step!)))))
 
 (defn update-text-display
   []
-  (let [ts-el (dom/getElement "sim-timestep")
+  (let [rgn (:region (peek @steps))
+        ts-el (dom/getElement "sim-timestep")
         info-el (dom/getElement "detail-text")]
-    (set! (.-innerHTML ts-el) (:timestep @r-state))
+    (set! (.-innerHTML ts-el) (:timestep rgn))
     (forms/setValue info-el (detail-text))))
 
 (defn animation-step!
   []
-  (let [newr @r-state
+  (let [x (peek @steps)
+        newin (:input x)
+        newbits (:inbits x)
+        newr (:region x)
         t (:timestep newr)
-        newbits (efn @input-state)
+        bit-width (:input-size (:spec newr))
         o @display-options]
     (update-text-display)
-    (draw-inbits canvas-ctx @inbits-q t)
-    (let [rgn-data (mapv rgn-column-states @rgn-q)]
+    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width)
+    (let [rgn-data (mapv (comp rgn-column-states :region) @steps)]
       (draw-rgn canvas-ctx rgn-data t)
       (let [ac (:active-columns newr)
             syn-cols (select-keys (:columns newr) ac)
@@ -351,9 +299,13 @@
                 on? (forms/getValue (.-currentTarget e))]
             (swap! display-options assoc (keyword id) on?))))))
 
+(defn init-ui!
+  []
+  (handle-sliders)
+  (handle-sim-control)
+  (handle-sim-step)
+  (handle-animation-control)
+  (handle-animation-step)
+  (handle-display-options))
+
 (init-ui!)
-(handle-sim-control)
-(handle-sim-step)
-(handle-animation-control)
-(handle-animation-step)
-(handle-display-options)
