@@ -7,6 +7,7 @@
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; initial CLA region
+(def ncol 200)
 (def numb-bits 64)
 (def numb-on-bits 11)
 (def numb-max 100)
@@ -14,15 +15,15 @@
 (def numb-domain [numb-min numb-max])
 (def n-in-items 3)
 (def bit-width (* numb-bits n-in-items))
-(def ncol 200)
 
-(def r-init (p/region (assoc p/spatial-pooler-defaults
-                        :ncol ncol
-                        :input-size bit-width
-                        :potential-radius (quot bit-width 5)
-                        :global-inhibition false
-                        :stimulus-threshold 2
-                        :duty-cycle-period 100)))
+(def r-init
+  (p/region (assoc p/spatial-pooler-defaults
+              :ncol ncol
+              :input-size bit-width
+              :potential-radius (quot bit-width 5)
+              :global-inhibition false
+              :stimulus-threshold 2
+              :duty-cycle-period 100)))
 
 ;; inputs
 

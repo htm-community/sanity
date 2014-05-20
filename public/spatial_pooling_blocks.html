@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>spatial pooling over a numeric range - comportex viz</title>
+  <title>spatial pooling blocks - comportex viz</title>
   <link href="main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
-    <h3>spatial pooling over a numeric range</h3>
+    <h3>spatial pooling over blocks</h3>
     <fieldset>
       <legend>Simulation</legend>
       Timestep: <span id="sim-timestep"></span></br>
@@ -25,15 +25,15 @@
     </fieldset>
     <fieldset>
       <legend>Display</legend>
-      <label><input id="display-connected-insyns" type="checkbox">Connected in-synapses</label><br/>
-      <label><input id="display-disconnected-insyns" type="checkbox">Disconnected in-synapses</label><br/>
       <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
-      <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label>
+      <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
+      <label><input id="display-active-insyns" type="checkbox">Active in-synapses</label><br/>
+      <label><input id="display-inactive-insyns" type="checkbox">Inactive in-synapses</label>
     </fieldset>
     <textarea id="detail-text">
     </textarea>
   </div>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.sp_range");</script>
+  <script type="text/javascript">goog.require("comportexviz.sp_blocks");</script>
 </body>
