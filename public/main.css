@@ -10,11 +10,13 @@ body {
 #viz {
   float: left;
   clear: left;
-  width: 800px;
-  height: 1000px;
 }
 
 #sidebar {
+  float: left;
+}
+
+#display-options > div {
   float: left;
 }
 

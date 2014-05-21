@@ -1,6 +1,5 @@
 (ns comportexviz.sp-blocks
   (:require [org.nfrac.comportex.pooling :as p]
-            [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.viz-canvas :as viz]
             [cljs.core.async :refer [chan <! >! timeout]]

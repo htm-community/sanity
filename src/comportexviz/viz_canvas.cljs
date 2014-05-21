@@ -42,8 +42,8 @@
               (->> (conj q x)
                    (take-last-v @keep-steps)))))))
 
-(def selected-column (atom nil))
-(def selected-inbit (atom nil))
+(def selected-cid (atom nil))
+(def selected-dt (atom 0))
 
 (defn run-sim
   []
@@ -57,11 +57,11 @@
 (enable-console-print!)
 
 (def width-px 800)
-(def height-px 1000)
-(def bit-grid-px 6)
-(def col-grid-px 6)
-(def fill% 0.9)
-(def bit-w-px (* fill% bit-grid-px))
+(def height-px 1100)
+(def bit-grid-px 5)
+(def col-grid-px 5)
+(def fill% 1)
+(def bit-w-px (dec (* fill% bit-grid-px)))
 (def bit-r-px (* bit-w-px 0.5))
 (def col-r-px (* fill% col-grid-px 0.5))
 
@@ -94,13 +94,6 @@
   [z]
   (let [x (hexit z)]
     (str "#" x x x)))
-
-(defn rgn-column-states
-  [rgn]
-  (let [ac (:active-columns rgn)
-        om (:overlaps rgn)
-        am (zipmap ac (repeat :active))]
-    (merge om am)))
 
 (defn rgn-px-offset
   []
@@ -154,21 +147,15 @@
                (<= 0 id))
       [id dt])))
 
-(defn alpha-fade
-  [dt n]
-  (->> (/ (inc dt) n)
-       (- 1)
-       (* 5)
-       (min 1)))
-
 (defn draw-inbits
-  [ctx data bit-width]
+  [ctx data bit-width sel-dt]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
-          :let [bits (data (dt->i dt))]]
-    (c/alpha ctx (alpha-fade dt (count data)))
+          :let [bits (data (dt->i dt))
+                alph (if (= sel-dt dt) 1 0.5)]]
+    (c/alpha ctx alph)
     (c/fill-style ctx "#f00")
     (doseq [b bits
             :let [[x-px y-px] (inbit->px b dt)]]
@@ -186,7 +173,7 @@
   ctx)
 
 (defn draw-rgn
-  [ctx data ncol selected]
+  [ctx data ncol sel-cid sel-dt]
   ;; Originally this used translate and scale to draw grid on integer
   ;; coordinates. But better to use px lookup functions so that we can
   ;; draw between frames of reference: inbits & columns.
@@ -195,12 +182,14 @@
   (c/stroke-style ctx "#000")
   (doseq [dt (range (count data))
           :let [m (data (dt->i dt))
-                a (alpha-fade dt (count data))]]
-    (c/alpha ctx (* a (if selected 0.5 1)))
+                alph (if (and (= sel-dt dt)
+                              (not sel-cid)) 1 0.5)]]
+    (c/alpha ctx alph)
     (doseq [cid (range ncol)
             :let [[x-px y-px] (column->px cid dt)
                   cval (m cid :inactive)
-                  sel? (= selected [cid dt])
+                  sel? (and (= sel-dt dt)
+                            (= sel-cid cid))
                   color (case cval
                           :inactive "#fff"
                           :active "#f00"
@@ -208,14 +197,13 @@
                                (min 1.0)
                                (- 1)
                                (greyhex)))]]
-      (c/fill-style ctx color)
       (when sel?
-        (c/save ctx)
         (c/alpha ctx 1))
+      (c/fill-style ctx color)
       (c/circle ctx {:x x-px :y y-px :r col-r-px})
       (c/stroke ctx)
       (when sel?
-        (c/restore ctx))))
+        (c/alpha ctx alph))))
   (c/restore ctx)
   ctx)
 
@@ -225,42 +213,44 @@
   (c/stroke-width ctx 1)
   (doseq [[cid dt m] data
           :let [[cx cy] (column->px cid dt)
-                drawsyns (fn [syns active?]
-                           (c/stroke-style ctx (if active? "#f00" "#000"))
-                           (doseq [[id perm] syns
-                                   :let [[ix iy] (inbit->px id dt)]]
-                             (doto ctx
-                               (c/alpha (* perm perm))
-                               (c/begin-path)
-                               (c/move-to cx cy)
-                               (c/line-to ix iy)
-                               (c/stroke)))
-                           )]]
-    (drawsyns (:inactive m) false)
-    (drawsyns (:active m) true))
+                perms? (:display-insyns-permanences @display-options)
+                draw (fn [syns active?]
+                       (c/stroke-style ctx (if active? "#f00" "#000"))
+                       (doseq [[id perm] syns
+                               :let [[ix iy] (inbit->px id dt)]]
+                         (doto ctx
+                           (c/alpha (if perms? perm 1))
+                           (c/begin-path)
+                           (c/move-to cx cy)
+                           (c/line-to ix iy)
+                           (c/stroke)))
+                       )]]
+    (draw (:inactive m) false)
+    (draw (:active m) true))
   (c/restore ctx)
   ctx)
 
 (defn detail-text
-  [state]
+  [state dt cid]
   (let [in (:input state)
         bits (:inbits state)
         r (:region state)
-        om (:overlaps r)
         ac (:active-columns r)]
     (apply str
            (interpose \newline
-                      ["# Input"
+                      ["__Selection__"
+                       (str "  * timestep " (:timestep r))
+                       (str "  * delay " dt)
+                       (str "  * column " (or cid "nil"))
+                       ""
+                       "__Input__"
                        in
-                       "# Input bits"
+                       ""
+                       "__Input bits__"
                        (sort bits)
-                       "# Active columns"
-                       (sort ac)
-                       "# Overlaps map"
-                       (sort om)
-                       "# Selection"
-                       @selected-inbit
-                       @selected-column]))))
+                       ""
+                       "__Active columns__"
+                       (sort ac)]))))
 
 ;; use core.async to run simulation separately from animation
 
@@ -326,41 +316,52 @@
 
 (defn update-text-display
   []
-  (let [state (peek @steps)
+  (let [curr-t (:timestep (:region (peek @steps)))
+        view-state (nth @steps (dt->i @selected-dt))
         ts-el (dom/getElement "sim-timestep")
         info-el (dom/getElement "detail-text")]
-    (set! (.-innerHTML ts-el) (:timestep (:region state)))
-    (forms/setValue info-el (detail-text state))))
+    (set! (.-innerHTML ts-el) curr-t)
+    (forms/setValue info-el (detail-text view-state @selected-dt @selected-cid))))
+
+(defn rgn-column-states
+  [rgn opts]
+  (let [om (:overlaps rgn)
+        am (zipmap (:active-columns rgn) (repeat :active))
+        pm (delay nil)] ;; TODO
+    (cond-> (if (:display-overlap-columns opts) om {})
+            (:display-predictive-columns opts) (merge @pm)
+            (:display-active-columns opts) (merge am))))
+
+(defn in-synapse-display-data
+  [cid dt opts]
+  (when (:display-active-insyns opts)
+    (let [x (@steps (dt->i dt))
+          col (get-in x [:region :columns cid])
+          on-bits (:inbits x)
+         syns (-> col :in-synapses :connected)
+         m {:active (select-keys syns on-bits)
+            :inactive (when (:display-inactive-insyns opts)
+                        (apply dissoc syns on-bits))}]
+     [cid dt m])))
 
 (defn animation-step!
   []
   (let [x (peek @steps)
-        newin (:input x)
-        newbits (:inbits x)
-        newr (:region x)
-        t (:timestep newr)
-        bit-width (:input-size (:spec newr))
-        ncol (count (:columns newr))
+        curr (:region x)
+        bit-width (:input-size (:spec curr))
+        ncol (count (:columns curr))
+        dt @selected-dt
+        view-r (get-in @steps [(dt->i dt) :region])
         rgn-data (mapv (comp rgn-column-states :region) @steps)
-        o @display-options]
+        view-cids (if @selected-cid
+                    [@selected-cid]
+                    (:active-columns view-r))
+        view-syn-data (map in-synapse-display-data view-cids (repeat dt))]
     (update-text-display)
     (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
-    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width)
-    (draw-rgn canvas-ctx rgn-data ncol @selected-column)
-    (when (:display-active-insyns o)
-      (let [view-cols (if @selected-column
-                        [@selected-column]
-                        (mapv vector (:active-columns newr) (repeat 0)))
-            syn-data (map (fn [[cid dt] view-cols]
-                            (let [col (get-in @steps [(dt->i dt) :region :columns cid])
-                                  syns (-> col :in-synapses :connected)
-                                  m {:active (when (:display-active-insyns o)
-                                               (select-keys syns newbits))
-                                     :inactive (when (:display-inactive-insyns o)
-                                                 (apply dissoc syns newbits))}]
-                              [cid dt m]))
-                          view-cols)]
-        (draw-insynapses canvas-ctx syn-data)))))
+    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
+    (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
+    (draw-insynapses canvas-ctx view-syn-data)))
 
 (defn run-animation
   []
@@ -392,8 +393,11 @@
   []
   (let [ids ["display-active-columns"
              "display-overlap-columns"
+             "display-predictive-columns"
              "display-active-insyns"
-             "display-inactive-insyns"]
+             "display-inactive-insyns"
+             "display-insyns-permanences"
+             "display-active-dendrites"]
         btns (map dom/getElement ids)
         cs (map listen btns (repeat "click"))
         cm (zipmap cs ids)]
@@ -403,7 +407,8 @@
           (let [[e c] (alts! (keys cm))
                 id (cm c)
                 on? (forms/getValue (.-currentTarget e))]
-            (swap! display-options assoc (keyword id) on?))))))
+            (swap! display-options assoc (keyword id) on?)
+            (animation-step!))))))
 
 (defn handle-canvas-clicks
   []
@@ -415,14 +420,18 @@
              y (.-offsetY e)]
          (if-let [[cid dt] (px->column x y)]
            ;; column clicked
-           (reset! selected-column [cid dt])
+           (do
+             (reset! selected-cid cid)
+             (reset! selected-dt dt))
            (if-let [[id dt] (px->inbit x y)]
              ;; in-bit clicked
-             (reset! selected-inbit [id dt])
+             (do
+               (reset! selected-cid nil)
+               (reset! selected-dt dt))
              ;; nothing clicked
              (do
-               (reset! selected-column nil)
-               (reset! selected-inbit nil))))
+               (reset! selected-cid nil)
+               (reset! selected-dt 0))))
          (animation-step!))))))
 
 (defn init-ui!

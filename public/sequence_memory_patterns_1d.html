@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>sequence memory patterns 1D - comportex viz</title>
+  <link href="main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="viz"></canvas>
+  <div id="sidebar">
+    <h3>sequence memory patterns 1D</h3>
+    <fieldset>
+      <legend>Simulation</legend>
+      Timestep: <span id="sim-timestep"></span></br>
+      Step ms: <div id="sim-ms-slider-box" class="slider-box"></div>
+      <span id="sim-ms-text"></span>
+      <button id="sim-control">Start</button>
+      <button id="sim-step">Step</button>
+    </fieldset>
+    <fieldset>
+      <legend>Animation</legend>
+      Step ms: <div id="animation-ms-slider-box" class="slider-box"></div>
+      <span id="animation-ms-text"></span>
+      <button id="animation-control">Start</button>
+      <button id="animation-step">Draw now</button>
+    </fieldset>
+    <fieldset id="display-options">
+      <legend>Display</legend>
+      <div>
+        <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
+        <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
+        <label><input id="display-predictive-columns" type="checkbox">Predictive columns</label><br/>
+        <label><input id="display-bursting-columns" type="checkbox">Bursting columns</label>
+      </div>
+      <div>
+        <label><input id="display-active-insyns" type="checkbox">Active in-synapses</label><br/>
+        <label><input id="display-inactive-insyns" type="checkbox">Inactive in-synapses</label><br/>
+        <label><input id="display-insyns-permanences" type="checkbox">Permanences</label>
+      </div>
+      <div>
+        <label><input id="display-active-dendrites" type="checkbox">Active dendrites</label><br/>
+        <label><input id="display-inactive-dendrites" type="checkbox">Inactive dendrites</label><br/>
+      </div>
+    </fieldset>
+    <textarea id="detail-text">
+    </textarea>
+  </div>
+  <script type="text/javascript" src="out/deps/goog/base.js"></script>
+  <script type="text/javascript" src="out/comportex_viz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.sm_patterns_1d");</script>
+</body>
