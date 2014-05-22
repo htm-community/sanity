@@ -23,17 +23,23 @@
       <button id="animation-control">Start</button>
       <button id="animation-step">Draw now</button>
     </fieldset>
-    <fieldset>
+    <fieldset id="display-options">
       <legend>Display</legend>
-      <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
-      <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
-      <label><input id="display-active-insyns" type="checkbox">Active in-synapses</label><br/>
-      <label><input id="display-inactive-insyns" type="checkbox">Inactive in-synapses</label>
+      <div>
+        <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
+        <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
+      </div>
+      <div>
+        <label><input id="display-active-insyns" type="checkbox">Active in-synapses</label><br/>
+        <label><input id="display-inactive-insyns" type="checkbox">Inactive in-synapses</label><br/>
+        <label><input id="display-insyns-permanences" type="checkbox">Permanences</label>
+      </div>
     </fieldset>
     <textarea id="detail-text">
     </textarea>
   </div>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
   <script type="text/javascript">goog.require("comportexviz.sp_blocks");</script>
 </body>

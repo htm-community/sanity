@@ -3,9 +3,9 @@
             [org.nfrac.comportex.sequence-memory :as sm]
             [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.viz-canvas :as viz]
-            [cljs.core.async :refer [chan <! >! timeout]]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [comportexviz.mq :as mq]
+            [cljs.core.async :refer [<! >!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; inputs
@@ -81,7 +81,7 @@
      (let [in (first inseq)
            in-bits (efn (:values in))
            new-rgn (cla-step rgn in-bits)]
-       (>! viz/sim-chan
+       (>! mq/sim-channel
            {:input in :inbits in-bits :region new-rgn})
        (recur (input-transform inseq)
               new-rgn)))))

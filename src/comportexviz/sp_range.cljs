@@ -1,9 +1,8 @@
 (ns comportexviz.sp-range
   (:require [org.nfrac.comportex.pooling :as p]
             [org.nfrac.comportex.encoders :as enc]
-            [org.nfrac.comportex.util :as util]
-            [comportexviz.viz-canvas :as viz]
-            [cljs.core.async :refer [chan <! >! timeout]])
+            [comportexviz.mq :as mq]
+            [cljs.core.async :refer [<! >!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; initial CLA region
@@ -46,7 +45,7 @@
           rgn r-init]
      (let [in-bits (efn in)
            new-rgn (p/pooling-step rgn in-bits)]
-       (>! viz/sim-chan
+       (>! mq/sim-channel
            {:input in :inbits in-bits :region new-rgn})
        (recur (input-transform in)
               new-rgn)))))

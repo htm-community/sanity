@@ -1,9 +1,9 @@
 (ns comportexviz.sp-blocks
   (:require [org.nfrac.comportex.pooling :as p]
             [org.nfrac.comportex.util :as util :refer [round]]
-            [comportexviz.viz-canvas :as viz]
-            [cljs.core.async :refer [chan <! >! timeout]]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [comportexviz.mq :as mq]
+            [cljs.core.async :refer [<! >!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; initial CLA region
@@ -60,7 +60,7 @@
      (let [in-bits (efn in)
            new-rgn (p/pooling-step rgn in-bits)
            t (:timestep new-rgn)]
-       (>! viz/sim-chan
+       (>! mq/sim-channel
            {:input in :inbits in-bits :region new-rgn})
        (recur (input-transform in t)
               new-rgn)))))

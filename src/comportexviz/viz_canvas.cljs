@@ -4,14 +4,13 @@
             goog.ui.Slider
             goog.ui.Component.EventType
             [goog.events :as events]
-            [cljs.core.async :refer [put! chan <! alts! timeout]]
             [clojure.core.rrb-vector :as fv]
             [monet.canvas :as c]
-            [monet.core])
+            [monet.core]
+            [comportexviz.mq :as mq]
+            [cljs.core.async :refer [chan put! <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-
-(def sim-chan (chan))
 
 (def sim-go? (atom false))
 (def sim-step-ms (atom 500))
@@ -36,7 +35,7 @@
 (defn take-step!
   []
   (go
-   (let [x (<! sim-chan)]
+   (let [x (<! mq/sim-channel)]
      (swap! steps
             (fn [q]
               (->> (conj q x)
@@ -52,7 +51,7 @@
      (take-step!)
      (<! (timeout @sim-step-ms)))))
 
-;; GRAPHIC DISPLAY
+;; ## Graphic Display
 
 (enable-console-print!)
 
@@ -252,7 +251,69 @@
                        "__Active columns__"
                        (sort ac)]))))
 
-;; use core.async to run simulation separately from animation
+(defn update-text-display
+  []
+  (let [view-state (nth @steps (dt->i @selected-dt))
+        info-el (dom/getElement "detail-text")]
+    (forms/setValue info-el (detail-text view-state @selected-dt @selected-cid))))
+
+(defn update-timestep
+  []
+  (let [ts-el (dom/getElement "sim-timestep")
+        curr-t (:timestep (:region (peek @steps)))]
+    (set! (.-innerHTML ts-el) curr-t)))
+
+(defn rgn-column-states
+  [rgn]
+  (let [opts @display-options
+        om (:overlaps rgn)
+        am (zipmap (:active-columns rgn) (repeat :active))
+        pm (delay {})] ;; TODO
+    (cond-> (if (:display-overlap-columns opts) om {})
+            (:display-predictive-columns opts) (merge @pm)
+            (:display-active-columns opts) (merge am))))
+
+(defn in-synapse-display-data
+  [cid dt]
+  (let [opts @display-options]
+    (when (:display-active-insyns opts)
+      (let [x (@steps (dt->i dt))
+            col (get-in x [:region :columns cid])
+            on-bits (:inbits x)
+            syns (-> col :in-synapses :connected)
+            m {:active (select-keys syns on-bits)
+               :inactive (when (:display-inactive-insyns opts)
+                           (apply dissoc syns on-bits))}]
+        [cid dt m]))))
+
+(defn animation-step!
+  []
+  (let [x (peek @steps)
+        curr (:region x)
+        bit-width (:input-size (:spec curr))
+        ncol (count (:columns curr))
+        dt @selected-dt
+        view-r (get-in @steps [(dt->i dt) :region])
+        rgn-data (mapv (comp rgn-column-states :region) @steps)
+        view-cids (if @selected-cid
+                    [@selected-cid]
+                    (:active-columns view-r))
+        view-syn-data (map in-synapse-display-data view-cids (repeat dt))]
+    (update-text-display)
+    (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
+    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
+    (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
+    (draw-insynapses canvas-ctx view-syn-data)))
+
+(defn run-animation
+  []
+  (go
+   (while @animation-go?
+     (monet.core/animation-frame animation-step!)
+     (<! (timeout @animation-step-ms)))))
+
+
+;; ## Event stream processing
 
 (defn listen [el type]
   (let [out (chan)]
@@ -314,62 +375,6 @@
           (<! clicks)
           (take-step!)))))
 
-(defn update-text-display
-  []
-  (let [curr-t (:timestep (:region (peek @steps)))
-        view-state (nth @steps (dt->i @selected-dt))
-        ts-el (dom/getElement "sim-timestep")
-        info-el (dom/getElement "detail-text")]
-    (set! (.-innerHTML ts-el) curr-t)
-    (forms/setValue info-el (detail-text view-state @selected-dt @selected-cid))))
-
-(defn rgn-column-states
-  [rgn opts]
-  (let [om (:overlaps rgn)
-        am (zipmap (:active-columns rgn) (repeat :active))
-        pm (delay nil)] ;; TODO
-    (cond-> (if (:display-overlap-columns opts) om {})
-            (:display-predictive-columns opts) (merge @pm)
-            (:display-active-columns opts) (merge am))))
-
-(defn in-synapse-display-data
-  [cid dt opts]
-  (when (:display-active-insyns opts)
-    (let [x (@steps (dt->i dt))
-          col (get-in x [:region :columns cid])
-          on-bits (:inbits x)
-         syns (-> col :in-synapses :connected)
-         m {:active (select-keys syns on-bits)
-            :inactive (when (:display-inactive-insyns opts)
-                        (apply dissoc syns on-bits))}]
-     [cid dt m])))
-
-(defn animation-step!
-  []
-  (let [x (peek @steps)
-        curr (:region x)
-        bit-width (:input-size (:spec curr))
-        ncol (count (:columns curr))
-        dt @selected-dt
-        view-r (get-in @steps [(dt->i dt) :region])
-        rgn-data (mapv (comp rgn-column-states :region) @steps)
-        view-cids (if @selected-cid
-                    [@selected-cid]
-                    (:active-columns view-r))
-        view-syn-data (map in-synapse-display-data view-cids (repeat dt))]
-    (update-text-display)
-    (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
-    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
-    (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
-    (draw-insynapses canvas-ctx view-syn-data)))
-
-(defn run-animation
-  []
-  (go
-   (while @animation-go?
-     (animation-step!)
-     (<! (timeout @animation-step-ms)))))
-
 (defn handle-animation-control
   []
   (let [btn (dom/getElement "animation-control")
@@ -394,10 +399,12 @@
   (let [ids ["display-active-columns"
              "display-overlap-columns"
              "display-predictive-columns"
+             "display-bursting-columns"
              "display-active-insyns"
              "display-inactive-insyns"
              "display-insyns-permanences"
              "display-active-dendrites"]
+        ids (filter dom/getElement ids)
         btns (map dom/getElement ids)
         cs (map listen btns (repeat "click"))
         cm (zipmap cs ids)]
@@ -442,6 +449,8 @@
   (handle-animation-control)
   (handle-animation-step)
   (handle-display-options)
-  (handle-canvas-clicks))
+  (handle-canvas-clicks)
+  (add-watch steps :timestep (fn [_ _ _ _]
+                               (update-timestep))))
 
 (init-ui!)
