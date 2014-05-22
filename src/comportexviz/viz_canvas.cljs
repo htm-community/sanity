@@ -7,10 +7,21 @@
             [clojure.core.rrb-vector :as fv]
             [monet.canvas :as c]
             [monet.core]
+            [org.nfrac.comportex.sequence-memory :as sm]
             [comportexviz.mq :as mq]
             [cljs.core.async :refer [chan put! <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
+;; TODO - cache this!
+(defn predictive-columns
+  [rgn]
+  (let [cells (:prev-active-cells rgn)]
+    (->> (:columns rgn)
+         (keep (fn [col]
+                 (when (seq (sm/column-predictive-cells col cells
+                                                        (:spec rgn)))
+                   (:id col))))
+         (set))))
 
 (def sim-go? (atom false))
 (def sim-step-ms (atom 500))
@@ -191,7 +202,9 @@
                             (= sel-cid cid))
                   color (case cval
                           :inactive "#fff"
-                          :active "#f00"
+                          :active "#0a4"
+                          :predictive "#88f"
+                          :bursting "#f00"
                           (->> (/ cval 10)
                                (min 1.0)
                                (- 1)
@@ -229,6 +242,37 @@
   (c/restore ctx)
   ctx)
 
+(defn draw-dendrites
+  [ctx data]
+  (c/save ctx)
+  (c/stroke-width ctx 1)
+  (doseq [[cid dt m] data
+          :let [[cx cy] (column->px cid dt)
+                perms? (:display-dendrite-permanences @display-options)
+                draw (fn [syns active?]
+                       (c/stroke-style ctx (if active? "#f00" "#000"))
+                       (doseq [[[id _] perm] syns
+                               :let [[dcx dcy] (column->px id (inc dt))
+                                     mid-y (quot (+ cy dcy) 2)
+                                     diff-y (Math/abs (- cy dcy))]]
+                         (doto ctx
+                           (c/alpha (if perms? perm 1))
+                           (c/begin-path)
+                           (c/move-to cx cy)
+                           (c/line-to (+ cx 10) cy)
+                           (c/quadratic-curve-to (+ cx (quot diff-y 2))
+                                                 mid-y
+                                                 dcx
+                                                 dcy)
+                           (c/stroke)))
+                       )]]
+    (draw (:inactive m) false)
+    (draw (:active m) true))
+  (c/restore ctx)
+  ctx)
+
+(declare dendrite-display-data)
+
 (defn detail-text
   [state dt cid]
   (let [in (:input state)
@@ -239,7 +283,7 @@
            (interpose \newline
                       ["__Selection__"
                        (str "  * timestep " (:timestep r))
-                       (str "  * delay " dt)
+                       (str "    * (delay " dt ")")
                        (str "  * column " (or cid "nil"))
                        ""
                        "__Input__"
@@ -249,7 +293,17 @@
                        (sort bits)
                        ""
                        "__Active columns__"
-                       (sort ac)]))))
+                       (sort ac)
+                       ""
+                       "__Active cells__"
+                       (sort (:active-cells r))
+                       ""
+                       (if cid
+                         (str "__Selected column__" \newline
+                              "__Dendrite display data__"
+                              (dendrite-display-data cid dt)
+                              "__Column__"
+                              (get-in r [:columns cid])))]))))
 
 (defn update-text-display
   []
@@ -267,11 +321,13 @@
   [rgn]
   (let [opts @display-options
         om (:overlaps rgn)
+        pm (delay (zipmap (predictive-columns rgn) (repeat :predictive)))
         am (zipmap (:active-columns rgn) (repeat :active))
-        pm (delay {})] ;; TODO
+        bm (zipmap (:bursting-columns rgn) (repeat :bursting))]
     (cond-> (if (:display-overlap-columns opts) om {})
             (:display-predictive-columns opts) (merge @pm)
-            (:display-active-columns opts) (merge am))))
+            (:display-active-columns opts) (merge am)
+            (:display-bursting-columns opts) (merge bm))))
 
 (defn in-synapse-display-data
   [cid dt]
@@ -286,6 +342,26 @@
                            (apply dissoc syns on-bits))}]
         [cid dt m]))))
 
+(defn dendrite-display-data
+  [cid dt]
+  (let [opts @display-options]
+    (when (:display-active-dendrites opts)
+      (let [x (@steps (dt->i dt))
+            col (get-in x [:region :columns cid])
+            rgn (:region x)
+            pcon (-> rgn :spec :connected-perm)
+            on-cells (:prev-active-cells rgn)
+            best (sm/best-matching-segment-and-cell col on-cells (:spec rgn))
+            m (if-let [sid (:segment-idx best)]
+                (let [[_ cell-idx] (:cell-id best)
+                      allsyns (get-in col [:cells cell-idx :segments sid :synapses])
+                      syns (into {} (filter (fn [[id p]] (>= pcon p)) allsyns))]
+                 {:active (select-keys syns on-cells)
+                  :inactive (when (:display-dendrites-inactive opts)
+                              (apply dissoc syns on-cells))})
+                {})]
+        [cid dt m]))))
+
 (defn animation-step!
   []
   (let [x (peek @steps)
@@ -298,12 +374,14 @@
         view-cids (if @selected-cid
                     [@selected-cid]
                     (:active-columns view-r))
-        view-syn-data (map in-synapse-display-data view-cids (repeat dt))]
+        view-syn-data (map in-synapse-display-data view-cids (repeat dt))
+        view-dendrite-data (map dendrite-display-data view-cids (repeat dt))]
     (update-text-display)
     (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
     (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
     (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
-    (draw-insynapses canvas-ctx view-syn-data)))
+    (draw-insynapses canvas-ctx view-syn-data)
+    (draw-dendrites canvas-ctx view-dendrite-data)))
 
 (defn run-animation
   []
@@ -403,7 +481,9 @@
              "display-active-insyns"
              "display-inactive-insyns"
              "display-insyns-permanences"
-             "display-active-dendrites"]
+             "display-active-dendrites"
+             "display-dendrites-inactive"
+             "display-dendrite-permanences"]
         ids (filter dom/getElement ids)
         btns (map dom/getElement ids)
         cs (map listen btns (repeat "click"))
