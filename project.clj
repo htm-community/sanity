@@ -7,11 +7,7 @@
                  [org.nfrac/comportex "0.1.0-SNAPSHOT"]
                  [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
                  [org.clojure/core.rrb-vector "0.0.11"]
-
-                 [rm-hull/monet "0.1.12"]
-                 
-                 [net.drib/strokes "0.5.1"]
-                 ]
+                 [rm-hull/monet "0.1.12"]]
   
   :plugins [[lein-cljsbuild "1.0.3"]]
 
