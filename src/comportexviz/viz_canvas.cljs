@@ -14,22 +14,16 @@
             [cljs.core.async :refer [chan put! <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-;; TODO - cache this!
-(defn predictive-columns
-  [rgn]
-  (let [cells (:prev-active-cells rgn)]
-    (->> (:columns rgn)
-         (keep (fn [col]
-                 (when (seq (sm/column-predictive-cells col cells
-                                                        (:spec rgn)))
-                   (:id col))))
-         (set))))
-
 (def sim-go? (atom false))
 (def sim-step-ms (atom 500))
 (def animation-go? (atom false))
 (def animation-step-ms (atom 500))
 (def display-options (atom {:display-active-columns true}))
+
+(defn wrap
+  [x]
+  (let [pcr (delay (sm/predictive-cells (:region x)))]
+    (assoc-in x [:region :predictive-cells-ref] pcr)))
 
 ;; keep recent time steps
 (def keep-steps (atom 25))
@@ -48,10 +42,11 @@
 (defn take-step!
   []
   (go
-   (let [x (<! mq/sim-channel)]
+   (let [x (<! mq/sim-channel)
+         xw (wrap x)]
      (swap! steps
             (fn [q]
-              (->> (conj q x)
+              (->> (conj q xw)
                    (take-last-v @keep-steps)))))))
 
 (def selected-cid (atom nil))
@@ -292,8 +287,11 @@
 (declare dendrite-display-data)
 
 (defn detail-text
-  [state dt cid]
-  (let [in (:input state)
+  []
+  (let [dt @selected-dt
+        cid @selected-cid
+        state (@steps (dt->i dt))
+        in (:input state)
         bits (:inbits state)
         rgn (:region state)
         ac (:active-columns rgn)]
@@ -316,14 +314,18 @@
       (str (sort (:active-cells rgn)))
       ""
       (if cid
-        (let [col (get-in rgn [:columns cid])
-              best (sm/best-matching-segment-and-cell
-                    col (:prev-active-cells rgn) (:spec rgn))]
+        (let [dtp (inc dt)
+              x (@steps (dt->i dtp))
+              pcol (get-in x [:region :columns cid])
+              prgn (:region x)
+              pcells (:active-cells prgn)
+              best (sm/best-matching-segment-and-cell pcol pcells (:spec rgn))
+              col (get-in rgn [:columns cid])]
           ["__Selected column__"
            "__Best matching segment and cell_"
            (str best)
            "__Cells and their Dendrite segments__"
-           (->> (:cells col)
+           (->> (:cells pcol)
                 (map-indexed
                  (fn [i cell]
                    (let [ds (:segments cell)]
@@ -344,9 +346,8 @@
 
 (defn update-text-display
   []
-  (let [view-state (nth @steps (dt->i @selected-dt))
-        info-el (dom/getElement "detail-text")]
-    (forms/setValue info-el (detail-text view-state @selected-dt @selected-cid))))
+  (let [info-el (dom/getElement "detail-text")]
+    (forms/setValue info-el (detail-text))))
 
 (defn update-timestep
   []
@@ -355,10 +356,12 @@
     (set! (.-innerHTML ts-el) curr-t)))
 
 (defn rgn-column-states
-  [rgn]
+  [rgn prev-rgn]
   (let [opts @display-options
         om (:overlaps rgn)
-        pm (delay (zipmap (predictive-columns rgn) (repeat :predictive)))
+        pm (delay (when prev-rgn
+                    (zipmap (keys (deref (:predictive-cells-ref prev-rgn)))
+                            (repeat :predictive))))
         am (zipmap (:active-columns rgn) (repeat :active))
         bm (zipmap (:bursting-columns rgn) (repeat :bursting))]
     (cond-> (if (:display-overlap-columns opts) om {})
@@ -383,19 +386,24 @@
   [cid dt]
   (let [opts @display-options]
     (when (:display-active-dendrites opts)
-      (let [x (@steps (dt->i dt))
+      ;; logically need to use prev region, since it is prior to
+      ;; learning that occurred at time dt.
+      ;; also need its current active cells that are the
+      ;; PREVIOUSLY active cells at dt.
+      (let [dtp (inc dt)
+            x (@steps (dt->i dtp))
             col (get-in x [:region :columns cid])
             rgn (:region x)
             pcon (-> rgn :spec :connected-perm)
-            on-cells (:prev-active-cells rgn)
+            on-cells (:active-cells rgn)
             best (sm/best-matching-segment-and-cell col on-cells (:spec rgn))
             m (if-let [sid (:segment-idx best)]
                 (let [[_ cell-idx] (:cell-id best)
                       allsyns (get-in col [:cells cell-idx :segments sid :synapses])
                       syns (into {} (filter (fn [[id p]] (>= pcon p)) allsyns))]
-                 {:active (select-keys syns on-cells)
-                  :inactive (when (:display-dendrites-inactive opts)
-                              (apply dissoc syns on-cells))})
+                  {:active (select-keys syns on-cells)
+                   :inactive (when (:display-dendrites-inactive opts)
+                               (apply dissoc syns on-cells))})
                 {})]
         [cid dt m]))))
 
@@ -407,7 +415,8 @@
         ncol (count (:columns curr))
         dt @selected-dt
         view-r (get-in @steps [(dt->i dt) :region])
-        rgn-data (mapv (comp rgn-column-states :region) @steps)
+        rs (map :region @steps)
+        rgn-data (mapv rgn-column-states rs (cons nil rs))
         view-cids (if @selected-cid
                     [@selected-cid]
                     (:active-columns view-r))
