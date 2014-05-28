@@ -4,6 +4,8 @@
             goog.ui.Slider
             goog.ui.Component.EventType
             [goog.events :as events]
+            [goog.string :as gstring]
+            [goog.string.format]
             [clojure.core.rrb-vector :as fv]
             [monet.canvas :as c]
             [monet.core]
@@ -70,10 +72,10 @@
 (def height-px 1100)
 (def bit-grid-px 5)
 (def col-grid-px 5)
-(def fill% 1)
-(def bit-w-px (dec (* fill% bit-grid-px)))
+(def bit-w-px (- bit-grid-px 1))
 (def bit-r-px (* bit-w-px 0.5))
-(def col-r-px (* fill% col-grid-px 0.5))
+(def col-r-px (* col-grid-px 0.5))
+(def head-px 10)
 
 (def canvas-dom (dom/getElement "viz"))
 ;; need to set canvas size in js not CSS, the latter delayed so
@@ -118,7 +120,8 @@
         right (+ left width)
         off-x-px (* (+ dt 0.5) col-grid-px)
         x-px (- right off-x-px)
-        y-px (* (+ cid 0.5) col-grid-px)]
+        off-y-px (* (+ cid 0.5) col-grid-px)
+        y-px (+ head-px off-y-px)]
     [x-px y-px]))
 
 (defn px->column
@@ -128,7 +131,7 @@
   (let [left (rgn-px-offset)
         width (* @keep-steps col-grid-px)
         right (+ left width)
-        cid (Math/floor (/ y-px col-grid-px))
+        cid (Math/floor (/ (- y-px head-px) col-grid-px))
         dt (Math/floor (/ (- right x-px) col-grid-px))]
     (when (and (<= 0 dt (count @steps))
                (<= 0 cid))
@@ -142,7 +145,8 @@
         right width
         off-x-px (* (+ dt 0.5) bit-grid-px)
         x-px (- right off-x-px)
-        y-px (* (+ id 0.5) bit-grid-px)]
+        off-y-px (* (+ id 0.5) bit-grid-px)
+        y-px (+ head-px off-y-px)]
     [x-px y-px]))
 
 (defn px->inbit
@@ -151,11 +155,18 @@
   [x-px y-px]
   (let [width (* @keep-steps bit-grid-px)
         right width
-        id (Math/floor (/ y-px bit-grid-px))
+        id (Math/floor (/ (- y-px head-px) bit-grid-px))
         dt (Math/floor (/ (- right x-px) bit-grid-px))]
     (when (and (<= 0 dt (count @steps))
                (<= 0 id))
       [id dt])))
+
+(defn square
+  [cx cy r]
+  {:x (- cx r)
+   :y (- cy r)
+   :w (* 2 r)
+   :h (* 2 r)})
 
 (defn draw-inbits
   [ctx data bit-width sel-dt]
@@ -166,19 +177,14 @@
           :let [bits (data (dt->i dt))
                 alph (if (= sel-dt dt) 1 0.5)]]
     (c/alpha ctx alph)
-    (c/fill-style ctx "#f00")
-    (doseq [b bits
-            :let [[x-px y-px] (inbit->px b dt)]]
-      (c/fill-rect ctx {:x (- x-px bit-r-px)
-                        :y (- y-px bit-r-px)
-                        :w bit-w-px
-                        :h bit-w-px}))
     (doseq [b (range bit-width)
-            :let [[x-px y-px] (inbit->px b dt)]]
-      (c/stroke-rect ctx {:x (- x-px bit-r-px)
-                          :y (- y-px bit-r-px)
-                          :w bit-w-px
-                          :h bit-w-px})))
+            :let [[x-px y-px] (inbit->px b dt)
+                  color (if (bits b)
+                          "#f00"
+                          "#fff")]]
+      (c/fill-style ctx color)
+      (c/fill-rect ctx (square x-px y-px bit-r-px))
+      (c/stroke-rect ctx (square x-px y-px bit-r-px))))
   (c/restore ctx)
   ctx)
 
@@ -216,6 +222,18 @@
       (c/stroke ctx)
       (when sel?
         (c/alpha ctx alph))))
+  ;; draw axis on selection: vertical dt and horizonal cid
+  (c/fill-style ctx "#000")
+  (c/alpha ctx 1.0)
+  (let [pts [(column->px -1 sel-dt)
+             (column->px ncol sel-dt)]]
+    (doseq [[x-px y-px] pts]
+      (c/fill-rect ctx (square x-px y-px col-r-px))))
+  (when sel-cid
+    (let [pts [(column->px sel-cid -1)
+               (column->px sel-cid (count data))]]
+      (doseq [[x-px y-px] pts]
+        (c/fill-rect ctx (square x-px y-px col-r-px)))))
   (c/restore ctx)
   ctx)
 
@@ -233,7 +251,7 @@
                          (doto ctx
                            (c/alpha (if perms? perm 1))
                            (c/begin-path)
-                           (c/move-to cx cy)
+                           (c/move-to (- cx 1) cy) ;; -1 avoid obscuring colour
                            (c/line-to ix iy)
                            (c/stroke)))
                        )]]
@@ -258,7 +276,7 @@
                          (doto ctx
                            (c/alpha (if perms? perm 1))
                            (c/begin-path)
-                           (c/move-to cx cy)
+                           (c/move-to (+ cx 1) cy) ;; avoid obscuring colour
                            (c/line-to (+ cx 10) cy)
                            (c/quadratic-curve-to (+ cx (quot diff-y 2))
                                                  mid-y
@@ -277,33 +295,52 @@
   [state dt cid]
   (let [in (:input state)
         bits (:inbits state)
-        r (:region state)
-        ac (:active-columns r)]
-    (apply str
-           (interpose \newline
-                      ["__Selection__"
-                       (str "  * timestep " (:timestep r))
-                       (str "    * (delay " dt ")")
-                       (str "  * column " (or cid "nil"))
-                       ""
-                       "__Input__"
-                       in
-                       ""
-                       "__Input bits__"
-                       (sort bits)
-                       ""
-                       "__Active columns__"
-                       (sort ac)
-                       ""
-                       "__Active cells__"
-                       (sort (:active-cells r))
-                       ""
-                       (if cid
-                         (str "__Selected column__" \newline
-                              "__Dendrite display data__"
-                              (dendrite-display-data cid dt)
-                              "__Column__"
-                              (get-in r [:columns cid])))]))))
+        rgn (:region state)
+        ac (:active-columns rgn)]
+    (->>
+     ["__Selection__"
+      (str "* timestep " (:timestep rgn)
+           " (delay " dt ")")
+      (str "* column " (or cid "nil"))
+      ""
+      "__Input__"
+      (str in)
+      ""
+      "__Input bits__"
+      (str (sort bits))
+      ""
+      "__Active columns__"
+      (str (sort ac))
+      ""
+      "__Active cells__"
+      (str (sort (:active-cells rgn)))
+      ""
+      (if cid
+        (let [col (get-in rgn [:columns cid])
+              best (sm/best-matching-segment-and-cell
+                    col (:prev-active-cells rgn) (:spec rgn))]
+          ["__Selected column__"
+           "__Best matching segment and cell_"
+           (str best)
+           "__Cells and their Dendrite segments__"
+           (->> (:cells col)
+                (map-indexed
+                 (fn [i cell]
+                   (let [ds (:segments cell)]
+                     [(str "CELL " i)
+                      (str (count ds) " = "
+                           (sort (map (comp count :synapses) ds)))
+                      (for [i (range (count ds))
+                            :let [syns (:synapses (ds i))]]
+                        [(str "  SEGMENT " i)
+                         (for [s (sort syns)]
+                           (str "  " (key s) " :=> "
+                                (gstring/format "%.2f" (val s))))])
+                      ]))))
+           ]))]
+     (flatten)
+     (interpose \newline)
+     (apply str))))
 
 (defn update-text-display
   []

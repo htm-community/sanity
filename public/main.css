@@ -1,6 +1,6 @@
 
 body {
-  background:#eeeeee;
+  background:#ccc;
 }
 
 #header {
@@ -14,6 +14,7 @@ body {
 
 #sidebar {
   float: left;
+  width: 30%;
 }
 
 #display-options > div {
@@ -24,13 +25,14 @@ body {
   display: inline-block;
   vertical-align: middle;
   width: 150px;
-  height: 20px;
+  height: 1em;
 }
 
 .goog-slider-horizontal {
   width: 100%;
   height: 100%;
-  background-color: ThreeDFace;
+  background-color: #eee;
+  border: 1px groove #eee;
   position: relative;
   overflow: hidden;
 }
@@ -41,7 +43,7 @@ body {
   width: 20px;
   height: 100%;
   position: absolute;
-  background-color: ThreeDShadow;
+  background-color: #bbb;
   overflow: hidden;
 }
 

@@ -1,13 +1,19 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>spatial pooling blocks - comportex viz</title>
+  <title>block steps - comportex viz</title>
   <link href="main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
-    <h3>spatial pooling over blocks</h3>
+    <h3>block steps</h3>
+    <p>One of the simplest possible input patterns. The input field is
+    divided into blocks of radius 16 bits, not overlapping. Each block
+    stays active for 5 time steps then increments to the next one.
+    However the input also has a direction state: after the final
+    block it switches direction and steps down back to the first one,
+    and then repeats.</p>
     <fieldset>
       <legend>Simulation</legend>
       Timestep: <span id="sim-timestep"></span></br>
@@ -26,13 +32,20 @@
     <fieldset id="display-options">
       <legend>Display</legend>
       <div>
+        <label><input id="display-overlap-columns" type="checkbox">Overlap scores</label><br/>
         <label><input id="display-active-columns" type="checkbox">Active columns</label><br/>
-        <label><input id="display-overlap-columns" type="checkbox">Overlap columns</label><br/>
+        <label><input id="display-bursting-columns" type="checkbox">Bursting columns</label><br/>
+        <label><input id="display-predictive-columns" type="checkbox">Predictive columns</label>
       </div>
       <div>
         <label><input id="display-active-insyns" type="checkbox">Active in-synapses</label><br/>
         <label><input id="display-inactive-insyns" type="checkbox">Inactive in-synapses</label><br/>
         <label><input id="display-insyns-permanences" type="checkbox">Permanences</label>
+      </div>
+      <div>
+        <label><input id="display-active-dendrites" type="checkbox">Active dendrites</label><br/>
+        <label><input id="display-dendrites-inactive" type="checkbox">Inactive synapses</label><br/>
+        <label><input id="display-dendrite-permanences" type="checkbox">Permanences</label>
       </div>
     </fieldset>
     <textarea id="detail-text">
@@ -41,5 +54,5 @@
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
-  <script type="text/javascript">goog.require("comportexviz.sp_blocks");</script>
+  <script type="text/javascript">goog.require("comportexviz.block_steps");</script>
 </body>

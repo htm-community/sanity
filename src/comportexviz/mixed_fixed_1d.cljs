@@ -1,4 +1,4 @@
-(ns comportexviz.sm-patterns-1d
+(ns comportexviz.mixed-fixed-1d
   (:require [org.nfrac.comportex.pooling :as p]
             [org.nfrac.comportex.sequence-memory :as sm]
             [org.nfrac.comportex.encoders :as enc]
