@@ -70,6 +70,7 @@
 (def bit-w-px (- bit-grid-px 1))
 (def bit-r-px (* bit-w-px 0.5))
 (def col-r-px (* col-grid-px 0.5))
+(def seg-r-px 15)
 (def head-px 10)
 
 (def canvas-dom (dom/getElement "viz"))
@@ -104,7 +105,12 @@
 
 (defn rgn-px-offset
   []
-  (* @keep-steps bit-grid-px 1.3))
+  (* @keep-steps bit-grid-px 1.4))
+
+(defn segs-px-offset
+  []
+  (+ (rgn-px-offset)
+     (* @keep-steps col-grid-px 2.0)))
 
 (defn column->px
   "Returns pixel coordinates on the canvas `[x-px y-px]` for the
@@ -219,14 +225,22 @@
         (c/alpha ctx alph))))
   ;; draw axis on selection: vertical dt and horizonal cid
   (c/fill-style ctx "#000")
+  (c/stroke-style ctx "#000")
+  (c/stroke-width ctx 2)
   (c/alpha ctx 1.0)
   (let [pts [(column->px -1 sel-dt)
              (column->px ncol sel-dt)]]
+    (apply c/move-to ctx (map + (first pts) (repeat col-r-px)))
+    (apply c/line-to ctx (map + (second pts) (repeat col-r-px)))
+    (c/stroke ctx)
     (doseq [[x-px y-px] pts]
       (c/fill-rect ctx (square x-px y-px col-r-px))))
   (when sel-cid
     (let [pts [(column->px sel-cid -1)
                (column->px sel-cid (count data))]]
+      (apply c/move-to ctx (map + (first pts) (repeat col-r-px)))
+      (apply c/line-to ctx (map + (second pts) (repeat col-r-px)))
+      (c/stroke ctx)
       (doseq [[x-px y-px] pts]
         (c/fill-rect ctx (square x-px y-px col-r-px)))))
   (c/restore ctx)
@@ -255,7 +269,7 @@
   (c/restore ctx)
   ctx)
 
-(defn draw-dendrites
+(defn draw-matching-segments
   [ctx data]
   (c/save ctx)
   (c/stroke-width ctx 1)
@@ -284,7 +298,61 @@
   (c/restore ctx)
   ctx)
 
-(declare dendrite-display-data)
+(defn draw-all-segments
+  [ctx data cid dt ncol th]
+  (let [perms? false ;; TODO
+        ncells (count data)
+        ns-bycell (mapv count data)
+        ns-bycell-pad (map inc ns-bycell)
+        n-pad (apply + 1 ns-bycell-pad)
+        our-left (segs-px-offset)
+        our-height (* 0.9 ncol col-grid-px)
+        seg->px (fn [cell-idx idx]
+                  (let [i-all (apply + 1 idx (take cell-idx ns-bycell-pad))
+                        frac (/ i-all n-pad)]
+                    [(+ our-left seg-r-px 10)
+                     (+ head-px (* frac our-height))]))]
+    ;; draw diagram line from selected cell to the segments
+    (let [[cidx cidy] (column->px cid dt)]
+      (c/stroke-style ctx "#fff")
+      (c/move-to ctx (+ cidx 1) cidy) ;; avoid obscuring colour
+      (c/line-to ctx our-left cidy)
+      (c/line-to ctx our-left head-px)
+      (c/line-to ctx our-left (+ head-px our-height))
+      (c/stroke ctx))
+    (doseq [[ci segs] (map-indexed vector data)
+            [si m] (map-indexed vector segs)
+            :let [[sx sy] (seg->px ci si)
+                  segact (count (:active m))
+                  segtot (+ segact (count (:inactive m)))
+                  z (-> (- 1 (/ segact th))
+                        (min 1.0))]]
+      ;; draw segment as a circle
+      (c/alpha ctx 1.0)
+      (c/stroke-style ctx "#000")
+      (c/fill-style ctx (rgbhex 1 z z))
+      (c/circle ctx {:x sx :y sy :r seg-r-px})
+      (c/stroke ctx)
+      (c/fill-style ctx "#000")
+      (when (zero? si)
+        (c/text ctx {:text (str "cell " ci " segments:")
+                     :x sx :y (- sy seg-r-px 10)}))
+      (c/text ctx {:text (str si ", activation " segact
+                              " / " segtot)
+                   :x (+ sx (* 2 seg-r-px)) :y sy})
+      ;; synapses
+      (let [draw (fn [syns active?]
+                   (c/stroke-style ctx (if active? "#f00" "#000"))
+                   (doseq [[[to-cid _] perm] syns
+                           :let [[cx cy] (column->px to-cid (inc dt))]]
+                     (doto ctx
+                       (c/alpha (if perms? perm 1))
+                       (c/begin-path)
+                       (c/move-to sx sy)
+                       (c/line-to (+ cx 1) cy) ;; +1 avoid obscuring colour
+                       (c/stroke))))]
+        (draw (:inactive m) false)
+        (draw (:active m) true)))))
 
 (defn detail-text
   []
@@ -382,14 +450,15 @@
                            (apply dissoc syns on-bits))}]
         [cid dt m]))))
 
-(defn dendrite-display-data
+(defn matching-segments-display-data
   [cid dt]
   (let [opts @display-options]
     (when (:display-active-dendrites opts)
       ;; logically need to use prev region, since it is prior to
       ;; learning that occurred at time dt.
       ;; also need its current active cells that are the
-      ;; PREVIOUSLY active cells at dt.
+      ;; PREVIOUSLY active cells at dt -- i.e. that define the
+      ;; predictive states for dt.
       (let [dtp (inc dt)
             x (@steps (dt->i dtp))
             col (get-in x [:region :columns cid])
@@ -407,6 +476,24 @@
                 {})]
         [cid dt m]))))
 
+(defn all-segments-display-data
+  [cid dt]
+  (let [dtp (inc dt)
+        x (@steps (dt->i dtp))
+        col (get-in x [:region :columns cid])
+        rgn (:region x)
+        pcon (-> rgn :spec :connected-perm)
+        ac (:active-cells rgn)
+        d (->> (:cells col)
+               (mapv (fn [cell]
+                       (->> (:segments cell)
+                            (map :synapses)
+                            (mapv (fn [allsyns]
+                                    (let [syns (into {} (filter (fn [[id p]] (>= pcon p)) allsyns))]
+                                      {:active (select-keys syns ac)
+                                       :inactive (apply dissoc syns ac)})))))))]
+    d))
+
 (defn animation-step!
   []
   (let [x (peek @steps)
@@ -416,18 +503,22 @@
         dt @selected-dt
         view-r (get-in @steps [(dt->i dt) :region])
         rs (map :region @steps)
-        rgn-data (mapv rgn-column-states rs (cons nil rs))
-        view-cids (if @selected-cid
-                    [@selected-cid]
-                    (:active-columns view-r))
-        view-syn-data (map in-synapse-display-data view-cids (repeat dt))
-        view-dendrite-data (map dendrite-display-data view-cids (repeat dt))]
+        rgn-data (mapv rgn-column-states rs (cons nil rs))]
     (update-text-display)
     (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
     (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
     (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
-    (draw-insynapses canvas-ctx view-syn-data)
-    (draw-dendrites canvas-ctx view-dendrite-data)))
+    (if @selected-cid
+      (let [isd1 (in-synapse-display-data [@selected-cid] dt)
+            asd (all-segments-display-data @selected-cid dt)]
+        (draw-insynapses canvas-ctx [isd1])
+        (draw-all-segments canvas-ctx asd @selected-cid dt ncol
+                           (:activation-threshold (:spec view-r))))
+      (let [view-cids (:active-columns view-r)
+            isd (map in-synapse-display-data view-cids (repeat dt))
+            msd (map matching-segments-display-data view-cids (repeat dt))]
+        (draw-insynapses canvas-ctx isd)
+        (draw-matching-segments canvas-ctx msd)))))
 
 (defn run-animation
   []
