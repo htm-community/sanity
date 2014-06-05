@@ -1,9 +1,12 @@
 # TODO
 
+* split up viz-canvas namespace
+
 * generate html ui from code
 * tabs
   * description
   * controls
+  * noise
   * parameter values (edit!)
   * region details
   * selected column details

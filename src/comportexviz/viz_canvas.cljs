@@ -65,7 +65,7 @@
 (enable-console-print!)
 
 (def width-px 800)
-(def height-px 1100)
+(def height-px 1600)
 (def bit-grid-px 4)
 (def col-grid-px 5)
 (def bit-w-px (- bit-grid-px 1))
@@ -82,27 +82,33 @@
 
 (def canvas-ctx (c/get-context canvas-dom "2d"))
 
-(defn hexit
-  [z]
-  (let [i (.floor js/Math (* z 16))]
-    (if (< i 10)
-      (str i)
-      (case i
-        10 "a"
-        11 "b"
-        12 "c"
-        13 "d"
-        14 "e"
-        "f"))))
+(defn hsl
+  [h s l]
+  (let [h2 (if (keyword? h)
+             (case h
+               :red 0
+               :orange 21
+               :yellow 42
+               :green 85
+               :blue 170
+               :purple 212)
+             ;; otherwise angle
+             (* (/ h 360) 255))]
+    (str "hsl(" h2 ","
+         (long (* s 100)) "%,"
+         (long (* l 100)) "%)")))
 
-(defn rgbhex
-  [r g b]
-  (str "#" (hexit r) (hexit g) (hexit b)))
-
-(defn greyhex
+(defn grey
   [z]
-  (let [x (hexit z)]
-    (str "#" x x x)))
+  (let [v (long (* z 255))]
+    (str "rgb(" v "," v "," v ")")))
+
+(def col-colors
+  {:inactive "white"
+   :active "#0a4"
+   :predictive "#88f"
+   :bursting "red"
+   })
 
 (defn rgn-px-offset
   []
@@ -181,7 +187,7 @@
   [ctx data bit-width sel-dt]
   (c/save ctx)
   (c/stroke-width ctx 1)
-  (c/stroke-style ctx "#000")
+  (c/stroke-style ctx "black")
   (doseq [dt (range (count data))
           :let [bits (data (dt->i dt))
                 alph (if (= sel-dt dt) 1 0.5)]]
@@ -189,8 +195,8 @@
     (doseq [b (range bit-width)
             :let [[x-px y-px] (inbit->px b dt)
                   color (if (bits b)
-                          "#f00"
-                          "#fff")]]
+                          "red"
+                          "white")]]
       (c/fill-style ctx color)
       (c/fill-rect ctx (centred-square x-px y-px bit-r-px))
       (c/stroke-rect ctx (centred-square x-px y-px bit-r-px))))
@@ -204,7 +210,7 @@
   ;; draw between frames of reference: inbits & columns.
   (c/save ctx)
   (c/stroke-width ctx 1)
-  (c/stroke-style ctx "#000")
+  (c/stroke-style ctx "black")
   (doseq [dt (range (count data))
           :let [m (data (dt->i dt))
                 alph (if (and (= sel-dt dt)
@@ -215,15 +221,11 @@
                   cval (m cid :inactive)
                   sel? (and (= sel-dt dt)
                             (= sel-cid cid))
-                  color (case cval
-                          :inactive "#fff"
-                          :active "#0a4"
-                          :predictive "#88f"
-                          :bursting "#f00"
-                          (->> (/ cval 10)
-                               (min 1.0)
-                               (- 1)
-                               (greyhex)))]]
+                  color (or (col-colors cval)
+                            (->> (/ cval 10)
+                                 (min 1.0)
+                                 (- 1)
+                                 (grey)))]]
       (when sel?
         (c/alpha ctx 1))
       (c/fill-style ctx color)
@@ -232,7 +234,7 @@
       (when sel?
         (c/alpha ctx alph))))
   ;; draw axis on selection: vertical dt and horizonal cid
-  (c/stroke-style ctx "#000")
+  (c/stroke-style ctx "black")
   (c/stroke-width ctx 1)
   (c/alpha ctx 1.0)
   (let [[x y1] (column->px 0 sel-dt)
@@ -259,7 +261,7 @@
           :let [[cx cy] (column->px cid dt)
                 perms? (:display-insyns-permanences @display-options)
                 draw (fn [syns active?]
-                       (c/stroke-style ctx (if active? "#f00" "#000"))
+                       (c/stroke-style ctx (if active? "red" "black"))
                        (doseq [[id perm] syns
                                :let [[ix iy] (inbit->px id dt)]]
                          (doto ctx
@@ -282,7 +284,7 @@
           :let [[cx cy] (column->px cid dt)
                 perms? (:display-dendrite-permanences @display-options)
                 draw (fn [syns active?]
-                       (c/stroke-style ctx (if active? "#f00" "#000"))
+                       (c/stroke-style ctx (if active? "red" "black"))
                        (doseq [[[id _] perm] syns
                                :let [[dcx dcy] (column->px id (inc dt))
                                      mid-y (quot (+ cy dcy) 2)
@@ -319,7 +321,7 @@
                      (+ head-px (* frac our-height))]))]
     ;; draw diagram line from selected cell to the segments
     (let [[cidx cidy] (column->px cid 0)]
-      (c/stroke-style ctx "#fff")
+      (c/stroke-style ctx "white")
       (c/stroke-width ctx col-grid-px)
       (c/move-to ctx (+ cidx col-r-px 1) cidy) ;; avoid obscuring colour
       (c/line-to ctx our-left cidy)
@@ -337,13 +339,13 @@
                         (min 1.0))]]
       ;; draw segment as a rectangle
       (c/alpha ctx 1.0)
-      (c/stroke-style ctx "#000")
+      (c/stroke-style ctx "black")
       (c/stroke-width ctx 1)
-      (c/fill-style ctx (rgbhex 1 z z))
+      (c/fill-style ctx (hsl :red 1 z))
       (let [s (centred-rect sx sy (* 2 seg-r-px) seg-r-px)]
         (c/fill-rect ctx s)
         (c/stroke-rect ctx s))
-      (c/fill-style ctx "#000")
+      (c/fill-style ctx "black")
       (when (zero? si)
         (c/text ctx {:text (str "cell " ci " segments:")
                      :x sx :y (- sy seg-r-px 5)}))
@@ -357,10 +359,10 @@
       (let [draw (fn [syns conn? active?]
                    (c/stroke-style ctx
                                    (cond
-                                    (and conn? active?) "#f00"
-                                    (and conn? (not active?)) "#000"
-                                    active? "#f88"
-                                    (not active?) "#888"))
+                                    (and conn? active?) "red"
+                                    (and conn? (not active?)) "black"
+                                    active? (hsl :red 0.5 0.5)
+                                    (not active?) (grey 0.5)))
                    (doseq [[[to-cid _] perm] syns
                            :let [[cx cy] (column->px to-cid (inc dt))]]
                      (doto ctx
