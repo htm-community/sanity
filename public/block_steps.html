@@ -8,12 +8,12 @@
   <canvas id="viz"></canvas>
   <div id="sidebar">
     <h3>block steps</h3>
-    <p>One of the simplest possible input patterns. The input field is
-    divided into blocks of radius 16 bits, not overlapping. Each block
-    stays active for 5 time steps then increments to the next one.
-    However the input also has a direction state: after the final
-    block it switches direction and steps down back to the first one,
-    and then repeats.</p>
+    <p>The input field is divided into sections of radius 25 bits, not
+    overlapping. The input stream steps through each section in turn
+    upwards and then back downwards. Each section remains active for 4
+    time steps. So the input has a position and direction state, as
+    well as a counter of how long the current position has been
+    active.</p>
     <fieldset>
       <legend>Simulation</legend>
       Timestep: <span id="sim-timestep"></span></br>
@@ -55,4 +55,7 @@
   <script type="text/javascript" src="out/comportex_viz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
   <script type="text/javascript">goog.require("comportexviz.block_steps");</script>
+  <script type="text/javascript">
+    comportexviz.block_steps.run_sim();
+  </script>
 </body>

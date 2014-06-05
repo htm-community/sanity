@@ -1,18 +1,18 @@
 (ns comportexviz.mixed-fixed-1d
-  (:require [org.nfrac.comportex.pooling :as p]
-            [org.nfrac.comportex.sequence-memory :as sm]
+  (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
             [clojure.set :as set]
+            [comportexviz.parameters]
             [comportexviz.mq :as mq]
             [cljs.core.async :refer [<! >!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; inputs
-(def bit-width 200)
+(def bit-width 400)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
-(def on-bits 15)
+(def on-bits 30)
 
 (def patterns
   {:run0 (range 5)
@@ -53,37 +53,21 @@
   (enc/superpose-encoder
    (enc/linear-number-encoder bit-width on-bits numb-domain)))
 
-;; initial CLA region
-(def ncol 200)
-(def depth 5)
-
 (def r-init
-  (-> (p/region (assoc p/spatial-pooler-defaults
-                  :ncol ncol
-                  :input-size bit-width
-                  :potential-radius (quot bit-width 5)
-                  :global-inhibition false
-                  :stimulus-threshold 2
-                  :duty-cycle-period 500))
-      (sm/with-sequence-memory (assoc sm/sequence-memory-defaults
-                                 :depth depth))))
+  (core/cla-region
+   (assoc comportexviz.parameters/small
+     :input-size bit-width
+     :potential-radius (quot bit-width 5))))
 
-(defn cla-step
-  [r in-bits]
-  (let [r-sp (p/pooling-step r in-bits)]
-    (sm/sequence-memory-step r-sp (:active-columns r-sp))))
-
-(defn run-sim!
+(defn ^:export run-sim
   []
   (go
    (loop [inseq (input-init)
           rgn r-init]
      (let [in (first inseq)
            in-bits (efn (:values in))
-           new-rgn (cla-step rgn in-bits)]
+           new-rgn (core/cla-step rgn in-bits)]
        (>! mq/sim-channel
            {:input in :inbits in-bits :region new-rgn})
        (recur (input-transform inseq)
               new-rgn)))))
-
-(run-sim!)
