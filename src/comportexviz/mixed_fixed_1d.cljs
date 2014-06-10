@@ -12,7 +12,7 @@
 (def bit-width 400)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
-(def on-bits 30)
+(def on-bits 25)
 
 (def patterns
   {:run0 (range 5)

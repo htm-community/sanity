@@ -11,6 +11,7 @@
             [monet.canvas :as c]
             [monet.core]
             [org.nfrac.comportex.sequence-memory :as sm]
+            [clojure.set :as set]
             [comportexviz.mq :as mq]
             [cljs.core.async :refer [chan put! <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
@@ -19,7 +20,10 @@
 (def sim-step-ms (atom 500))
 (def animation-go? (atom false))
 (def animation-step-ms (atom 500))
-(def display-options (atom {:display-active-columns true}))
+(def display-options
+  (atom {:display-active-columns true
+         :display-bursting-columns true
+         :display-predicted-bits true}))
 
 (defn wrap
   [x]
@@ -73,6 +77,7 @@
 (def col-r-px (* col-grid-px 0.5))
 (def seg-r-px 15)
 (def head-px 10)
+(def h-spacing-px 80)
 
 (def canvas-dom (dom/getElement "viz"))
 ;; need to set canvas size in js not CSS, the latter delayed so
@@ -83,41 +88,47 @@
 (def canvas-ctx (c/get-context canvas-dom "2d"))
 
 (defn hsl
-  [h s l]
-  (let [h2 (if (keyword? h)
-             (case h
-               :red 0
-               :orange 21
-               :yellow 42
-               :green 85
-               :blue 170
-               :purple 212)
-             ;; otherwise angle
-             (* (/ h 360) 255))]
-    (str "hsl(" h2 ","
-         (long (* s 100)) "%,"
-         (long (* l 100)) "%)")))
+  ([h s l] (hsl h s l 1.0))
+  ([h s l a]
+   (let [h2 (if (keyword? h)
+              (case h
+                :red 0
+                :orange 30
+                :yellow 60
+                :yellow-green 90
+                :green 120
+                :blue 210
+                :purple 270
+                :pink 300)
+              ;; otherwise angle
+              h)]
+     (str "hsla(" h2 ","
+          (long (* s 100)) "%,"
+          (long (* l 100)) "%,"
+          a ")"))))
 
 (defn grey
   [z]
   (let [v (long (* z 255))]
     (str "rgb(" v "," v "," v ")")))
 
-(def col-colors
+(def state-colors
   {:inactive "white"
-   :active "#0a4"
-   :predictive "#88f"
-   :bursting "red"
+   :active (hsl :blue 1.0 0.5) ;; can be active+predicted
+   :predicted (hsl :green 1.0 0.4) ;; inactive+predicted
+   :unpredicted (hsl :red 1.0 0.5)  ;; active+unpredicted
    })
 
 (defn rgn-px-offset
   []
-  (* @keep-steps bit-grid-px 1.4))
+  (+ (* @keep-steps bit-grid-px)
+     h-spacing-px))
 
 (defn segs-px-offset
   []
   (+ (rgn-px-offset)
-     (* @keep-steps col-grid-px 2.0)))
+     (* @keep-steps col-grid-px)
+     h-spacing-px))
 
 (defn column->px
   "Returns pixel coordinates on the canvas `[x-px y-px]` for the
@@ -173,8 +184,8 @@
   [cx cy r]
   {:x (- cx r)
    :y (- cy r)
-   :w (* 2 r)
-   :h (* 2 r)})
+   :w (inc (* 2 r))
+   :h (inc (* 2 r))})
 
 (defn centred-rect
   [cx cy w h]
@@ -183,23 +194,38 @@
    :w w
    :h h})
 
+(defn highlight-rect
+  [ctx rect]
+  (doto ctx
+    (c/stroke-style (hsl :yellow 1 0.75 0.5))
+    (c/stroke-width 3)
+    (c/stroke-rect rect)
+    (c/stroke-style "black")
+    (c/stroke-width 1)
+    (c/stroke-rect rect)))
+
 (defn draw-inbits
   [ctx data bit-width sel-dt]
   (c/save ctx)
   (c/stroke-width ctx 1)
-  (c/stroke-style ctx "black")
+  (c/stroke-style ctx (grey 0.75))
   (doseq [dt (range (count data))
-          :let [bits (data (dt->i dt))
-                alph (if (= sel-dt dt) 1 0.5)]]
-    (c/alpha ctx alph)
+          :let [bits (data (dt->i dt))]]
     (doseq [b (range bit-width)
             :let [[x-px y-px] (inbit->px b dt)
-                  color (if (bits b)
-                          "red"
+                  color (if-let [bit-state (bits b)]
+                          (state-colors bit-state)
                           "white")]]
       (c/fill-style ctx color)
       (c/fill-rect ctx (centred-square x-px y-px bit-r-px))
       (c/stroke-rect ctx (centred-square x-px y-px bit-r-px))))
+  ;; draw axis on selection: vertical dt
+  (let [[x y1] (inbit->px 0 sel-dt)
+        [_ y2] (inbit->px (dec bit-width) sel-dt)
+        y (/ (+ y1 y2) 2)
+        w (+ 1 bit-grid-px)
+        h (+ 10 bit-grid-px (- y2 y1))]
+    (highlight-rect ctx (centred-rect x y w h)))
   (c/restore ctx)
   ctx)
 
@@ -210,46 +236,34 @@
   ;; draw between frames of reference: inbits & columns.
   (c/save ctx)
   (c/stroke-width ctx 1)
-  (c/stroke-style ctx "black")
+  (c/stroke-style ctx (grey 0.75))
   (doseq [dt (range (count data))
-          :let [m (data (dt->i dt))
-                alph (if (and (= sel-dt dt)
-                              (not sel-cid)) 1 0.5)]]
-    (c/alpha ctx alph)
+          :let [m (data (dt->i dt))]]
     (doseq [cid (range ncol)
             :let [[x-px y-px] (column->px cid dt)
                   cval (m cid :inactive)
-                  sel? (and (= sel-dt dt)
-                            (= sel-cid cid))
-                  color (or (col-colors cval)
+                  color (or (state-colors cval)
                             (->> (/ cval 10)
                                  (min 1.0)
                                  (- 1)
                                  (grey)))]]
-      (when sel?
-        (c/alpha ctx 1))
       (c/fill-style ctx color)
       (c/circle ctx {:x x-px :y y-px :r col-r-px})
-      (c/stroke ctx)
-      (when sel?
-        (c/alpha ctx alph))))
+      (c/stroke ctx)))
   ;; draw axis on selection: vertical dt and horizonal cid
-  (c/stroke-style ctx "black")
-  (c/stroke-width ctx 1)
-  (c/alpha ctx 1.0)
   (let [[x y1] (column->px 0 sel-dt)
         [_ y2] (column->px (dec ncol) sel-dt)
         y (/ (+ y1 y2) 2)
-        w (+ 0 col-grid-px)
-        h (+ col-grid-px (- y2 y1))]
-    (c/stroke-rect ctx (centred-rect x y w h)))
+        w (+ 1 col-grid-px)
+        h (+ 10 col-grid-px (- y2 y1))]
+    (highlight-rect ctx (centred-rect x y w h)))
   (when sel-cid
     (let [[x1 y] (column->px sel-cid 0)
           [x2 _] (column->px sel-cid (dec (count data)))
           x (/ (+ x1 x2) 2)
-          w (+ col-grid-px (Math/abs (- x2 x1)))
-          h (+ 0 col-grid-px)]
-      (c/stroke-rect ctx (centred-rect x y w h))))
+          w (+ 10 col-grid-px (Math/abs (- x2 x1)))
+          h (+ 1 col-grid-px)]
+      (highlight-rect ctx (centred-rect x y w h))))
   (c/restore ctx)
   ctx)
 
@@ -307,6 +321,7 @@
 
 (defn draw-all-segments
   [ctx data cid dt ncol th]
+  (c/save ctx)
   (let [perms? false ;; TODO
         ncells (count data)
         ns-bycell (mapv count data)
@@ -374,7 +389,9 @@
         (draw (m [:disconnected :inactive]) false false)
         (draw (m [:disconnected :active]) false true)
         (draw (m [:connected :inactive]) true false)
-        (draw (m [:connected :active]) true true)))))
+        (draw (m [:connected :active]) true true))))
+  (c/restore ctx)
+  ctx)
 
 (defn detail-text
   []
@@ -465,13 +482,30 @@
         om (:overlaps rgn)
         pm (delay (when prev-rgn
                     (zipmap (keys (deref (:predictive-cells-ref prev-rgn)))
-                            (repeat :predictive))))
+                            (repeat :predicted))))
         am (zipmap (:active-columns rgn) (repeat :active))
-        bm (zipmap (:bursting-columns rgn) (repeat :bursting))]
+        bm (zipmap (:bursting-columns rgn) (repeat :unpredicted))]
     (cond-> (if (:display-overlap-columns opts) om {})
             (:display-predictive-columns opts) (merge @pm)
             (:display-active-columns opts) (merge am)
             (:display-bursting-columns opts) (merge bm))))
+
+(defn inbits-display-data
+  [state prev-state]
+  (let [opts @display-options
+        inbits (:inbits state)
+        data (zipmap inbits (repeat :active))]
+    (if (and (:display-predicted-bits opts)
+             prev-state)
+      (let [rgn (:region prev-state)
+            pc @(:predictive-cells-ref rgn)
+            all-pred-bits (sm/predicted-bits rgn pc 3)
+            unpred-bits (set/difference inbits all-pred-bits)]
+        (merge (zipmap all-pred-bits (repeat :predicted))
+               data
+               (zipmap unpred-bits (repeat :unpredicted))))
+      ;; else just show active bits
+      data)))
 
 (defn in-synapse-display-data
   [cid dt]
@@ -552,10 +586,11 @@
         dt @selected-dt
         view-r (get-in @steps [(dt->i dt) :region])
         rs (map :region @steps)
+        inb-data (mapv inbits-display-data @steps (cons nil @steps))
         rgn-data (mapv rgn-column-states rs (cons nil rs))]
     (update-text-display)
     (c/clear-rect canvas-ctx {:x 0 :y 0 :w width-px :h height-px})
-    (draw-inbits canvas-ctx (mapv :inbits @steps) bit-width dt)
+    (draw-inbits canvas-ctx inb-data bit-width dt)
     (draw-rgn canvas-ctx rgn-data ncol @selected-cid dt)
     (if @selected-cid
       (let [isd1 (in-synapse-display-data [@selected-cid] dt)
