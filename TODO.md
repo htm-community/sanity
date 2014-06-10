@@ -1,12 +1,15 @@
 # TODO
 
+* cache display data for each time step
+
 * split up viz-canvas namespace
 
 * generate html ui from code
+* or, have only one page that can load different examples
 * tabs
   * description
   * controls
-  * noise
+  * noise (nb control channel)
   * parameter values (edit!)
   * region details
   * selected column details

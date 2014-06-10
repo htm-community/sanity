@@ -1,4 +1,4 @@
-(ns comportexviz.mixed-fixed-1d
+(ns comportexviz.mixed-gaps-fixed-1d
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
@@ -15,21 +15,35 @@
 (def on-bits 25)
 
 (def patterns
-  [(range 0 5)
-   (range 3 9)
-   (range 8 12)
-   (reverse (range 0 15))])
+  {:run0 (range 5)
+   :twos (range 0 10 2)
+   :reps (mapcat #(repeat 2 %) (range 5))
+   :run10 (range 10 16)
+   :rev10 (reverse (range 10 16))
+   :threes (range 0 16 3)
+   :bounce (map (partial + 10)
+                (concat (range 5) (range 3) (range 2) (range 1)))
+   })
 
-(defn mix-patterns
-  "Returns an infinite sequence of sets of values."
-  [patterns]
-  (->> patterns
-       (map #(apply concat (repeat %)))
-       (apply map (fn [& xs] (set xs)))))
+(defn repeat-with-gaps
+  [xs [lower upper]]
+  (let [gap #(repeat (util/rand-int lower upper) nil)]
+    (apply concat (interpose xs (repeatedly gap)))))
+
+(defn mix-patterns-with-gaps
+  [patterns gap-range]
+  (let [tagseqs (map (fn [[k xs]]
+                       (->> (repeat-with-gaps xs gap-range)
+                            (map (fn [x] {:id (if x k) :val x}))))
+                     patterns)]
+    (apply map (fn [& ms] {:patterns (set (keep :id ms))
+                          :values (set (keep :val ms))})
+           tagseqs)))
 
 (defn input-init
   []
-  (mix-patterns patterns))
+  ;; infinite lazy sequence
+  (mix-patterns-with-gaps patterns [1 50]))
 
 (defn input-transform
   [xs]
@@ -43,7 +57,7 @@
   (core/cla-region
    (assoc comportexviz.parameters/small
      :input-size bit-width
-     :potential-radius (quot bit-width 4))))
+     :potential-radius (quot bit-width 5))))
 
 (defn ^:export run-sim
   []
@@ -51,7 +65,7 @@
    (loop [inseq (input-init)
           rgn r-init]
      (let [in (first inseq)
-           in-bits (efn in)
+           in-bits (efn (:values in))
            new-rgn (core/cla-step rgn in-bits)]
        (>! mq/sim-channel
            {:input in :inbits in-bits :region new-rgn})

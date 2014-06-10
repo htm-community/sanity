@@ -70,10 +70,9 @@
 
 (def width-px 800)
 (def height-px 1600)
-(def bit-grid-px 4)
+(def bit-w-px 5)
+(def bit-h-px 2)
 (def col-grid-px 5)
-(def bit-w-px (- bit-grid-px 1))
-(def bit-r-px (* bit-w-px 0.5))
 (def col-r-px (* col-grid-px 0.5))
 (def seg-r-px 15)
 (def head-px 10)
@@ -121,7 +120,7 @@
 
 (defn rgn-px-offset
   []
-  (+ (* @keep-steps bit-grid-px)
+  (+ (* @keep-steps bit-w-px)
      h-spacing-px))
 
 (defn segs-px-offset
@@ -160,11 +159,11 @@
   "Returns pixel coordinates on the canvas `[x-px y-px]` for the
    center of an input bit `id` at time delay `dt`."
   [id dt]
-  (let [width (* @keep-steps bit-grid-px)
+  (let [width (* @keep-steps bit-w-px)
         right width
-        off-x-px (* (+ dt 0.5) bit-grid-px)
+        off-x-px (* (+ dt 0.5) bit-w-px)
         x-px (- right off-x-px)
-        off-y-px (* (+ id 0.5) bit-grid-px)
+        off-y-px (* (+ id 0.5) bit-h-px)
         y-px (+ head-px off-y-px)]
     [x-px y-px]))
 
@@ -172,20 +171,13 @@
   "Returns input bit id and time delay `[id dt]` located by given
    pixel coordinates on the canvas. Otherwise nil."
   [x-px y-px]
-  (let [width (* @keep-steps bit-grid-px)
+  (let [width (* @keep-steps bit-w-px)
         right width
-        id (Math/floor (/ (- y-px head-px) bit-grid-px))
-        dt (Math/floor (/ (- right x-px) bit-grid-px))]
+        id (Math/floor (/ (- y-px head-px) bit-h-px))
+        dt (Math/floor (/ (- right x-px) bit-w-px))]
     (when (and (<= 0 dt (count @steps))
                (<= 0 id))
       [id dt])))
-
-(defn centred-square
-  [cx cy r]
-  {:x (- cx r)
-   :y (- cy r)
-   :w (inc (* 2 r))
-   :h (inc (* 2 r))})
 
 (defn centred-rect
   [cx cy w h]
@@ -207,7 +199,7 @@
 (defn draw-inbits
   [ctx data bit-width sel-dt]
   (c/save ctx)
-  (c/stroke-width ctx 1)
+  (c/stroke-width ctx (* bit-h-px 0.15))
   (c/stroke-style ctx (grey 0.75))
   (doseq [dt (range (count data))
           :let [bits (data (dt->i dt))]]
@@ -217,14 +209,14 @@
                           (state-colors bit-state)
                           "white")]]
       (c/fill-style ctx color)
-      (c/fill-rect ctx (centred-square x-px y-px bit-r-px))
-      (c/stroke-rect ctx (centred-square x-px y-px bit-r-px))))
+      (c/fill-rect ctx (centred-rect x-px y-px bit-w-px bit-h-px))
+      (c/stroke-rect ctx (centred-rect x-px y-px bit-w-px bit-h-px))))
   ;; draw axis on selection: vertical dt
   (let [[x y1] (inbit->px 0 sel-dt)
         [_ y2] (inbit->px (dec bit-width) sel-dt)
         y (/ (+ y1 y2) 2)
-        w (+ 1 bit-grid-px)
-        h (+ 10 bit-grid-px (- y2 y1))]
+        w (+ 1 bit-w-px)
+        h (+ 10 bit-h-px (- y2 y1))]
     (highlight-rect ctx (centred-rect x y w h)))
   (c/restore ctx)
   ctx)
@@ -235,7 +227,7 @@
   ;; coordinates. But better to use px lookup functions so that we can
   ;; draw between frames of reference: inbits & columns.
   (c/save ctx)
-  (c/stroke-width ctx 1)
+  (c/stroke-width ctx (* col-grid-px 0.15))
   (c/stroke-style ctx (grey 0.75))
   (doseq [dt (range (count data))
           :let [m (data (dt->i dt))]]
