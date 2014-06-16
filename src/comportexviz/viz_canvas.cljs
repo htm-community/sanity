@@ -1,5 +1,5 @@
 (ns comportexviz.viz-canvas
-  (:require [goog.dom :as dom]
+  (:require ;[goog.dom :as dom]
             [goog.dom.forms :as forms]
             [goog.ui.Slider]
             [goog.ui.Component.EventType]
@@ -10,8 +10,11 @@
             [clojure.core.rrb-vector :as fv]
             [monet.canvas :as c]
             [monet.core]
+            [domina :as dom]
+            [domina.css :as css]
             [org.nfrac.comportex.sequence-memory :as sm]
             [clojure.set :as set]
+            [comportexviz.plots :as plots]
             [comportexviz.mq :as mq]
             [cljs.core.async :refer [chan put! <! alts! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
@@ -54,6 +57,25 @@
               (->> (conj q xw)
                    (take-last-v @keep-steps)))))))
 
+;; stats
+(def !raw-freqs (atom []))
+(def !agg-freqs (plots/aggregated-ts-ref !raw-freqs :agg 200))
+
+(defn update-stats!
+  [state prev-state]
+  (when prev-state
+    (let [rgn (:region state)
+          prev-rgn (:region prev-state)
+          pm (zipmap (keys (deref (:predictive-cells-ref prev-rgn)))
+                     (repeat :predicted))
+          am (zipmap (:active-columns rgn) (repeat :active))
+          bm (zipmap (:bursting-columns rgn) (repeat :unpredicted))
+          m (merge pm am bm)
+          x (-> (frequencies (vals m))
+                (assoc :timestep (:timestep rgn)
+                       :ncol (count (:columns rgn))))]
+      (swap! !raw-freqs conj x))))
+
 (def selected-cid (atom nil))
 (def selected-dt (atom 0))
 
@@ -78,7 +100,7 @@
 (def head-px 10)
 (def h-spacing-px 80)
 
-(def canvas-dom (dom/getElement "viz"))
+(def canvas-dom (dom/by-id "viz"))
 ;; need to set canvas size in js not CSS, the latter delayed so
 ;; get-context would see the wrong resolution here.
 (set! (.-width canvas-dom) width-px)
@@ -459,13 +481,13 @@
 
 (defn update-text-display
   []
-  (let [info-el (dom/getElement "detail-text")]
+  (let [info-el (dom/by-id "detail-text")]
     (forms/setValue info-el (detail-text))))
 
 (defn update-timestep
-  []
-  (let [ts-el (dom/getElement "sim-timestep")
-        curr-t (:timestep (:region (peek @steps)))]
+  [state]
+  (let [ts-el (dom/by-id "sim-timestep")
+        curr-t (:timestep (:region state))]
     (set! (.-innerHTML ts-el) curr-t)))
 
 (defn rgn-column-states
@@ -615,7 +637,7 @@
 (defn handle-sim-ms
   [s]
   (let [changes (listen s goog.ui.Component.EventType/CHANGE)
-        txt (dom/getElement "sim-ms-text")]
+        txt (dom/by-id "sim-ms-text")]
     (go (while true
           (let [e (<! changes)
                 newval (reset! sim-step-ms (.getValue s))]
@@ -624,7 +646,7 @@
 (defn handle-animation-ms
   [s]
   (let [changes (listen s goog.ui.Component.EventType/CHANGE)
-        txt (dom/getElement "animation-ms-text")]
+        txt (dom/by-id "animation-ms-text")]
     (go (while true
           (let [e (<! changes)
                 newval (reset! animation-step-ms (.getValue s))]
@@ -636,12 +658,12 @@
                 (.setId "sim-ms-slider")
                 (.setMaximum 1000)
                 (.createDom)
-                (.render (dom/getElement "sim-ms-slider-box")))
+                (.render (dom/by-id "sim-ms-slider-box")))
         s-anim (doto (goog.ui.Slider.)
                  (.setId "animation-ms-slider")
                  (.setMaximum 1000)
                  (.createDom)
-                 (.render (dom/getElement "animation-ms-slider-box")))]
+                 (.render (dom/by-id "animation-ms-slider-box")))]
     (handle-sim-ms s-sim)
     (handle-animation-ms s-anim)
     (.setValue s-sim @sim-step-ms)
@@ -649,7 +671,7 @@
 
 (defn handle-sim-control
   []
-  (let [btn (dom/getElement "sim-control")
+  (let [btn (dom/by-id "sim-control")
         clicks (listen btn "click")]
     (go (while true
           (let [e (<! clicks)
@@ -660,7 +682,7 @@
 
 (defn handle-sim-step
   []
-  (let [btn (dom/getElement "sim-step")
+  (let [btn (dom/by-id "sim-step")
         clicks (listen btn "click")]
     (go (while true
           (<! clicks)
@@ -668,7 +690,7 @@
 
 (defn handle-animation-control
   []
-  (let [btn (dom/getElement "animation-control")
+  (let [btn (dom/by-id "animation-control")
         clicks (listen btn "click")]
     (go (while true
           (let [e (<! clicks)
@@ -679,7 +701,7 @@
 
 (defn handle-animation-step
   []
-  (let [btn (dom/getElement "animation-step")
+  (let [btn (dom/by-id "animation-step")
         clicks (listen btn "click")]
     (go (while true
           (<! clicks)
@@ -697,8 +719,8 @@
              "display-active-dendrites"
              "display-dendrites-inactive"
              "display-dendrite-permanences"]
-        ids (filter dom/getElement ids)
-        btns (map dom/getElement ids)
+        ids (filter dom/by-id ids)
+        btns (map dom/by-id ids)
         cs (map listen btns (repeat "click"))
         cm (zipmap cs ids)]
     (doseq [[el id] (map vector btns ids)]
@@ -774,6 +796,12 @@
              )
            (animation-step!)))))))
 
+(defn init-plots
+  []
+  (plots/bind-time-series-plot "#plots" !agg-freqs 400 240
+                               [:unpredicted :active :predicted]
+                               state-colors))
+
 (defn init-ui!
   []
   (handle-sliders)
@@ -784,7 +812,10 @@
   (handle-display-options)
   (handle-canvas-clicks)
   (handle-canvas-keys)
-  (add-watch steps :timestep (fn [_ _ _ _]
-                               (update-timestep))))
+  (init-plots)
+  (add-watch steps :stats (fn [_ _ _ s]
+                            (update-stats! (peek s) (peek (pop s)))))
+  (add-watch steps :timestep (fn [_ _ _ s]
+                               (update-timestep (peek s)))))
 
 (init-ui!)
