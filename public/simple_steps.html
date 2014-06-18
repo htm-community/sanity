@@ -1,19 +1,17 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>block steps - comportex viz</title>
+  <title>simple steps - comportex viz</title>
   <link href="main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
-    <h3>block steps</h3>
-    <p>The input field is divided into a few sections, not
-    overlapping. The input stream steps through each section in turn
-    upwards and then back downwards. Each section remains active for 4
-    time steps. So the input has a position and direction state, as
-    well as a counter of how long the current position has been
-    active.</p>
+    <h3>simple steps</h3>
+    <p>The input field is divided into many sections, not overlapping.
+    The input stream steps through each section in turn upwards and
+    then back downwards. So the input has a position as well as a
+    direction state.</p>
     <div id="controls"></div>
     <div id="plots"></div>
     <textarea id="detail-text">
@@ -22,10 +20,10 @@
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
-  <script type="text/javascript">goog.require("comportexviz.demos.block_steps");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.simple_steps");</script>
   <script type="text/javascript">
     comportexviz.viz_canvas.sim_loop(
-      comportexviz.demos.block_steps.run_sim()
+      comportexviz.demos.simple_steps.run_sim()
     );
   </script>
 </body>

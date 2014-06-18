@@ -1,10 +1,9 @@
-(ns comportexviz.block-steps
+(ns comportexviz.demos.block-steps
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
-            [clojure.set :as set]
             [comportexviz.parameters]
-            [comportexviz.mq :as mq]
-            [cljs.core.async :refer [<! >!]])
+            [clojure.set :as set]
+            [cljs.core.async :refer [chan <! >!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 ;; inputs
@@ -49,13 +48,15 @@
 
 (defn ^:export run-sim
   []
-  (go
-   (loop [in initial-input
-          rgn (rgn-init)]
-     (let [in-bits (efn in)
-           new-rgn (core/cla-step rgn in-bits)
-           t (:timestep new-rgn)]
-       (>! mq/sim-channel
-           {:input in :inbits in-bits :region new-rgn})
-       (recur (input-transform in t)
-              new-rgn)))))
+  (let [c (chan)]
+    (go
+     (loop [in initial-input
+            rgn (rgn-init)]
+       (let [in-bits (efn in)
+             new-rgn (core/cla-step rgn in-bits)
+             t (:timestep new-rgn)]
+         (>! c
+             {:input in :inbits in-bits :region new-rgn})
+         (recur (input-transform in t)
+                new-rgn))))
+    c))

@@ -1,15 +1,16 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>fixed sequences mixed with gaps 1D - comportex viz</title>
+  <title>shuffled fixed sequences 1D - comportex viz</title>
   <link href="main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
-    <h3>fixed sequences mixed with gaps 1D</h3>
-    <p>The following fixed sequences are repeated at random intervals
-    and mixed together:</p>
+    <h3>shuffled fixed sequences 1D</h3>
+    <p>The following fixed sequences are shuffled into an infinite
+    sequence where each sequence is presented completely before moving
+    on to another one, without any overlap or delay.</p>
 <pre>{:run0 (0 1 2 3 4),
  :twos (0 2 4 6 8),
  :reps (0 0 1 1 2 2 3 3 4 4),
@@ -26,10 +27,10 @@
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
-  <script type="text/javascript">goog.require("comportexviz.demos.mixed_gaps_fixed_1d");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.shuffled_fixed_1d");</script>
   <script type="text/javascript">
     comportexviz.viz_canvas.sim_loop(
-      comportexviz.demos.mixed_gaps_fixed_1d.run_sim()
+      comportexviz.demos.shuffled_fixed_1d.run_sim()
     );
   </script>
 </body>

@@ -1,41 +1,25 @@
 (ns comportexviz.viz-canvas
-  (:require ;[goog.dom :as dom]
-            [goog.dom.forms :as forms]
-            [goog.ui.Slider]
-            [goog.ui.Component.EventType]
+  (:require [c2.dom :as dom :refer [->dom]]
+            [c2.event]
             [goog.events.EventType]
-            [goog.events :as events]
+            [goog.events :as gevents]
             [goog.string :as gstring]
             [goog.string.format]
             [clojure.core.rrb-vector :as fv]
             [monet.canvas :as c]
             [monet.core]
-            [domina :as dom]
-            [domina.css :as css]
             [org.nfrac.comportex.sequence-memory :as sm]
             [clojure.set :as set]
+            [comportexviz.controls-ui :refer [display-options
+                                              simulation-gate
+                                              animation-gate]]
             [comportexviz.plots :as plots]
-            [comportexviz.mq :as mq]
-            [cljs.core.async :refer [chan put! <! alts! timeout]])
+            [cljs.core.async :refer [chan put! <! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(def sim-go? (atom false))
-(def sim-step-ms (atom 500))
-(def animation-go? (atom false))
-(def animation-step-ms (atom 500))
-(def display-options
-  (atom {:display-active-columns true
-         :display-bursting-columns true
-         :display-predicted-bits true}))
-
-(defn wrap
-  [x]
-  (let [pcr (delay (sm/predictive-cells (:region x)))]
-    (assoc-in x [:region :predictive-cells-ref] pcr)))
-
-;; keep recent time steps
-(def keep-steps (atom 25))
 (def steps (atom []))
+;; keep how many recent time steps
+(def keep-steps (atom 25))
 
 (defn i->dt
   [i]
@@ -43,19 +27,36 @@
 
 (def dt->i i->dt)
 
+(defn wrap
+  [x]
+  (let [pcr (delay (sm/predictive-cells (:region x)))]
+    (assoc-in x [:region :predictive-cells-ref] pcr)))
+
+(defn ^:export sim-loop
+  [step-c]
+  (go (loop []
+        (when (<! simulation-gate)
+          (when-let [x (<! step-c)]
+            (swap! steps conj (wrap x))
+            (recur))))))
+
+(declare animation-step!)
+
+(defn animation-loop
+  []
+  (go (loop []
+        (when (<! animation-gate)
+          (monet.core/animation-frame animation-step!)
+          (recur)))))
+
 (defn- take-last-v
   [n v]
   (fv/subvec v (max 0 (- (count v) n))))
 
-(defn take-step!
-  []
-  (go
-   (let [x (<! mq/sim-channel)
-         xw (wrap x)]
-     (swap! steps
-            (fn [q]
-              (->> (conj q xw)
-                   (take-last-v @keep-steps)))))))
+(add-watch steps :keep-steps
+           (fn [_ _ _ v]
+             (when (> (count v) @keep-steps)
+               (swap! steps #(take-last-v @keep-steps %)))))
 
 ;; stats
 (def !raw-freqs (atom []))
@@ -79,12 +80,7 @@
 (def selected-cid (atom nil))
 (def selected-dt (atom 0))
 
-(defn run-sim
-  []
-  (go
-   (while @sim-go?
-     (take-step!)
-     (<! (timeout @sim-step-ms)))))
+
 
 ;; ## Graphic Display
 
@@ -100,7 +96,7 @@
 (def head-px 10)
 (def h-spacing-px 80)
 
-(def canvas-dom (dom/by-id "viz"))
+(def canvas-dom (->dom "#viz"))
 ;; need to set canvas size in js not CSS, the latter delayed so
 ;; get-context would see the wrong resolution here.
 (set! (.-width canvas-dom) width-px)
@@ -287,7 +283,7 @@
   (c/stroke-width ctx 1)
   (doseq [[cid dt m] data
           :let [[cx cy] (column->px cid dt)
-                perms? (:display-insyns-permanences @display-options)
+                perms? (:insyns-permanences @display-options)
                 draw (fn [syns active?]
                        (c/stroke-style ctx (if active? "red" "black"))
                        (doseq [[id perm] syns
@@ -310,7 +306,7 @@
   (c/stroke-width ctx 1)
   (doseq [[cid dt m] data
           :let [[cx cy] (column->px cid dt)
-                perms? (:display-dendrite-permanences @display-options)
+                perms? (:dendrite-permanences @display-options)
                 draw (fn [syns active?]
                        (c/stroke-style ctx (if active? "red" "black"))
                        (doseq [[[id _] perm] syns
@@ -481,14 +477,12 @@
 
 (defn update-text-display
   []
-  (let [info-el (dom/by-id "detail-text")]
-    (forms/setValue info-el (detail-text))))
+  (dom/val "#detail-text" (detail-text)))
 
 (defn update-timestep
   [state]
-  (let [ts-el (dom/by-id "sim-timestep")
-        curr-t (:timestep (:region state))]
-    (set! (.-innerHTML ts-el) curr-t)))
+  (let [curr-t (:timestep (:region state))]
+    (dom/text "#sim-timestep" curr-t)))
 
 (defn rgn-column-states
   [rgn prev-rgn]
@@ -499,17 +493,17 @@
                             (repeat :predicted))))
         am (zipmap (:active-columns rgn) (repeat :active))
         bm (zipmap (:bursting-columns rgn) (repeat :unpredicted))]
-    (cond-> (if (:display-overlap-columns opts) om {})
-            (:display-predictive-columns opts) (merge @pm)
-            (:display-active-columns opts) (merge am)
-            (:display-bursting-columns opts) (merge bm))))
+    (cond-> (if (:overlap-columns opts) om {})
+            (:predictive-columns opts) (merge @pm)
+            (:active-columns opts) (merge am)
+            (:bursting-columns opts) (merge bm))))
 
 (defn inbits-display-data
   [state prev-state]
   (let [opts @display-options
         inbits (:inbits state)
         data (zipmap inbits (repeat :active))]
-    (if (and (:display-predicted-bits opts)
+    (if (and (:predicted-bits opts)
              prev-state)
       (let [rgn (:region prev-state)
             pc @(:predictive-cells-ref rgn)
@@ -524,20 +518,20 @@
 (defn in-synapse-display-data
   [cid dt]
   (let [opts @display-options]
-    (when (:display-active-insyns opts)
+    (when (:active-insyns opts)
       (let [x (@steps (dt->i dt))
             col (get-in x [:region :columns cid])
             on-bits (:inbits x)
             syns (-> col :in-synapses :connected)
             m {:active (select-keys syns on-bits)
-               :inactive (when (:display-inactive-insyns opts)
+               :inactive (when (:inactive-insyns opts)
                            (apply dissoc syns on-bits))}]
         [cid dt m]))))
 
 (defn matching-segments-display-data
   [cid dt]
   (let [opts @display-options]
-    (when (:display-active-dendrites opts)
+    (when (:active-dendrites opts)
       ;; logically need to use prev region, since it is prior to
       ;; learning that occurred at time dt.
       ;; also need its current active cells that are the
@@ -557,7 +551,7 @@
                       allsyns (get-in pcol [:cells cell-idx :segments sid :synapses])
                       syns (into {} (filter (fn [[id p]] (>= p pcon)) allsyns))]
                   {:active (select-keys syns pac)
-                   :inactive (when (:display-dendrites-inactive opts)
+                   :inactive (when (:dendrites-inactive opts)
                                (apply dissoc syns pac))})
                 {})]
         [cid dt m]))))
@@ -618,119 +612,13 @@
         (draw-insynapses canvas-ctx isd)
         (draw-matching-segments canvas-ctx msd)))))
 
-(defn run-animation
-  []
-  (go
-   (while @animation-go?
-     (monet.core/animation-frame animation-step!)
-     (<! (timeout @animation-step-ms)))))
-
-
 ;; ## Event stream processing
 
 (defn listen [el type]
   (let [out (chan)]
-    (events/listen el type
-                   (fn [e] (put! out e)))
+    (gevents/listen el type
+                    (fn [e] (put! out e)))
     out))
-
-(defn handle-sim-ms
-  [s]
-  (let [changes (listen s goog.ui.Component.EventType/CHANGE)
-        txt (dom/by-id "sim-ms-text")]
-    (go (while true
-          (let [e (<! changes)
-                newval (reset! sim-step-ms (.getValue s))]
-            (set! (.-innerHTML txt) newval))))))
-
-(defn handle-animation-ms
-  [s]
-  (let [changes (listen s goog.ui.Component.EventType/CHANGE)
-        txt (dom/by-id "animation-ms-text")]
-    (go (while true
-          (let [e (<! changes)
-                newval (reset! animation-step-ms (.getValue s))]
-            (set! (.-innerHTML txt) newval))))))
-
-(defn handle-sliders
-  []
-  (let [s-sim (doto (goog.ui.Slider.)
-                (.setId "sim-ms-slider")
-                (.setMaximum 1000)
-                (.createDom)
-                (.render (dom/by-id "sim-ms-slider-box")))
-        s-anim (doto (goog.ui.Slider.)
-                 (.setId "animation-ms-slider")
-                 (.setMaximum 1000)
-                 (.createDom)
-                 (.render (dom/by-id "animation-ms-slider-box")))]
-    (handle-sim-ms s-sim)
-    (handle-animation-ms s-anim)
-    (.setValue s-sim @sim-step-ms)
-    (.setValue s-anim @animation-step-ms)))
-
-(defn handle-sim-control
-  []
-  (let [btn (dom/by-id "sim-control")
-        clicks (listen btn "click")]
-    (go (while true
-          (let [e (<! clicks)
-                newval (swap! sim-go? not)]
-            (set! (.-innerHTML (.-currentTarget e))
-                  (if newval "Stop" "Start"))
-            (when newval (run-sim)))))))
-
-(defn handle-sim-step
-  []
-  (let [btn (dom/by-id "sim-step")
-        clicks (listen btn "click")]
-    (go (while true
-          (<! clicks)
-          (take-step!)))))
-
-(defn handle-animation-control
-  []
-  (let [btn (dom/by-id "animation-control")
-        clicks (listen btn "click")]
-    (go (while true
-          (let [e (<! clicks)
-                newval (swap! animation-go? not)]
-            (set! (.-innerHTML (.-currentTarget e))
-                  (if newval "Stop" "Start"))
-            (when newval (run-animation)))))))
-
-(defn handle-animation-step
-  []
-  (let [btn (dom/by-id "animation-step")
-        clicks (listen btn "click")]
-    (go (while true
-          (<! clicks)
-          (animation-step!)))))
-
-(defn handle-display-options
-  []
-  (let [ids ["display-active-columns"
-             "display-overlap-columns"
-             "display-predictive-columns"
-             "display-bursting-columns"
-             "display-active-insyns"
-             "display-inactive-insyns"
-             "display-insyns-permanences"
-             "display-active-dendrites"
-             "display-dendrites-inactive"
-             "display-dendrite-permanences"]
-        ids (filter dom/by-id ids)
-        btns (map dom/by-id ids)
-        cs (map listen btns (repeat "click"))
-        cm (zipmap cs ids)]
-    (doseq [[el id] (map vector btns ids)]
-      (forms/setValue el (get @display-options (keyword id))))
-    (go (while true
-          (let [[e c] (alts! (keys cm))
-                id (cm c)
-                on? (forms/getValue (.-currentTarget e))]
-            (swap! display-options assoc (keyword id) on?)
-            (animation-step!))))))
 
 (defn handle-canvas-clicks
   []
@@ -755,8 +643,7 @@
              ;; nothing clicked
              (do
                (reset! selected-cid nil)
-               (reset! selected-dt 0))))
-         (animation-step!))))))
+               (reset! selected-dt 0)))))))))
 
 (def code-key
   {32 :space
@@ -784,7 +671,9 @@
              :right (if (pos? @selected-dt)
                       (swap! selected-dt
                              (fn [x] (max (dec x) 0)))
-                      (take-step!))
+                      (do
+                        (put! simulation-gate true)
+                        (put! animation-gate true)))
              :up (swap! selected-cid
                         (fn [x] (if x (dec x) 0)))
              :down (swap! selected-cid
@@ -793,8 +682,15 @@
                              (fn [x] (max 0 (- x 10))))
              :page-down (swap! selected-cid
                                (fn [x] (max 0 (+ x 10))))
-             )
-           (animation-step!)))))))
+             )))))))
+
+(add-watch selected-dt :redraw
+           (fn [_ _ _ _]
+             (put! animation-gate true)))
+
+(add-watch selected-cid :redraw
+           (fn [_ _ _ _]
+             (put! animation-gate true)))
 
 (defn init-plots
   []
@@ -802,20 +698,16 @@
                                [:unpredicted :active :predicted]
                                state-colors))
 
-(defn init-ui!
+(defn init-ui-all
   []
-  (handle-sliders)
-  (handle-sim-control)
-  (handle-sim-step)
-  (handle-animation-control)
-  (handle-animation-step)
-  (handle-display-options)
+  (comportexviz.controls-ui/init-ui)
   (handle-canvas-clicks)
   (handle-canvas-keys)
   (init-plots)
   (add-watch steps :stats (fn [_ _ _ s]
                             (update-stats! (peek s) (peek (pop s)))))
   (add-watch steps :timestep (fn [_ _ _ s]
-                               (update-timestep (peek s)))))
+                               (update-timestep (peek s))))
+  (animation-loop))
 
-(init-ui!)
+(c2.event/on-load init-ui-all)
