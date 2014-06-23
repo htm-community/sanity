@@ -25,11 +25,11 @@
   </div>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
+  <script type="text/javascript">goog.require("comportexviz.main");</script>
   <script type="text/javascript">goog.require("comportexviz.demos.mixed_gaps_fixed_1d");</script>
   <script type="text/javascript">
-    comportexviz.viz_canvas.sim_loop(
-      comportexviz.demos.mixed_gaps_fixed_1d.run_sim()
+    comportexviz.main.set_model(
+      comportexviz.demos.mixed_gaps_fixed_1d.model
     );
   </script>
 </body>

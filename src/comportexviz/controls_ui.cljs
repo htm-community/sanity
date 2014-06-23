@@ -3,79 +3,8 @@
             [c2.event :as event]
             [goog.events :as gevents]
             [goog.ui.Slider]
-            [goog.ui.Component.EventType]
-            [cljs.core.async :as async :refer [chan put! <! >! timeout]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
-
-(def simulation-gate (chan))
-(def animation-gate (chan))
-
-(def display-options
-  (atom {:active-columns true
-         :bursting-columns true
-         :predicted-bits true
-         :predictive-columns nil
-         :overlap-columns nil
-         :active-insyns nil
-         :inactive-insyns nil
-         :insyns-permanences nil
-         :active-dendrites nil
-         :inactive-dendrites nil
-         :dendrite-permanences nil
-         }))
-
-(def sim-go? (atom false))
-(def sim-step-ms (atom 500))
-(def anim-go? (atom false))
-(def anim-step-ms (atom 500))
-
-(defn run-sim
-  []
-  (go
-   (while @sim-go?
-     (>! simulation-gate true)
-     (<! (timeout @sim-step-ms)))))
-
-(defn run-anim
-  []
-  (go
-   (while @anim-go?
-     (>! animation-gate true)
-     (<! (timeout @anim-step-ms)))))
-
-(add-watch sim-go? :run-sim
-           (fn [_ _ _ v] (when v (run-sim))))
-
-(add-watch anim-go? :run-anim
-           (fn [_ _ _ v] (when v (run-anim))))
-
-(add-watch sim-go? :buttons
-           (fn [_ _ _ v]
-             (-> (->dom "#sim-start")
-                 (dom/style :display (when v "none")))
-             (-> (->dom "#sim-stop")
-                 (dom/style :display (when-not v "none")))))
-
-(add-watch anim-go? :buttons
-           (fn [_ _ _ v]
-             (-> (->dom "#anim-start")
-                 (dom/style :display (when v "none")))
-             (-> (->dom "#anim-stop")
-                 (dom/style :display (when-not v "none")))))
-
-(add-watch sim-step-ms :ui-text
-           (fn [_ _ _ v]
-             (-> (->dom "#sim-ms-text")
-                 (dom/text (str v "ms")))))
-
-(add-watch anim-step-ms :ui-text
-           (fn [_ _ _ v]
-             (-> (->dom "#anim-ms-text")
-                 (dom/text (str v "ms")))))
-
-(add-watch display-options :redraw
-           (fn [_ _ _ _]
-             (put! animation-gate true)))
+            [goog.ui.Component.EventType])
+  (:require-macros [c2.util :refer [bind!]]))
 
 (defn slider
   [id min-val max-val step unit]
@@ -94,93 +23,91 @@
                   (fn [_] (reset! atom (.getValue s))))
   (.setValue s @atom))
 
-(defn controls
-  []
-  [:div#controls
+(defn checkbox
+  [m key txt]
+  [:label [:input {:id (name key)
+                   :type "checkbox"
+                   :checked (when (m key) "checked")}]
+   txt])
 
-   [:fieldset#sim-controls
-    [:legend "Simulation"]
-    [:label "Timestep:" [:span#sim-timestep]]
-    [:br]
-    [:label "Step ms:"
-     [:div#sim-ms-slider-box {:class "slider-box"}]]
-    [:span#sim-ms-text]
-    [:button#sim-start "Start"]
-    [:button#sim-stop {:style {:display "none"}} "Stop"]
-    [:button#sim-step "Step"]]
+(defn init!
+  [model sim-go? main-options keep-steps viz-options sim-step! draw-now!]
+  (bind! "#controls"
+         [:div#controls
 
-   [:fieldset#anim-controls
+          [:fieldset#sim-controls
+           [:legend "Simulation"]
+           [:label "Timestep:" [:span#sim-timestep
+                                (:timestep (:region @model))]]
+           [:br]
+           [:button#sim-start
+            {:style {:display (when @sim-go? "none")}} "Start"]
+           [:button#sim-stop
+            {:style {:display (when-not @sim-go? "none")}} "Stop"]
+           [:button#sim-step "Step"]
+           [:label "Step every:"
+            [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
+            [:span [:a#sim-slower {:href "#"} "slower"]]
+            [:span [:a#sim-faster {:href "#"} "faster"]]]]
 
-    [:legend "Animation"]
-    [:label "Step ms:"
-     [:div#anim-ms-slider-box {:class "slider-box"}]]
-    [:span#anim-ms-text]
-    [:button#anim-start "Start"]
-    [:button#anim-stop {:style {:display "none"}} "Stop"]
-    [:button#anim-step "Draw now"]]
+          [:fieldset#anim-controls
+           [:legend "Animation"]
+           [:button#anim-start
+            {:style {:display (when (:anim-go? @main-options) "none")}} "Start"]
+           [:button#anim-stop
+            {:style {:display (when-not (:anim-go? @main-options) "none")}} "Stop"]
+           [:button#anim-step "Draw now"]
+           [:label "Draw every:"
+            [:span#anim-every-text (str (:anim-every @main-options) " steps")]
+            [:span [:a#anim-slower {:href "#"} "slower"]]
+            [:span [:a#anim-faster {:href "#"} "faster"]]]]
 
-   [:fieldset#display-options
-    [:legend "Display"]
-    [:div
-     [:label [:input#overlap-columns {:type "checkbox"}] "Overlap scores"] [:br]
-     [:label [:input#active-columns {:type "checkbox"}] "Active columns"] [:br]
-     [:label [:input#bursting-columns {:type "checkbox"}] "Bursting columns"] [:br]
-     [:label [:input#predictive-columns {:type "checkbox"}] "Predictive columns"] [:br]
-     [:label [:input#predicted-bits {:type "checkbox"}] "Predicted bits"]]
-    [:div
-     [:label [:input#active-insyns {:type "checkbox"}] "Active in-synapses"] [:br]
-     [:label [:input#inactive-insyns {:type "checkbox"}] "Inactive in-synapses"] [:br]
-     [:label [:input#insyns-permanences {:type "checkbox"}] "Permanences"]]
-    [:div
-     [:label [:input#active-dendrites {:type "checkbox"}] "Active dendrites"] [:br]
-     [:label [:input#inactive-dendrites {:type "checkbox"}] "Inactive synapses"] [:br]
-     [:label [:input#dendrite-permanences {:type "checkbox"}] "Permanences"]]]])
-
-(defn handle-display-options
-  []
-  (doseq [k (keys @display-options)
-          :let [el (->dom (str "#" (name k)))]]
-    (event/on-raw el :click
-                  (fn [_] (swap! display-options
-                                assoc k (dom/val el))))))
-
-(defn show-display-options
-  []
-  (doseq [[k v] @display-options
-          :let [el (->dom (str "#" (name k)))]]
-    (dom/val el (boolean v))))
-
-(defn init-ui
-  []
-  (dom/replace! "#controls" (controls))
-  (let [sim-s (slider "sim-ms-slider" 0 1000 10 50)
-        anim-s (slider "anim-ms-slider" 0 1000 10 50)]
-    (dom/append! "#sim-ms-slider-box" (.getElement sim-s))
-    (dom/append! "#anim-ms-slider-box" (.getElement anim-s))
-    (bind-slider sim-s sim-step-ms)
-    (bind-slider anim-s anim-step-ms))
+          (let [viz @viz-options]
+            [:fieldset#viz-options
+             [:legend "Visualisation"]
+             [:div
+              (checkbox viz :overlap-columns "Overlap scores") [:br]
+              (checkbox viz :active-columns "Active columns") [:br]
+              (checkbox viz :bursting-columns "Bursting columns") [:br]
+              (checkbox viz :predictive-columns "Predictive columns") [:br]
+              (checkbox viz :predicted-bits "Predicted bits")]
+             [:div
+              (checkbox viz :active-insyns "Active in-synapses") [:br]
+              (checkbox viz :inactive-insyns "Inactive in-synapses") [:br]
+              (checkbox viz :insyns-permanences "Permanences")]
+             [:div
+              (checkbox viz :active-dendrites "Active dendrites") [:br]
+              (checkbox viz :inactive-dendrites "Inactive synapses") [:br]
+              (checkbox viz :dendrite-permanences "Permanences")]])])
 
   (event/on-raw "#sim-start" :click
                 (fn [_] (reset! sim-go? true)))
   (event/on-raw "#sim-stop" :click
                 (fn [_] (reset! sim-go? false)))
   (event/on-raw "#sim-step" :click
-                (fn [_] (put! simulation-gate true)))
+                (fn [_] (sim-step!)))
+  (event/on-raw "#sim-faster" :click
+                (fn [_] (swap! main-options update-in [:sim-step-ms]
+                              #(-> (- % 100) (max 0)))))
+  (event/on-raw "#sim-slower" :click
+                (fn [_] (swap! main-options update-in [:sim-step-ms]
+                              #(+ % 100))))
 
   (event/on-raw "#anim-start" :click
-                (fn [_] (reset! anim-go? true)))
+                (fn [_] (swap! main-options assoc :anim-go? true)))
   (event/on-raw "#anim-stop" :click
-                (fn [_] (reset! anim-go? false)))
+                (fn [_] (swap! main-options assoc :anim-go? false)))
   (event/on-raw "#anim-step" :click
-                (fn [_] (put! animation-gate true)))
+                (fn [_] (draw-now!)))
+  (event/on-raw "#anim-faster" :click
+                (fn [_] (swap! main-options update-in [:anim-every]
+                              #(-> (dec %) (max 1)))))
+  (event/on-raw "#anim-slower" :click
+                (fn [_] (swap! main-options update-in [:anim-every]
+                              #(inc %))))
 
-  (handle-display-options)
-  (show-display-options))
-
-
-
-
-
-
-
+  (doseq [k (keys @viz-options)
+          :let [el (->dom (str "#" (name k)))]]
+    (event/on-raw el :click
+                  (fn [_] (swap! viz-options assoc k (dom/val el))))))
 

@@ -1,21 +1,18 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>fixed sequences mixed 1D - comportex viz</title>
+  <title>signal steps - comportex viz</title>
   <link href="main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="viz"></canvas>
   <div id="sidebar">
-    <h3>fixed sequences mixed 1D</h3>
-    <p>The following fixed sequences are repeated
-    and mixed together:</p>
-<pre>
-(0 1 2 3 4)
-(3 4 5 6 7 8)
-(8 9 10 11)
-(14 13 12 11 10 9 8 7 6 5 4 3 2 1 0)
-</pre>
+    <h3>signal steps</h3>
+    <p>The input field is divided into many sections, not overlapping.
+    The input stream steps through the sections either upwards or
+    downwards, chosen randomly. However, a "motor signal" indicating
+    the next direction is included in the input (as the final 2
+    sections).</p>
     <div id="controls"></div>
     <div id="plots"></div>
     <textarea id="detail-text">
@@ -24,10 +21,10 @@
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.main");</script>
-  <script type="text/javascript">goog.require("comportexviz.demos.mixed_fixed_1d");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.signal_steps");</script>
   <script type="text/javascript">
     comportexviz.main.set_model(
-      comportexviz.demos.mixed_fixed_1d.model
+      comportexviz.demos.signal_steps.model
     );
   </script>
 </body>

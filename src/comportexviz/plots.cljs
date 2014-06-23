@@ -1,8 +1,10 @@
 (ns comportexviz.plots
   (:require [c2.core :as c2]
             [c2.scale :as scale]
-            [c2.svg :as svg])
-  (:require-macros [c2.util :refer [bind!]]))
+            [c2.svg :as svg]
+            [cljs.core.async :as async :refer [chan put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [c2.util :refer [bind!]]))
 
 (defn mean
   [xs]
@@ -36,22 +38,22 @@
       new-agg)))
 
 (defn aggregated-ts-ref
-  [!ts key keep-n]
-  (let [agg (atom {:bucket 1 :ts @!ts :keep-n keep-n})]
-    (add-watch !ts key
-               (fn [_ _ _ ts]
-                 ;; check if filled aggregation bucket
-                 (when (>= (count ts)
-                           (:bucket @agg))
-                   (swap! agg update-aggregated-ts ts keep-n)
-                   (swap! !ts empty))))
+  [c keep-n]
+  (let [agg (atom {:bucket 1 :ts [] :keep-n keep-n})]
+    (go (loop [pxs []]
+          (let [xs (conj pxs (<! c))]
+            (if (< (count xs) (:bucket @agg))
+              (recur xs)
+              (do
+                (swap! agg update-aggregated-ts xs keep-n)
+                (recur (empty xs)))))))
     agg))
 
-(defn bind-time-series-plot
-  [el !ts width height series-keys series-colors]
+(defn bind-ts-plot
+  [el agg width height series-keys series-colors]
   (let [margin {:left 20 :bottom 20}]
     (bind! el
-     (let [{:keys [ts keep-n]} @!ts
+     (let [{:keys [ts keep-n]} agg
            step-width (/ width keep-n)
            ncol (:ncol (peek ts))
            scale (scale/linear :domain [0 (* ncol 0.15)]

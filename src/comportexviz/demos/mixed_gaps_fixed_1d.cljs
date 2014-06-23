@@ -1,17 +1,13 @@
 (ns comportexviz.demos.mixed-gaps-fixed-1d
-  (:require [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.encoders :as enc]
+  (:require [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.parameters]
-            [clojure.set :as set]
-            [cljs.core.async :refer [chan <! >!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+            [comportexviz.cla-model :as cla-model]
+            [comportexviz.parameters]))
 
-;; inputs
 (def bit-width 400)
+(def on-bits 25)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
-(def on-bits 25)
 
 (def patterns
   {:run0 (range 5)
@@ -30,6 +26,8 @@
     (apply concat (interpose xs (repeatedly gap)))))
 
 (defn mix-patterns-with-gaps
+  "Returns an infinite sequence of maps, each with keys `:patterns` (a
+   set of keywords) and `:values` (a set of numbers). "
   [patterns gap-range]
   (let [tagseqs (map (fn [[k xs]]
                        (->> (repeat-with-gaps xs gap-range)
@@ -39,36 +37,37 @@
                           :values (set (keep :val ms))})
            tagseqs)))
 
-(defn input-init
+(defn crouching-head-hidden-tail
+  "Returns the first element, with the rest in metadata to avoid
+   printing an infinite sequence."
+  [xs]
+  (-> (first xs)
+      (with-meta {::next (next xs)})))
+
+;; a function not a value; do not hold on to the head of an infinite seq.
+(defn initial-input
   []
-  ;; infinite lazy sequence
-  (mix-patterns-with-gaps patterns [1 50]))
+  (let [inseq (mix-patterns-with-gaps patterns [1 50])]
+    (crouching-head-hidden-tail inseq)))
 
 (defn input-transform
-  [xs]
-  (next xs))
+  [v]
+  (crouching-head-hidden-tail (::next (meta v))))
 
 (def efn
-  (enc/superpose-encoder
-   (enc/linear-number-encoder bit-width on-bits numb-domain)))
+  (let [f (enc/superpose-encoder
+           (enc/linear-number-encoder bit-width on-bits numb-domain))]
+    (fn [v]
+      (f (:values v)))))
 
-(def r-init
-  (core/cla-region
-   (assoc comportexviz.parameters/small
-     :input-size bit-width
-     :potential-radius (quot bit-width 5))))
+(def spec
+  (assoc comportexviz.parameters/small
+    :input-size bit-width
+    :potential-radius (quot bit-width 4)))
 
-(defn ^:export run-sim
-  []
-  (let [c (chan)]
-    (go
-     (loop [inseq (input-init)
-            rgn r-init]
-       (let [in (first inseq)
-             in-bits (efn (:values in))
-             new-rgn (core/cla-step rgn in-bits)]
-         (>! c
-             {:input in :inbits in-bits :region new-rgn})
-         (recur (input-transform inseq)
-                new-rgn))))
-    c))
+(def generator
+  (cla-model/generator (initial-input) input-transform efn
+                       {:bit-width bit-width}))
+
+(def ^:export model
+  (cla-model/cla-model generator spec))

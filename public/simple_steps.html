@@ -19,11 +19,11 @@
   </div>
   <script type="text/javascript" src="out/deps/goog/base.js"></script>
   <script type="text/javascript" src="out/comportex_viz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.viz_canvas");</script>
+  <script type="text/javascript">goog.require("comportexviz.main");</script>
   <script type="text/javascript">goog.require("comportexviz.demos.simple_steps");</script>
   <script type="text/javascript">
-    comportexviz.viz_canvas.sim_loop(
-      comportexviz.demos.simple_steps.run_sim()
+    comportexviz.main.set_model(
+      comportexviz.demos.simple_steps.model
     );
   </script>
 </body>

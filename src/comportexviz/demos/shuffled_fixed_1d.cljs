@@ -1,17 +1,13 @@
 (ns comportexviz.demos.shuffled-fixed-1d
-  (:require [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.encoders :as enc]
+  (:require [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.parameters]
-            [clojure.set :as set]
-            [cljs.core.async :refer [chan <! >!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+            [comportexviz.cla-model :as cla-model]
+            [comportexviz.parameters]))
 
-;; inputs
 (def bit-width 400)
+(def on-bits 25)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
-(def on-bits 25)
 
 (def patterns
   {:run0 (range 5)
@@ -24,7 +20,7 @@
                 (concat (range 5) (range 3) (range 2) (range 1)))
    })
 
-(defn input-init
+(defn input-seq
   []
   ;; infinite lazy sequence
   (let [ps (vec patterns)]
@@ -37,31 +33,33 @@
          (interpose {:pattern nil :values []})
          (apply concat))))
 
+;; a function; do not hold on to the head of an infinite seq.
+(defn initial-input-fn
+  []
+  ;; infinite lazy sequence, store in metadata to avoid printing
+  (let [inseq (input-seq)]
+    (with-meta (first inseq) {::inseq inseq})))
+
 (defn input-transform
-  [xs]
-  (next xs))
+  [v]
+  (let [inseq (next (::inseq (meta v)))]
+    (with-meta (first inseq) {::inseq inseq})))
 
 (def efn
-  (enc/superpose-encoder
-   (enc/linear-number-encoder bit-width on-bits numb-domain)))
+  (let [f (enc/superpose-encoder
+           (enc/linear-number-encoder bit-width on-bits numb-domain))]
+    (fn [v]
+      (f (:values v)))))
 
-(def r-init
-  (core/cla-region
-   (assoc comportexviz.parameters/small
-     :input-size bit-width
-     :potential-radius (quot bit-width 5))))
+(def spec
+  (assoc comportexviz.parameters/small
+    :input-size bit-width
+    :potential-radius (quot bit-width 4)))
 
-(defn ^:export run-sim
-  []
-  (let [c (chan)]
-    (go
-     (loop [inseq (input-init)
-            rgn r-init]
-       (let [in (first inseq)
-             in-bits (efn (:values in))
-             new-rgn (core/cla-step rgn in-bits)]
-         (>! c
-             {:input in :inbits in-bits :region new-rgn})
-         (recur (input-transform inseq)
-                new-rgn))))
-    c))
+(def generator
+  (cla-model/generator (initial-input-fn) input-transform efn
+                       {:bit-width bit-width}))
+
+(def ^:export model
+  (cla-model/cla-model generator spec))
+
