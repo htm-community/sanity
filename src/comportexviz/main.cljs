@@ -1,6 +1,6 @@
 (ns comportexviz.main
   (:require [c2.dom :as dom :refer [->dom]]
-            [comportexviz.cla-model :as cla-model]
+            [org.nfrac.comportex.core :as core]
             [comportexviz.controls-ui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
@@ -22,7 +22,7 @@
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
 
-(def freqs-c (async/map< (comp cla-model/column-state-freqs :region)
+(def freqs-c (async/map< (comp core/column-state-freqs :region)
                          (tap-c steps-mult)))
 (def freqs-mult (async/mult freqs-c))
 (def agg-freqs-ts (plots/aggregated-ts-ref (tap-c freqs-mult) 200))
@@ -40,7 +40,7 @@
 (defn sim-step!
   []
   (->>
-   (swap! model cla-model/step)
+   (swap! model core/step)
    (put! steps-c)))
 
 (defn ^:export set-model

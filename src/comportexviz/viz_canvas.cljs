@@ -7,7 +7,7 @@
             [goog.string.format]
             [monet.canvas :as c]
             [monet.core]
-            [comportexviz.cla-model :as cla-model]
+            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.sequence-memory :as sm]
             [clojure.set :as set]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -347,8 +347,8 @@
   (let [state (nth @steps dt)
         rgn (:region state)
         ingen (:in state)
-        in (cla-model/domain-value ingen)
-        bits (cla-model/bits-value ingen)]
+        in (core/domain-value ingen)
+        bits (core/bits-value ingen)]
     (->>
      ["__Selection__"
       (str "* timestep " (:timestep rgn)
@@ -422,7 +422,7 @@
 
 (defn inbits-display-data
   [state prev-state opts]
-  (let [inbits (cla-model/bits-value (:in state))
+  (let [inbits (core/bits-value (:in state))
         data (zipmap inbits (repeat :active))]
     (if (and (:predicted-bits opts)
              prev-state)
@@ -440,7 +440,7 @@
   [state cid opts]
   (when (:active-insyns opts)
     (let [col (get-in state [:region :columns cid])
-          on-bits (cla-model/bits-value (:in state))
+          on-bits (core/bits-value (:in state))
           syns (-> col :in-synapses :connected)]
       {:active (select-keys syns on-bits)
        :inactive (when (:inactive-insyns opts)

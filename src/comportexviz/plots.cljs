@@ -58,29 +58,30 @@
            ncol (:ncol (peek ts))
            scale (scale/linear :domain [0 (* ncol 0.15)]
                                :range [0 (dec height)])]
-       [:div
-        [:style {:type "text/css"}
-         (apply str "g.timestep rect { stroke-width: 0px; }"
-                (for [k series-keys]
-                  (str "." (name k) " { fill: " (series-colors k) "}")))]
-        ;; the containing SVG element
-        [:svg#main {:style {:display "block", :margin "auto"
-                            :width (+ width (:left margin))
-                            :height (+ height (:bottom margin))}}
-         [:g.plot-space {:transform (str (svg/translate [(:left margin) height])
-                                         ;; flip y coordinates to
-                                         ;; have origin at bottom
-                                         " " (svg/scale [1 -1]))}
-          (c2/unify
-           (map-indexed vector ts)
-           (fn [[i x]]
-             (let [vals (map x series-keys)
-                   cums (reductions + 0 vals)]
-               (into
-                [:g.timestep {:transform (svg/translate [(inc (* i step-width)) 0])}]
-                (for [[k val cum] (map vector series-keys vals cums)]
-                  [:rect {:class k
-                          :x 0, :y (scale cum)
-                          :width step-width
-                          :height (scale val)}]))))
-           :key-fn (comp :timestep second))]]]))))
+       (when (pos? ncol)
+         [:div
+          [:style {:type "text/css"}
+           (apply str "g.timestep rect { stroke-width: 0px; }"
+                  (for [k series-keys]
+                    (str "." (name k) " { fill: " (series-colors k) "}")))]
+          ;; the containing SVG element
+          [:svg#main {:style {:display "block", :margin "auto"
+                              :width (+ width (:left margin))
+                              :height (+ height (:bottom margin))}}
+           [:g.plot-space {:transform (str (svg/translate [(:left margin) height])
+                                           ;; flip y coordinates to
+                                           ;; have origin at bottom
+                                           " " (svg/scale [1 -1]))}
+            (c2/unify
+             (map-indexed vector ts)
+             (fn [[i x]]
+               (let [vals (map x series-keys)
+                     cums (reductions + 0 vals)]
+                 (into
+                  [:g.timestep {:transform (svg/translate [(inc (* i step-width)) 0])}]
+                  (for [[k val cum] (map vector series-keys vals cums)]
+                    [:rect {:class k
+                            :x 0, :y (scale cum)
+                            :width step-width
+                            :height (scale val)}]))))
+             :key-fn (comp :timestep second))]]])))))

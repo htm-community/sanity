@@ -1,6 +1,6 @@
 (ns comportexviz.demos.simple-steps
-  (:require [org.nfrac.comportex.encoders :as enc]
-            [comportexviz.cla-model :as cla-model]
+  (:require [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.encoders :as enc]
             [comportexviz.parameters]))
 
 (def bit-width 300)
@@ -26,14 +26,11 @@
     (fn [[i dir]]
       (f i))))
 
-(def spec
-  (assoc comportexviz.parameters/small
-    :input-size bit-width
-    :potential-radius (quot bit-width 4)))
-
-(def generator
-  (cla-model/generator initial-input input-transform efn
-                       {:bit-width bit-width}))
-
-(def ^:export model
-  (cla-model/cla-model generator spec))
+(defn ^:export model
+  []
+  (let [spec (assoc comportexviz.parameters/small
+               :input-size bit-width
+               :potential-radius (quot bit-width 4))
+        gen (core/generator initial-input input-transform efn
+                            {:bit-width bit-width})]
+    (core/cla-model gen spec)))

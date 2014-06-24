@@ -1,7 +1,7 @@
 (ns comportexviz.demos.signal-steps
-  (:require [org.nfrac.comportex.encoders :as enc]
+  (:require [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.cla-model :as cla-model]
             [comportexviz.parameters]))
 
 ;; inputs
@@ -29,14 +29,11 @@
    (enc/linear-number-encoder numb-bit-width on-bits numb-domain)
    (enc/category-encoder cat-bit-width [:down :up])))
 
-(def spec
-  (assoc comportexviz.parameters/small
-    :input-size bit-width
-    :potential-radius (quot bit-width 4)))
-
-(def generator
-  (cla-model/generator initial-input input-transform efn
-                       {:bit-width bit-width}))
-
-(def ^:export model
-  (cla-model/cla-model generator spec))
+(defn ^:export model
+  []
+  (let [gen (core/generator initial-input input-transform efn
+                            {:bit-width bit-width})
+        spec (assoc comportexviz.parameters/small
+               :input-size bit-width
+               :potential-radius (quot bit-width 4))]
+    (core/cla-model gen spec)))

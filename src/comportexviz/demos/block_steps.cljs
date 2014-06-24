@@ -1,6 +1,6 @@
 (ns comportexviz.demos.block-steps
-  (:require [org.nfrac.comportex.encoders :as enc]
-            [comportexviz.cla-model :as cla-model]
+  (:require [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.encoders :as enc]
             [comportexviz.parameters]))
 
 ;; inputs
@@ -35,14 +35,11 @@
     (fn [m]
       (f (:value m)))))
 
-(def spec
-  (assoc comportexviz.parameters/small
-    :input-size bit-width
-    :potential-radius (quot bit-width 4)))
-
-(def generator
-  (cla-model/generator initial-input input-transform efn
-                       {:bit-width bit-width}))
-
-(def ^:export model
-  (cla-model/cla-model generator spec))
+(defn ^:export model
+  []
+  (let [gen (core/generator initial-input input-transform efn
+                            {:bit-width bit-width})
+        spec (assoc comportexviz.parameters/small
+               :input-size bit-width
+               :potential-radius (quot bit-width 4))]
+    (core/cla-model gen spec)))

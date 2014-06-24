@@ -5,7 +5,7 @@
    :input-size 200
    :potential-radius 100
    :activation-level 0.06
-   :global-inhibition false
+   :global-inhibition true
    :stimulus-threshold 2
    :sp-perm-inc 0.04
    :sp-perm-dec 0.01

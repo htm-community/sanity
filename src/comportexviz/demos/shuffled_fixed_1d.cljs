@@ -1,7 +1,7 @@
 (ns comportexviz.demos.shuffled-fixed-1d
-  (:require [org.nfrac.comportex.encoders :as enc]
+  (:require [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.cla-model :as cla-model]
             [comportexviz.parameters]))
 
 (def bit-width 400)
@@ -33,8 +33,8 @@
          (interpose {:pattern nil :values []})
          (apply concat))))
 
-;; a function; do not hold on to the head of an infinite seq.
-(defn initial-input-fn
+;; a function not a value; do not hold on to the head of an infinite seq.
+(defn initial-input
   []
   ;; infinite lazy sequence, store in metadata to avoid printing
   (let [inseq (input-seq)]
@@ -51,15 +51,12 @@
     (fn [v]
       (f (:values v)))))
 
-(def spec
-  (assoc comportexviz.parameters/small
-    :input-size bit-width
-    :potential-radius (quot bit-width 4)))
-
-(def generator
-  (cla-model/generator (initial-input-fn) input-transform efn
-                       {:bit-width bit-width}))
-
-(def ^:export model
-  (cla-model/cla-model generator spec))
+(defn ^:export model
+  []
+  (let [gen (core/generator (initial-input) input-transform efn
+                            {:bit-width bit-width})
+        spec (assoc comportexviz.parameters/small
+               :input-size bit-width
+               :potential-radius (quot bit-width 4))]
+    (core/cla-model gen spec)))
 
