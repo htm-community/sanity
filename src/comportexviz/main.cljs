@@ -70,8 +70,13 @@
 
 (c2.event/on-load init-ui!)
 
+(defn now [] (.getTime (js/Date.)))
+
 (defn run-sim
   []
+  (swap! model assoc
+         :run-start {:time (now)
+                     :timestep (:timestep (:region @model))})
   (go
    (while @sim-go?
      (let [tc (async/timeout (:sim-step-ms @main-options))]

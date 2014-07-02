@@ -13,7 +13,7 @@
 * ui to change parameter values
 * and restart sim
 
-* start small! (#cells)
+* start small! (#cells / sequence length)
 
 * plot most recent sliding window
 

@@ -52,6 +52,11 @@ body {
   margin-right: 5px;
 }
 
+.detail {
+  font-size: 80%;
+  opacity: 0.8;
+}
+
 #sidebar a {
   font-size: 80%;
   text-decoration: none;

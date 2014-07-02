@@ -2,9 +2,26 @@
   (:require [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
             [goog.events :as gevents]
+            [goog.string :as gstring]
+            [goog.string.format]
             [goog.ui.Slider]
             [goog.ui.Component.EventType])
   (:require-macros [c2.util :refer [bind!]]))
+
+(defn now [] (.getTime (js/Date.)))
+
+(defn sim-rate
+  "Returns the simulation rate in timesteps per second for current
+   run."
+  [model]
+  (when (:time (:run-start model))
+    (let [m (:run-start model)
+          dur-ms (- (now)
+                    (:time m))
+          steps (- (:timestep (:region model))
+                   (:timestep m))]
+      (-> (/ steps dur-ms)
+          (* 1000)))))
 
 (defn slider
   [id min-val max-val step unit]
@@ -39,6 +56,10 @@
            [:legend "Simulation"]
            [:label "Timestep:" [:span#sim-timestep
                                 (:timestep (:region @model))]]
+           [:span#sim-rate {:class "detail"}
+            (when @sim-go?
+              (gstring/format "%.1f steps/sec."
+                              (sim-rate @model)))]
            [:br]
            [:button#sim-start
             {:style {:display (when @sim-go? "none")}} "Start"]

@@ -3,7 +3,6 @@
             [org.nfrac.comportex.encoders :as enc]
             [comportexviz.parameters]))
 
-;; inputs
 (def bit-width 300)
 (def on-bits 30)
 (def numb-max 9)

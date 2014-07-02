@@ -13,7 +13,7 @@
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(def steps (atom (list)))
+(def steps (atom []))
 (def keep-steps (atom 25))
 
 (def viz-options
@@ -32,10 +32,14 @@
 
 (def width-px 800)
 (def height-px 1600)
+(def pad 0.85)
 (def bit-w-px 5)
 (def bit-h-px 2)
+(def bit-h-px-pad (* bit-h-px pad))
+(def bit-w-px-pad (* bit-w-px pad))
 (def col-grid-px 5)
 (def col-r-px (* col-grid-px 0.5))
+(def col-r-px-pad (* col-r-px pad))
 (def seg-r-px 15)
 (def head-px 10)
 (def h-spacing-px 80)
@@ -70,37 +74,49 @@
    :active (hsl :blue 1.0 0.5) ;; can be active+predicted
    :predicted (hsl :green 1.0 0.4) ;; inactive+predicted
    :unpredicted (hsl :red 1.0 0.5)  ;; active+unpredicted
+   :highlight (hsl :yellow 1 0.75 0.5)
    })
 
-(defn rgn-px-offset
+(defn rgns-x-offset
   []
   (+ (* @keep-steps bit-w-px)
      h-spacing-px))
 
-(defn segs-px-offset
+(defn segs-x-offset
   []
-  (+ (rgn-px-offset)
+  (+ (rgns-x-offset)
      (* @keep-steps col-grid-px)
      h-spacing-px))
 
-(defn column->px
-  "Returns pixel coordinates on the canvas `[x-px y-px]` for the
-   center of a column `cid` at time delay `dt`."
-  [cid dt]
-  (let [left (rgn-px-offset)
+(defn region-dt-offset
+  "Returns the pixel offsets `[x-px y-px]` from the canvas origin for
+   drawing the region columns at time delay `dt`."
+  [dt]
+  (let [left (rgns-x-offset)
         width (* @keep-steps col-grid-px)
         right (+ left width)
-        off-x-px (* (+ dt 0.5) col-grid-px)
+        off-x-px (* (+ dt 1) col-grid-px)
         x-px (- right off-x-px)
-        off-y-px (* (+ cid 0.5) col-grid-px)
-        y-px (+ head-px off-y-px)]
+        y-px head-px]
     [x-px y-px]))
+
+(defn column->px
+  "Returns pixel coordinates `[x-px y-px]` for the centre of a
+   region column `cid`, in local coordinates, or in absolute canvas
+   coordinates if time delay `dt` is given."
+  ([cid]
+     (let [x-px col-r-px
+           y-px (* (+ cid 0.5) col-grid-px)]
+       [x-px y-px]))
+  ([cid dt]
+     (mapv + (region-dt-offset dt)
+           (column->px cid))))
 
 (defn px->column
   "Returns column id and time delay `[cid dt]` located by given pixel
    coordinates on the canvas. Otherwise nil."
   [x-px y-px]
-  (let [left (rgn-px-offset)
+  (let [left (rgns-x-offset)
         width (* @keep-steps col-grid-px)
         right (+ left width)
         cid (Math/floor (/ (- y-px head-px) col-grid-px))
@@ -109,17 +125,36 @@
                (<= 0 cid))
       [cid dt])))
 
+(defn inbits-dt-offset
+  "Returns the pixel offsets `[x-px y-px]` from the canvas origin for
+   drawing the input bits at time delay `dt`."
+  [dt]
+  (let [width (* @keep-steps bit-w-px)
+        right width
+        off-x-px (* (+ dt 1) bit-w-px)
+        x-px (- right off-x-px)
+        y-px head-px]
+    [x-px y-px]))
+
+(defn inbit->px-top-left
+  "Returns pixel coordinates `[x-px y-px]` for the top-left of an
+   input bit `id`, in local coordinates, or in absolute canvas
+   coordinates if time delay `dt` is given."
+  ([id]
+     (let [x-px 0
+           y-px (* id bit-h-px)]
+       [x-px y-px]))
+  ([id dt]
+     (mapv + (inbits-dt-offset dt)
+           (inbit->px-top-left id))))
+
 (defn inbit->px
   "Returns pixel coordinates on the canvas `[x-px y-px]` for the
    center of an input bit `id` at time delay `dt`."
   [id dt]
-  (let [width (* @keep-steps bit-w-px)
-        right width
-        off-x-px (* (+ dt 0.5) bit-w-px)
-        x-px (- right off-x-px)
-        off-y-px (* (+ id 0.5) bit-h-px)
-        y-px (+ head-px off-y-px)]
-    [x-px y-px]))
+  (let [[x-px y-px] (inbit->px-top-left id dt)]
+    [(+ x-px (/ bit-w-px 2))
+     (+ y-px (/ bit-h-px 2))]))
 
 (defn px->inbit
   "Returns input bit id and time delay `[id dt]` located by given
@@ -135,67 +170,78 @@
 
 (defn centred-rect
   [cx cy w h]
-  {:x (- cx (quot w 2))
-   :y (- cy (quot h 2))
+  {:x (- cx (/ w 2))
+   :y (- cy (/ h 2))
    :w w
    :h h})
 
 (defn highlight-rect
   [ctx rect]
   (doto ctx
-    (c/stroke-style (hsl :yellow 1 0.75 0.5))
+    (c/stroke-style (:highlight state-colors))
     (c/stroke-width 3)
     (c/stroke-rect rect)
     (c/stroke-style "black")
     (c/stroke-width 1)
     (c/stroke-rect rect)))
 
-(defn draw-inbits
-  [ctx data bit-width sel-dt]
+(defn draw-inbits-1
+  "Draws with relative pixel positions, assuming the context has been
+   transformed already."
+  [ctx bit-states bit-width]
   (c/save ctx)
-  (c/stroke-width ctx (* bit-h-px 0.15))
-  (c/stroke-style ctx (grey 0.75))
-  (doseq [[dt bits] (map-indexed vector data)]
-    (doseq [b (range bit-width)
-            :let [[x-px y-px] (inbit->px b dt)
-                  color (if-let [bit-state (bits b)]
-                          (state-colors bit-state)
-                          "white")
-                  s (centred-rect x-px y-px bit-w-px bit-h-px)]]
-      (doto ctx
-        (c/fill-style color)
-        (c/fill-rect s)
-        (c/stroke-rect s))))
+  (doseq [b (range bit-width)
+          :let [[x-px y-px] (inbit->px-top-left b)
+                color (if-let [bit-state (bit-states b)]
+                        (state-colors bit-state)
+                        "white")]]
+    (c/fill-style ctx color)
+    (.fillRect ctx x-px y-px bit-w-px-pad bit-h-px-pad))
+  (c/restore ctx)
+  ctx)
+
+(defn draw-inbits-selection
+  [ctx sel-dt bit-width]
   ;; draw axis on selection: vertical dt
   (let [[x y1] (inbit->px 0 sel-dt)
         [_ y2] (inbit->px (dec bit-width) sel-dt)
         y (/ (+ y1 y2) 2)
         w (+ 1 bit-w-px)
         h (+ 10 bit-h-px (- y2 y1))]
-    (highlight-rect ctx (centred-rect x y w h)))
+    (highlight-rect ctx (centred-rect x y w h))))
+
+(defn circle
+  [ctx x y r]
+  (.arc ctx x y r 0 (* (.-PI js/Math) 2) true))
+
+(defn column-color
+  [col-states cid]
+  (let [col-state (col-states cid :inactive)]
+    (or (state-colors col-state)
+        (->> (/ col-state 10)
+             (min 1.0)
+             (- 1)
+             (grey)))))
+
+(defn draw-region-1
+  "Draws with relative pixel positions, assuming the context has been
+   transformed already."
+  [ctx col-states ncol]
+  (c/save ctx)
+  (let [color-groups (group-by (partial column-color col-states)
+                               (range ncol))]
+    (doseq [[color cids] color-groups]
+      (c/begin-path ctx)
+      (doseq [cid cids
+              :let [[x-px y-px] (column->px cid)]]
+        (circle ctx x-px y-px col-r-px-pad))
+      (c/fill-style ctx color)
+      (c/fill ctx)))
   (c/restore ctx)
   ctx)
 
-(defn draw-rgn
-  [ctx data ncol sel-cid sel-dt]
-  ;; Originally this used translate and scale to draw grid on integer
-  ;; coordinates. But better to use px lookup functions so that we can
-  ;; draw between frames of reference: inbits & columns.
-  (c/save ctx)
-  (c/stroke-width ctx (* col-grid-px 0.15))
-  (c/stroke-style ctx (grey 0.75))
-  (doseq [[dt m] (map-indexed vector data)]
-    (doseq [cid (range ncol)
-            :let [[x-px y-px] (column->px cid dt)
-                  cval (m cid :inactive)
-                  color (or (state-colors cval)
-                            (->> (/ cval 10)
-                                 (min 1.0)
-                                 (- 1)
-                                 (grey)))]]
-      (c/fill-style ctx color)
-      (c/circle ctx {:x x-px :y y-px :r col-r-px})
-      (c/stroke ctx)))
+(defn draw-region-selection
+  [ctx sel-dt sel-cid ncol]
   ;; draw axis on selection: vertical dt and horizonal cid
   (let [[x y1] (column->px 0 sel-dt)
         [_ y2] (column->px (dec ncol) sel-dt)
@@ -205,12 +251,11 @@
     (highlight-rect ctx (centred-rect x y w h)))
   (when sel-cid
     (let [[x1 y] (column->px sel-cid 0)
-          [x2 _] (column->px sel-cid (dec (count data)))
+          [x2 _] (column->px sel-cid (dec @keep-steps))
           x (/ (+ x1 x2) 2)
           w (+ 10 col-grid-px (Math/abs (- x2 x1)))
           h (+ 1 col-grid-px)]
       (highlight-rect ctx (centred-rect x y w h))))
-  (c/restore ctx)
   ctx)
 
 (defn draw-insynapses
@@ -273,7 +318,7 @@
         ns-bycell (mapv count data)
         ns-bycell-pad (map inc ns-bycell)
         n-pad (apply + 1 ns-bycell-pad)
-        our-left (segs-px-offset)
+        our-left (segs-x-offset)
         our-height (* 0.9 (.-innerHeight js/window))
         seg->px (fn [cell-idx idx]
                   (let [i-all (apply + 1 idx (take cell-idx ns-bycell-pad))
@@ -421,14 +466,14 @@
             (:bursting-columns opts) (merge bm))))
 
 (defn inbits-display-data
-  [state prev-state opts]
-  (let [inbits (core/bits-value (:in state))
+  "needs current region prior to learning, i.e. previous region"
+  [in prev-rgn opts]
+  (let [inbits (core/bits-value in)
         data (zipmap inbits (repeat :active))]
     (if (and (:predicted-bits opts)
-             prev-state)
-      (let [rgn (:region prev-state) ;; current region prior to learning
-            pcbc (:predictive-cells-by-column rgn)
-            all-pred-bits (sm/predicted-bits rgn pcbc 3)
+             prev-rgn)
+      (let [pcbc (:predictive-cells-by-column prev-rgn)
+            all-pred-bits (sm/predicted-bits prev-rgn pcbc 3)
             unpred-bits (set/difference inbits all-pred-bits)]
         (merge (zipmap all-pred-bits (repeat :predicted))
                data
@@ -502,38 +547,81 @@
                                              :active :inactive)])
                                         syns)))))))))
 
+(defn inbits-image
+  [in prev-rgn opts]
+  (let [bit-states (inbits-display-data in prev-rgn opts)
+        bit-width (core/bit-width in)
+        el (->dom [:canvas])]
+    (set! (.-width el) bit-w-px)
+    (set! (.-height el) (* bit-h-px bit-width))
+    (let [ctx (c/get-context el "2d")]
+      (draw-inbits-1 ctx bit-states bit-width)
+      el)))
+
+(defn region-image
+  [rgn opts]
+  (let [col-states (rgn-column-states rgn opts)
+        ncol (count (:columns rgn))
+        el (->dom [:canvas])]
+    (set! (.-width el) col-grid-px)
+    (set! (.-height el) (* col-grid-px ncol))
+    (let [ctx (c/get-context el "2d")]
+      (draw-region-1 ctx col-states ncol)
+      el)))
+
 (defn draw!
-  [{:keys [dt cid] :as selection}]
+  [{sel-dt :dt
+    sel-cid :cid
+    :as selection}]
+  (dom/val "#detail-text"
+           (if sel-cid (detail-text selection) ""))
   (let [opts @viz-options
-        cur-state (peek @steps)
-        cur-r (:region cur-state)
-        bit-width (:input-size (:spec cur-r))
-        ncol (count (:columns cur-r))
-        inb-data (mapv inbits-display-data @steps (pop @steps)
-                       (repeat opts))
-        rgn-data (for [state @steps]
-                   (rgn-column-states (:region state) opts))
-        state (nth @steps dt)
-        rgn (:region state)
-        prev-rgn (:region (nth @steps (inc dt) {}))
-        sel-cids (if cid [cid] (:active-columns rgn))
-        insyn-data (for [cid sel-cids]
-                     [cid (in-synapse-display-data state cid opts)])
+        sel-state (nth @steps sel-dt)
+        bit-width (core/bit-width (:in sel-state))
+        ncol (count (:columns (:region sel-state)))
         ctx (c/get-context (->dom "#viz") "2d")]
-    (dom/val "#detail-text"
-             (detail-text selection))
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    (draw-inbits ctx inb-data bit-width dt)
-    (draw-rgn ctx rgn-data ncol cid dt)
-    (draw-insynapses ctx insyn-data dt)
-    (when prev-rgn
-      (if cid
-        (let [asd (all-segments-display-data prev-rgn cid)]
-          (draw-all-segments ctx asd cid dt ncol
-                             (:activation-threshold (:spec rgn))))
-        (let [msd (for [cid sel-cids]
-                    [cid (matching-segments-display-data prev-rgn cid opts)])]
-          (draw-matching-segments ctx msd dt))))))
+    (doseq [dt (range (count @steps))
+            :let [state (nth @steps dt)
+                  prev-state (nth @steps (inc dt) {})
+                  rgn (:region state)
+                  cache (::cache (meta state))
+                  cached-opts (:viz-options @cache)]]
+      ;; refresh cache if necessary
+      (when (not= opts cached-opts)
+        (let [img (inbits-image (:in state) (:region prev-state) opts)]
+          (swap! cache assoc
+                 :viz-options opts
+                 :inbits-image img)))
+      ;; refresh cache if necessary
+      (when (not= opts cached-opts)
+        (let [img (region-image (:region state) opts)]
+          (swap! cache assoc
+                 :viz-options opts
+                 :region-image img)))
+      ;; draw from the cached off-screen buffers
+      (let [[xo yo] (inbits-dt-offset dt)]
+        (c/draw-image ctx (:inbits-image @cache) xo yo))
+      (let [[xo yo] (region-dt-offset dt)]
+        (c/draw-image ctx (:region-image @cache) xo yo)))
+    (draw-inbits-selection ctx sel-dt bit-width)
+    (draw-region-selection ctx sel-dt sel-cid ncol)
+    ;; extra visuals
+    (let [rgn (:region sel-state)
+          prev-rgn (:region (nth @steps (inc sel-dt) {}))
+          sel-cids (if sel-cid [sel-cid] (:active-columns rgn))
+          insyn-data (for [cid sel-cids]
+                       [cid (in-synapse-display-data sel-state cid opts)])]
+      (draw-insynapses ctx insyn-data sel-dt)
+      (when prev-rgn
+        (if sel-cid
+          (let [asd (all-segments-display-data prev-rgn sel-cid)]
+            (draw-all-segments ctx asd sel-cid sel-dt ncol
+                               (:activation-threshold (:spec rgn))))
+          (let [msd (for [cid sel-cids]
+                      [cid (matching-segments-display-data prev-rgn cid opts)])]
+            (draw-matching-segments ctx msd sel-dt))))))
+  nil)
 
 ;; ## Event stream processing
 
@@ -604,9 +692,10 @@
   [steps-c selection sim-step!]
   (go (loop []
         (when-let [x (<! steps-c)]
-          (swap! steps #(->> (cons x %)
-                             (take @keep-steps)
-                             (apply list))) ;; to ensure counted
+          (let [x* (vary-meta x assoc ::cache (atom {}))]
+            (swap! steps #(->> (cons x* %)
+                               (take @keep-steps)
+                               (vec))))
           (recur))))
   (let [el (->dom "#viz")]
     (set! (.-width el) width-px)
