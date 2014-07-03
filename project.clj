@@ -15,9 +15,8 @@
 
   :cljsbuild {:builds [{:id "viz"
                         :source-paths ["src"]
-                        :compiler  {:optimizations :none
-                                    :libs [""]
-                                    :source-map true
-                                    :output-dir "public/out/deps"
-                                    :output-to "public/out/comportex_viz.js"}}
+                        :compiler {:optimizations :advanced
+                                   :output-dir "public/out"
+                                   :source-map "public/comportexviz.js.map"
+                                   :output-to "public/comportexviz.js"}}
                        ]})

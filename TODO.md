@@ -1,13 +1,10 @@
 # TODO
 
-* perf
-  * benchmark
-  * cache display data for each time step
-  * web workers
+* ui controls for dendrite segments
 
 * rethink arcs to best matching
 
-* how to estimate/display predicted bits? maybe shade by votes
+* display predicted bits as translucent overlay, shaded by votes
 
 * show parameter values
 * ui to change parameter values
@@ -29,9 +26,7 @@
   * plots
 
 
-* trace back predicted columns to
-  * inbits  (weighted by some sort of confidence?)
-  * inputs  (reverse encoders?)
+* trace back predicted columns to inputs (reverse encoders?)
 
 * legend for colours
 * display duty cycles
@@ -40,4 +35,5 @@
 * 2D input fields
 * 2D column layouts
 * multiple regions in hierarchy
-* do not call model functions from viz-canvas
+
+* allow different viz to be plugged in (runtime config)
