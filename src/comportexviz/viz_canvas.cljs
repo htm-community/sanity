@@ -17,11 +17,10 @@
 (def keep-steps (atom 25))
 
 (def viz-options
-  (atom {:active-columns true
-         :bursting-columns true
-         :predictive-columns true
+  (atom {:active-bits true
          :predicted-bits true
          :overlap-columns nil
+         :predictive-columns true
          :active-insyns nil
          :inactive-insyns nil
          :insyns-permanences nil
@@ -64,6 +63,10 @@
           (long (* l 100)) "%,"
           a ")"))))
 
+(defn sixteenths
+  [z]
+  (-> z (* 16) (long) (/ 16.0)))
+
 (defn grey
   [z]
   (let [v (long (* z 255))]
@@ -71,9 +74,9 @@
 
 (def state-colors
   {:inactive "white"
-   :active (hsl :blue 1.0 0.5) ;; can be active+predicted
-   :predicted (hsl :green 1.0 0.4) ;; inactive+predicted
-   :unpredicted (hsl :red 1.0 0.5)  ;; active+unpredicted
+   :active (hsl :red 1.0 0.5)
+   :predicted (hsl :blue 1.0 0.5)
+   :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
    })
 
@@ -185,19 +188,35 @@
     (c/stroke-width 1)
     (c/stroke-rect rect)))
 
-(defn draw-inbits-1
+(defn draw-bits-1
+  "Fills the input bits in given color.
+   Draws with relative pixel positions, assuming the context has been
+   transformed already."
+  [ctx bits color]
+  (let [w bit-w-px-pad
+        h bit-h-px-pad]
+    (c/begin-path ctx)
+    (doseq [i bits
+            :let [[x y] (inbit->px-top-left i)]]
+      (.rect ctx x y w h))
+    (c/fill-style ctx color)
+    (c/fill ctx))
+  ctx)
+
+(defn draw-predbits-1
   "Draws with relative pixel positions, assuming the context has been
    transformed already."
-  [ctx bit-states bit-width]
-  (c/save ctx)
-  (doseq [b (range bit-width)
-          :let [[x-px y-px] (inbit->px-top-left b)
-                color (if-let [bit-state (bit-states b)]
-                        (state-colors bit-state)
-                        "white")]]
-    (c/fill-style ctx color)
-    (.fillRect ctx x-px y-px bit-w-px-pad bit-h-px-pad))
-  (c/restore ctx)
+  [ctx bit-votes]
+  (let [w bit-w-px-pad
+        h bit-h-px-pad]
+    (c/begin-path ctx)
+    (c/fill-style ctx (:predicted state-colors))
+    (doseq [[i v] bit-votes
+            :let [[x-px y-px] (inbit->px-top-left i)]]
+      (c/alpha ctx (->> (/ v 8)
+                        (min 1.0)
+                        (* 0.5)))
+      (.fillRect ctx x-px y-px w h)))
   ctx)
 
 (defn draw-inbits-selection
@@ -221,6 +240,7 @@
         (->> (/ col-state 10)
              (min 1.0)
              (- 1)
+             (sixteenths)
              (grey)))))
 
 (defn draw-region-1
@@ -455,31 +475,14 @@
 
 (defn rgn-column-states
   [rgn opts]
-  (let [om (:overlaps rgn)
-        pm (zipmap (keys (:prev-predictive-cells-by-column rgn))
-                   (repeat :predicted))
-        am (zipmap (:active-columns rgn) (repeat :active))
-        bm (zipmap (:bursting-columns rgn) (repeat :unpredicted))]
-    (cond-> (if (:overlap-columns opts) om {})
-            (:predictive-columns opts) (merge pm)
-            (:active-columns opts) (merge am)
-            (:bursting-columns opts) (merge bm))))
-
-(defn inbits-display-data
-  "needs current region prior to learning, i.e. previous region"
-  [in prev-rgn opts]
-  (let [inbits (core/bits-value in)
-        data (zipmap inbits (repeat :active))]
-    (if (and (:predicted-bits opts)
-             prev-rgn)
-      (let [pcbc (:predictive-cells-by-column prev-rgn)
-            all-pred-bits (sm/predicted-bits prev-rgn pcbc 3)
-            unpred-bits (set/difference inbits all-pred-bits)]
-        (merge (zipmap all-pred-bits (repeat :predicted))
-               data
-               (zipmap unpred-bits (repeat :unpredicted))))
-      ;; else just show active bits
-      data)))
+  (if (:predictive-columns opts)
+    (let [pred-cids (set (keys (:prev-predictive-cells-by-column rgn)))
+          active-cids (:active-columns rgn)
+          hit-cids (set/intersection pred-cids active-cids)]
+      (merge (zipmap pred-cids (repeat :predicted))
+             (zipmap active-cids (repeat :active))
+             (zipmap hit-cids (repeat :active-predicted))))
+    (zipmap (:active-columns rgn) (repeat :active))))
 
 (defn in-synapse-display-data
   [state cid opts]
@@ -547,27 +550,48 @@
                                              :active :inactive)])
                                         syns)))))))))
 
+(defn image-buffer
+  [w h]
+  (let [el (->dom [:canvas])]
+    (set! (.-width el) w)
+    (set! (.-height el) h)
+    el))
+
+(defn inbits-grid-image
+  [bit-width opts]
+  (let [el (image-buffer bit-w-px (* bit-h-px bit-width))
+        ctx (c/get-context el "2d")]
+    (draw-bits-1 ctx (range bit-width) (:inactive state-colors))
+    el))
+
 (defn inbits-image
-  [in prev-rgn opts]
-  (let [bit-states (inbits-display-data in prev-rgn opts)
-        bit-width (core/bit-width in)
-        el (->dom [:canvas])]
-    (set! (.-width el) bit-w-px)
-    (set! (.-height el) (* bit-h-px bit-width))
-    (let [ctx (c/get-context el "2d")]
-      (draw-inbits-1 ctx bit-states bit-width)
-      el)))
+  [in bit-width opts]
+  (let [inbits (core/bits-value in)
+        el (image-buffer bit-w-px (* bit-h-px bit-width))
+        ctx (c/get-context el "2d")]
+    (draw-bits-1 ctx inbits (:active state-colors))
+    el))
+
+(defn predbits-image
+  [prev-rgn bit-width opts]
+  (let [pcbc (:predictive-cells-by-column prev-rgn)
+        bit-votes (sm/predicted-bit-votes prev-rgn pcbc)
+        el (image-buffer bit-w-px (* bit-h-px bit-width))
+        ctx (c/get-context el "2d")]
+    (draw-predbits-1 ctx bit-votes)
+    el))
 
 (defn region-image
   [rgn opts]
   (let [col-states (rgn-column-states rgn opts)
+        col-vals (if (:overlap-columns opts)
+                   (merge (:overlaps rgn) col-states)
+                   col-states)
         ncol (count (:columns rgn))
-        el (->dom [:canvas])]
-    (set! (.-width el) col-grid-px)
-    (set! (.-height el) (* col-grid-px ncol))
-    (let [ctx (c/get-context el "2d")]
-      (draw-region-1 ctx col-states ncol)
-      el)))
+        el (image-buffer col-grid-px (* col-grid-px ncol))
+        ctx (c/get-context el "2d")]
+    (draw-region-1 ctx col-vals ncol)
+    el))
 
 (defn draw!
   [{sel-dt :dt
@@ -579,7 +603,8 @@
         sel-state (nth @steps sel-dt)
         bit-width (core/bit-width (:in sel-state))
         ncol (count (:columns (:region sel-state)))
-        ctx (c/get-context (->dom "#viz") "2d")]
+        ctx (c/get-context (->dom "#viz") "2d")
+        bg-img (inbits-grid-image bit-width opts)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
@@ -589,10 +614,14 @@
                   cached-opts (:viz-options @cache)]]
       ;; refresh cache if necessary
       (when (not= opts cached-opts)
-        (let [img (inbits-image (:in state) (:region prev-state) opts)]
+        (let [img (inbits-image (:in state) bit-width opts)]
           (swap! cache assoc
                  :viz-options opts
-                 :inbits-image img)))
+                 :inbits-image img))
+        (let [img (predbits-image (:region prev-state) bit-width opts)]
+          (swap! cache assoc
+                 :viz-options opts
+                 :predbits-image img)))
       ;; refresh cache if necessary
       (when (not= opts cached-opts)
         (let [img (region-image (:region state) opts)]
@@ -601,7 +630,11 @@
                  :region-image img)))
       ;; draw from the cached off-screen buffers
       (let [[xo yo] (inbits-dt-offset dt)]
-        (c/draw-image ctx (:inbits-image @cache) xo yo))
+        (c/draw-image ctx bg-img xo yo)
+        (when (:active-bits opts)
+          (c/draw-image ctx (:inbits-image @cache) xo yo))
+        (when (:predicted-bits opts)
+          (c/draw-image ctx (:predbits-image @cache) xo yo)))
       (let [[xo yo] (region-dt-offset dt)]
         (c/draw-image ctx (:region-image @cache) xo yo)))
     (draw-inbits-selection ctx sel-dt bit-width)

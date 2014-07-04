@@ -87,11 +87,11 @@
             [:fieldset#viz-options
              [:legend "Visualisation"]
              [:div
-              (checkbox viz :overlap-columns "Overlap scores") [:br]
-              (checkbox viz :active-columns "Active columns") [:br]
-              (checkbox viz :bursting-columns "Bursting columns") [:br]
-              (checkbox viz :predictive-columns "Predictive columns") [:br]
+              (checkbox viz :active-bits "Active bits") [:br]
               (checkbox viz :predicted-bits "Predicted bits")]
+             [:div
+              (checkbox viz :overlap-columns "Overlap scores") [:br]
+              (checkbox viz :predictive-columns "Predictive columns")]
              [:div
               (checkbox viz :active-insyns "Active in-synapses") [:br]
               (checkbox viz :inactive-insyns "Inactive in-synapses") [:br]
