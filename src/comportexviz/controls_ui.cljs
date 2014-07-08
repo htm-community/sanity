@@ -40,12 +40,25 @@
                   (fn [_] (reset! atom (.getValue s))))
   (.setValue s @atom))
 
+(defn keys->id
+  [keys]
+  (apply str "display-" (interpose "-" (map name keys))))
+
 (defn checkbox
-  [m key txt]
-  [:label [:input {:id (name key)
+  [m keys txt]
+  [:label [:input {:id (keys->id keys)
                    :type "checkbox"
-                   :checked (when (m key) "checked")}]
+                   :checked (when (get-in m keys) "checked")}]
    txt])
+
+(defn combobox
+  [m keys optvals txt]
+  [:label txt
+   [:select {:id (keys->id keys)}
+    (for [optval optvals]
+      [:option {:value (name optval)
+                :selected (when (= (get-in m keys) optval) "selected")}
+       (name optval)])]])
 
 (defn init!
   [model sim-go? main-options keep-steps viz-options sim-step! draw-now!]
@@ -87,19 +100,21 @@
             [:fieldset#viz-options
              [:legend "Visualisation"]
              [:div
-              (checkbox viz :active-bits "Active bits") [:br]
-              (checkbox viz :predicted-bits "Predicted bits")]
+              (checkbox viz [:input :active] "Active bits") [:br]
+              (checkbox viz [:input :predicted] "Predicted bits")]
              [:div
-              (checkbox viz :overlap-columns "Overlap scores") [:br]
-              (checkbox viz :predictive-columns "Predictive columns")]
+              (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
+              (checkbox viz [:columns :predictive] "Predictive columns")]
              [:div
-              (checkbox viz :active-insyns "Active in-synapses") [:br]
-              (checkbox viz :inactive-insyns "Inactive in-synapses") [:br]
-              (checkbox viz :insyns-permanences "Permanences")]
+              (checkbox viz [:ff-synapses :active] "Active in-synapses") [:br]
+              (checkbox viz [:ff-synapses :inactive] "Inactive in-synapses") [:br]
+              (checkbox viz [:ff-synapses :permanences] "Permanences")]
              [:div
-              (checkbox viz :active-dendrites "Active dendrites") [:br]
-              (checkbox viz :inactive-dendrites "Inactive synapses") [:br]
-              (checkbox viz :dendrite-permanences "Permanences")]])])
+              (combobox viz [:lat-synapses :from] [:learning :all :none]
+                        "Synapses from ") [:br]
+              (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
+              (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
+              (checkbox viz [:lat-synapses :permanences] "Permanences")]])])
 
   (event/on-raw "#sim-start" :click
                 (fn [_] (reset! sim-go? true)))
@@ -127,8 +142,11 @@
                 (fn [_] (swap! main-options update-in [:anim-every]
                               #(inc %))))
 
-  (doseq [k (keys @viz-options)
-          :let [el (->dom (str "#" (name k)))]]
-    (event/on-raw el :click
-                  (fn [_] (swap! viz-options assoc k (dom/val el))))))
-
+  (doseq [[k km] @viz-options
+          [subk v] km
+          :let [id (keys->id [k subk])
+                el (->dom (str "#" id))]]
+    (event/on-raw el :change
+                  (fn [_]
+                    (let [v (when-let [s (dom/val el)] (keyword s))]
+                      (swap! viz-options assoc-in [k subk] v))))))

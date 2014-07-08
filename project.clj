@@ -1,8 +1,8 @@
 (defproject comportexviz "0.0.1-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
 
-  :dependencies [[org.clojure/clojure "1.5.1"]
-                 [org.clojure/clojurescript "0.0-2234"]
+  :dependencies [[org.clojure/clojure "1.6.0"]
+                 [org.clojure/clojurescript "0.0-2268"]
                  [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
                  [com.cemerick/pprng "0.0.2"]
                  [org.nfrac/comportex "0.1.0-SNAPSHOT"]

@@ -17,17 +17,17 @@
 (def keep-steps (atom 25))
 
 (def viz-options
-  (atom {:active-bits true
-         :predicted-bits true
-         :overlap-columns nil
-         :predictive-columns true
-         :active-insyns nil
-         :inactive-insyns nil
-         :insyns-permanences nil
-         :active-dendrites nil
-         :inactive-dendrites nil
-         :dendrite-permanences nil
-         }))
+  (atom {:input {:active true
+                 :predicted true}
+         :columns {:overlaps nil
+                   :predictive true}
+         :ff-synapses {:active nil
+                       :inactive nil
+                       :permanences nil}
+         :lat-synapses {:from :learning ;; :learning, :all, :none
+                        :active true
+                        :inactive nil
+                        :permanences nil}}))
 
 (def width-px 800)
 (def height-px 1600)
@@ -39,6 +39,7 @@
 (def col-grid-px 5)
 (def col-r-px (* col-grid-px 0.5))
 (def col-r-px-pad (* col-r-px pad))
+(def cell-r-px 10)
 (def seg-r-px 15)
 (def head-px 10)
 (def h-spacing-px 80)
@@ -85,7 +86,7 @@
   (+ (* @keep-steps bit-w-px)
      h-spacing-px))
 
-(defn segs-x-offset
+(defn cells-x-offset
   []
   (+ (rgns-x-offset)
      (* @keep-steps col-grid-px)
@@ -279,12 +280,12 @@
   ctx)
 
 (defn draw-insynapses
-  [ctx data dt]
+  [ctx data dt opts]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (doseq [[cid m] data
           :let [[cx cy] (column->px cid dt)
-                perms? (:insyns-permanences @viz-options)
+                perms? (get-in opts [:ff-synapses :permanences])
                 draw (fn [syns active?]
                        (c/stroke-style ctx (if active? "red" "black"))
                        (doseq [[id perm] syns
@@ -301,110 +302,201 @@
   (c/restore ctx)
   ctx)
 
-(defn draw-matching-segments
-  [ctx data dt]
-  (c/save ctx)
-  (c/stroke-width ctx 1)
-  (doseq [[cid m] data
-          :let [[cx cy] (column->px cid dt)
-                perms? (:dendrite-permanences @viz-options)
-                draw (fn [syns active?]
-                       (c/stroke-style ctx (if active? "red" "black"))
-                       (doseq [[[id _] perm] syns
-                               :let [[dcx dcy] (column->px id (inc dt))
-                                     mid-y (quot (+ cy dcy) 2)
-                                     diff-y (Math/abs (- cy dcy))]]
-                         (doto ctx
-                           (c/alpha (if perms? perm 1))
-                           (c/begin-path)
-                           (c/move-to (+ cx 1) cy) ;; avoid obscuring colour
-                           (c/line-to (+ cx 10) cy)
-                           (c/quadratic-curve-to (+ cx (quot diff-y 2))
-                                                 mid-y
-                                                 dcx
-                                                 dcy)
-                           (c/stroke)))
-                       )]]
-    (draw (:inactive m) false)
-    (draw (:active m) true))
-  (c/restore ctx)
-  ctx)
+(defn group-synapses
+  [syns ac pcon]
+  (group-by (fn [[id p]]
+                   [(if (>= p pcon)
+                      :connected :disconnected)
+                    (if (ac id)
+                      :active :inactive)])
+                 syns))
+
+(defn column-learning-segment-and-cell
+  [prev-rgn current-ac cid]
+  (let [col-ac (set (filter (fn [[i _]] (= i cid))
+                            current-ac))]
+    (when (seq col-ac)
+      (let [col (get-in prev-rgn [:columns cid])
+            ac (:active-cells prev-rgn)
+            lc (:learn-cells prev-rgn)
+            bursting? (= (count col-ac)
+                         (count (:cells col)))]
+        (sm/column-learning-segment-and-cell col bursting? col-ac lc ac
+                                             (:spec prev-rgn))))))
+
+(defn natural-curve
+  [ctx x0 y0 x1 y1]
+  (let [x-third (/ (- x1 x0) 3)]
+    (c/bezier-curve-to ctx
+                       (- x1 x-third) y0
+                       (+ x0 x-third) y1
+                       x1 y1)))
 
 (defn draw-all-segments
-  [ctx data cid dt ncol th]
+  [ctx cid dt prev-rgn rgn ncol opts]
   (c/save ctx)
-  (let [perms? false ;; TODO
-        ncells (count data)
-        ns-bycell (mapv count data)
-        ns-bycell-pad (map inc ns-bycell)
-        n-pad (apply + 1 ns-bycell-pad)
-        our-left (segs-x-offset)
+  (let [col (get-in prev-rgn [:columns cid])
+        spec (:spec prev-rgn)
+        th (:activation-threshold (:spec rgn))
+        pcon (:connected-perm spec)
+        ac (:active-cells prev-rgn)
+        lc (:learn-cells prev-rgn)
+        active? (get-in rgn [:active-columns cid])
+        bursting? (get-in rgn [:bursting-columns cid])
+        current-ac (:active-cells rgn)
+        learning (column-learning-segment-and-cell prev-rgn current-ac cid)
+        cells (:cells col)
+        ncells (count cells)
+        nsegbycell (map (comp count :segments) cells)
+        nsegbycell-pad (map (partial max 1) nsegbycell)
+        nseg-pad (apply + nsegbycell-pad)
+        our-left (cells-x-offset)
+        segs-left (+ our-left seg-r-px (* cell-r-px 2))
         our-height (* 0.9 (.-innerHeight js/window))
+        our-top (+ (.-pageYOffset js/window) (/ our-height 9))
         seg->px (fn [cell-idx idx]
-                  (let [i-all (apply + 1 idx (take cell-idx ns-bycell-pad))
-                        frac (/ i-all n-pad)]
-                    [(+ our-left seg-r-px)
-                     (+ head-px (* frac our-height))]))]
-    ;; draw diagram line from selected cell to the segments
-    (let [[cidx cidy] (column->px cid 0)]
-      (doto ctx
-        (c/stroke-style "white")
-        (c/stroke-width col-grid-px)
-        (c/begin-path)
-        (c/move-to (+ cidx col-r-px 1) cidy) ;; avoid obscuring colour
-        (c/line-to our-left cidy)
-        (c/line-to our-left head-px)
-        (c/line-to our-left (+ head-px our-height))
-        (c/stroke)))
-    (doseq [[ci segs] (map-indexed vector data)
-            [si m] (map-indexed vector segs)
-            :let [[sx sy] (seg->px ci si)
-                  conn-act (count (m [:connected :active]))
-                  conn-tot (+ conn-act (count (m [:connected :inactive])))
-                  disc-act (count (m [:disconnected :active]))
-                  disc-tot (+ disc-act (count (m [:disconnected :inactive])))
-                  z (-> (- 1 (/ conn-act th))
-                        (min 1.0))]]
-      ;; draw segment as a rectangle
-      (let [s (centred-rect sx sy (* 2 seg-r-px) seg-r-px)]
+                  (let [i-all (apply + idx (take cell-idx nsegbycell-pad))
+                        frac (/ i-all nseg-pad)]
+                    [(+ segs-left seg-r-px)
+                     (+ our-top head-px (* frac our-height))]))
+        cell->px (fn [cell-idx]
+                   (let [[sx sy] (seg->px cell-idx 0)]
+                     [our-left sy]))
+        [colx coly] (column->px cid 0)
+        stroke-col-to-cell (fn [ctx cell-idx]
+                             (let [[cellx celly] (cell->px cell-idx)]
+                               (doto ctx
+                                 (c/begin-path)
+                                 (c/move-to (+ colx col-r-px 1) coly) ;; avoid obscuring colour
+                                 (natural-curve colx coly cellx celly)
+                                 (c/stroke))))
+        stroke-seg-to-cell (fn [ctx cell-idx idx]
+                             (let [[cellx celly] (cell->px cell-idx)
+                                   [sx sy] (seg->px cell-idx idx)]
+                               (doto ctx
+                                 (c/begin-path)
+                                 (c/move-to sx sy)
+                                 (c/line-to (+ cellx cell-r-px) celly)
+                                 (c/stroke))))]
+    ;; draw background channels to cell from column and from segments
+    (c/stroke-width ctx col-grid-px)
+    (c/stroke-style ctx (:inactive state-colors))
+    (doseq [[ci {segs :segments}] (map-indexed vector cells)]
+      (stroke-col-to-cell ctx ci)
+      (doseq [si (range (count segs))]
+        (stroke-seg-to-cell ctx ci si)))
+    (doseq [[ci {segs :segments}] (map-indexed vector cells)
+            :let [[cellx celly] (cell->px ci)
+                  cell-id [cid ci]
+                  cell-active? (current-ac cell-id)
+                  learn-cell? (= cell-id (:cell-id learning))
+                  seg-sg (mapv #(group-synapses (:synapses %) ac pcon) segs)
+                  on? (fn [sg] (>= (count (sg [:connected :active])) th))
+                  cell-state (cond
+                              (and cell-active? (some on? seg-sg)) :active-predicted
+                              (some on? seg-sg) :predicted
+                              cell-active? :active
+                              :else :inactive)]]
+      (when cell-active?
         (doto ctx
-          (c/alpha 1.0)
-          (c/stroke-style "black")
-          (c/stroke-width 1)
-          (c/fill-style (hsl :red 1 z))
-          (c/fill-rect s)
-          (c/stroke-rect s)
-          (c/fill-style "black")))
-      (when (zero? si)
-        (c/text ctx {:text (str "cell " ci " segments:")
-                     :x sx :y (- sy seg-r-px 5)}))
-      (c/text ctx {:text (str "#" si ", active / connected = " conn-act
-                              " / " conn-tot)
-                   :x (+ sx (* 2 seg-r-px)) :y (- sy 5)})
-      (c/text ctx {:text (str "  active / disconnected = " disc-act
-                              " / " disc-tot)
-                   :x (+ sx (* 2 seg-r-px)) :y (+ sy 5)})
-      ;; synapses
-      (let [draw (fn [syns conn? active?]
-                   (c/stroke-style ctx
-                                   (cond
-                                    (and conn? active?) "red"
-                                    (and conn? (not active?)) "black"
-                                    active? (hsl :red 0.5 0.5)
-                                    (not active?) (grey 0.5)))
-                   (doseq [[[to-cid _] perm] syns
-                           :let [[cx cy] (column->px to-cid (inc dt))]]
-                     (doto ctx
-                       (c/alpha (if perms? perm 1))
-                       (c/begin-path)
-                       (c/move-to sx sy)
-                       (c/line-to (+ cx 1) cy) ;; +1 avoid obscuring colour
-                       (c/stroke))))]
-        (draw (m [:disconnected :inactive]) false false)
-        (draw (m [:disconnected :active]) false true)
-        (draw (m [:connected :inactive]) true false)
-        (draw (m [:connected :active]) true true))))
-  (c/restore ctx)
+          (c/stroke-style (:active state-colors))
+          (c/stroke-width 2)
+          (stroke-col-to-cell ci)))
+      ;; draw the cell itself
+      (when learn-cell?
+        (doto ctx
+          (c/fill-style (:highlight state-colors))
+          (c/begin-path)
+          (circle cellx celly (+ cell-r-px 8))
+          (c/fill)))
+      (doto ctx
+        (c/fill-style (state-colors cell-state))
+        (c/stroke-style "black")
+        (c/stroke-width 1)
+        (c/begin-path)
+        (circle cellx celly cell-r-px)
+        (c/stroke)
+        (c/fill))
+      (c/fill-style ctx "black")
+      (c/text ctx {:text (str "cell " ci
+                              (when learn-cell?
+                                (str "   (learning on "
+                                     (if-let [si (:segment-idx learning)]
+                                       (str "segment " si)
+                                       "new segment")
+                                     ")")))
+                   :x cellx :y (- celly cell-r-px 5)})
+      (doseq [[si sg] (map-indexed vector seg-sg)
+              :let [[sx sy] (seg->px ci si)
+                    conn-act (count (sg [:connected :active]))
+                    conn-tot (+ conn-act (count (sg [:connected :inactive])))
+                    disc-act (count (sg [:disconnected :active]))
+                    disc-tot (+ disc-act (count (sg [:disconnected :inactive])))
+                    z (-> (/ conn-act th)
+                          (min 1.0))
+                    learn-seg? (and learn-cell?
+                                    (= si (:segment-idx learning)))]]
+        ;; draw segment as a rectangle
+        (let [seg-w (* 2 seg-r-px)
+              seg-cx (+ sx seg-r-px)
+              s (centred-rect seg-cx sy seg-w 10)
+              hs (centred-rect seg-cx sy (+ seg-w 8) (+ 10 8))]
+          (when learn-seg?
+            (doto ctx
+              (c/fill-style (:highlight state-colors))
+              (c/fill-rect hs)))
+          (doto ctx
+            (c/alpha 1.0)
+            (c/stroke-style "black")
+            (c/stroke-width 1)
+            (c/stroke-rect s)
+            (c/fill-style "white")
+            (c/fill-rect s)
+            (c/alpha z)
+            (c/fill-style (:active state-colors))
+            (c/fill-rect s)
+            (c/alpha 1.0)))
+        (when (on? sg)
+          (doto ctx
+            (c/stroke-style (:active state-colors))
+            (c/stroke-width 2)
+            (stroke-seg-to-cell ci si)))
+        (c/fill-style ctx "black")
+        (c/text ctx {:text (str "[" si "],  active / conn. = " conn-act
+                                " / " conn-tot)
+                     :x (+ sx 5 (* 2 seg-r-px)) :y (- sy 5)})
+        (c/text ctx {:text (str "   active / disconn. = " disc-act
+                                " / " disc-tot)
+                     :x (+ sx 5 (* 2 seg-r-px)) :y (+ sy 5)})
+        ;; synapses
+        (c/stroke-width ctx 1)
+        (let [perms? (get-in opts [:lat-synapses :permanences])
+              draw (fn [syns conn? active?]
+                     (c/stroke-style ctx
+                                     (cond
+                                      (and conn? active?) "red"
+                                      (and conn? (not active?)) "black"
+                                      active? (hsl :red 0.5 0.5)
+                                      (not active?) (grey 0.5)))
+                     (doseq [[[to-cid _] perm] syns
+                             :let [[cx cy] (column->px to-cid (inc dt))]]
+                       (doto ctx
+                         (c/alpha (if perms? perm 1))
+                         (c/begin-path)
+                         (c/move-to sx sy)
+                         (c/line-to (+ cx 1) cy) ;; +1 avoid obscuring colour
+                         (c/stroke)))
+                     (c/alpha ctx 1))
+              from (get-in opts [:lat-synapses :from])]
+          (when (or (= from :all)
+                    (and (= from :learning) learn-seg?))
+                                        ;(draw (sg [:disconnected :inactive]) false false)
+                                        ;(draw (sg [:disconnected :active]) false true)
+            (when (get-in opts [:lat-synapses :inactive])
+              (draw (sg [:connected :inactive]) true false))
+            (when (get-in opts [:lat-synapses :active])
+              (draw (sg [:connected :active]) true true))))))
+    (c/restore ctx))
   ctx)
 
 (defn detail-text
@@ -475,7 +567,7 @@
 
 (defn rgn-column-states
   [rgn opts]
-  (if (:predictive-columns opts)
+  (if (get-in opts [:columns :predictive])
     (let [pred-cids (set (keys (:prev-predictive-cells-by-column rgn)))
           active-cids (:active-columns rgn)
           hit-cids (set/intersection pred-cids active-cids)]
@@ -486,69 +578,35 @@
 
 (defn in-synapse-display-data
   [state cid opts]
-  (when (:active-insyns opts)
+  (when (get-in opts [:ff-synapses :active])
     (let [col (get-in state [:region :columns cid])
           on-bits (core/bits-value (:in state))
           syns (-> col :in-synapses :connected)]
       {:active (select-keys syns on-bits)
-       :inactive (when (:inactive-insyns opts)
+       :inactive (when (get-in opts [:ff-synapses :inactive])
                    (apply dissoc syns on-bits))})))
 
-(defn matching-segments-display-data
-  "This needs the previous region, since it is prior to learning that
-   occurred during the current timestep. It also needs the previous
-   active cells -- that are the current active cells in the previous
-   region -- since they define the predictive states for the current
-   timestep."
-  [prev-rgn cid opts]
-  (when (:active-dendrites opts)
+(defn group-synapses
+  [syns ac pcon]
+  (group-by (fn [[id p]]
+              [(if (>= p pcon)
+                 :connected :disconnected)
+               (if (ac id)
+                 :active :inactive)])
+            syns))
+
+(defn get-column-learning-segment
+  [prev-rgn current-ac cid]
+  (when (current-ac cid)
     (let [col (get-in prev-rgn [:columns cid])
-          pcon (-> prev-rgn :spec :connected-perm)
           ac (:active-cells prev-rgn)
-          best (sm/best-matching-segment-and-cell col
-                                                  (:learn-cells prev-rgn)
-                                                  (:spec prev-rgn))]
-      ;; TODO fall back to all active cells not just learn cells
-      (if-let [sid (:segment-idx best)]
-        (let [[_ cell-idx] (:cell-id best)
-              allsyns (get-in col [:cells cell-idx :segments sid :synapses])
-              syns (into {} (filter (fn [[id p]] (>= p pcon)) allsyns))]
-          {:active (select-keys syns ac)
-           :inactive (when (:dendrites-inactive opts)
-                       (apply dissoc syns ac))})
-        {}))))
-
-(defn all-segments-display-data
-  "Returns a data structure with all synapses in dendrite segments in
-   cells in the column. Like:
-
-   `[ [ { [:connected :active] [synapses ...],
-          [:connected :inactive] [synapses ...],
-          [:disconnected :active] [synapses ...],
-          [:disconnected :inactive] [synapses ...] }
-        ...] ;; more segments
-      ...] ;; more cells`
-
-   This needs the previous region, since it is prior to learning that
-   occurred during the current timestep. It also needs the previous
-   active cells -- that are the current active cells in the previous
-   region -- since they define the predictive states for the current
-   timestep."
-  [prev-rgn cid]
-  (let [col (get-in prev-rgn [:columns cid])
-        pcon (-> prev-rgn :spec :connected-perm)
-        ac (:active-cells prev-rgn)]
-    (->> (:cells col)
-         (mapv (fn [cell]
-                 (->> (:segments cell)
-                      (map :synapses)
-                      (mapv (fn [syns]
-                              (group-by (fn [[id p]]
-                                          [(if (>= p pcon)
-                                             :connected :disconnected)
-                                           (if (ac id)
-                                             :active :inactive)])
-                                        syns)))))))))
+          lc (:learn-cells prev-rgn)
+          col-ac (set (filter (fn [[_ i]] (= i cid))
+                              current-ac))
+          bursting? (= (count col-ac)
+                       (count (:cells col)))
+          spec (:spec prev-rgn)]
+      (sm/column-learning-segment-and-cell col bursting? col-ac lc ac spec))))
 
 (defn image-buffer
   [w h]
@@ -584,7 +642,7 @@
 (defn region-image
   [rgn opts]
   (let [col-states (rgn-column-states rgn opts)
-        col-vals (if (:overlap-columns opts)
+        col-vals (if (get-in opts [:columns :overlaps])
                    (merge (:overlaps rgn) col-states)
                    col-states)
         ncol (count (:columns rgn))
@@ -613,7 +671,7 @@
                   cache (::cache (meta state))
                   cached-opts (:viz-options @cache)]]
       ;; refresh cache if necessary
-      (when (not= opts cached-opts)
+      (when (not= (:input opts) (:input cached-opts))
         (let [img (inbits-image (:in state) bit-width opts)]
           (swap! cache assoc
                  :viz-options opts
@@ -623,7 +681,7 @@
                  :viz-options opts
                  :predbits-image img)))
       ;; refresh cache if necessary
-      (when (not= opts cached-opts)
+      (when (not= (:columns opts) (:columns cached-opts))
         (let [img (region-image (:region state) opts)]
           (swap! cache assoc
                  :viz-options opts
@@ -631,9 +689,9 @@
       ;; draw from the cached off-screen buffers
       (let [[xo yo] (inbits-dt-offset dt)]
         (c/draw-image ctx bg-img xo yo)
-        (when (:active-bits opts)
+        (when (get-in opts [:input :active])
           (c/draw-image ctx (:inbits-image @cache) xo yo))
-        (when (:predicted-bits opts)
+        (when (get-in opts [:input :predicted])
           (c/draw-image ctx (:predbits-image @cache) xo yo)))
       (let [[xo yo] (region-dt-offset dt)]
         (c/draw-image ctx (:region-image @cache) xo yo)))
@@ -645,15 +703,9 @@
           sel-cids (if sel-cid [sel-cid] (:active-columns rgn))
           insyn-data (for [cid sel-cids]
                        [cid (in-synapse-display-data sel-state cid opts)])]
-      (draw-insynapses ctx insyn-data sel-dt)
-      (when prev-rgn
-        (if sel-cid
-          (let [asd (all-segments-display-data prev-rgn sel-cid)]
-            (draw-all-segments ctx asd sel-cid sel-dt ncol
-                               (:activation-threshold (:spec rgn))))
-          (let [msd (for [cid sel-cids]
-                      [cid (matching-segments-display-data prev-rgn cid opts)])]
-            (draw-matching-segments ctx msd sel-dt))))))
+      (draw-insynapses ctx insyn-data sel-dt opts)
+      (when (and prev-rgn sel-cid)
+        (draw-all-segments ctx sel-cid sel-dt prev-rgn rgn ncol opts))))
   nil)
 
 ;; ## Event stream processing
