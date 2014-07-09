@@ -68,8 +68,6 @@
   (comportexviz.controls-ui/init! model sim-go? main-options viz/keep-steps
                                   viz/viz-options sim-step! draw!))
 
-(c2.event/on-load init-ui!)
-
 (defn now [] (.getTime (js/Date.)))
 
 (defn run-sim
@@ -110,3 +108,5 @@
                      (zero? (mod t n)))
             (draw!)))
         (recur c))))
+
+(c2.event/on-load init-ui!)

@@ -5,7 +5,9 @@
             [goog.string :as gstring]
             [goog.string.format]
             [goog.ui.Slider]
-            [goog.ui.Component.EventType])
+            [goog.ui.Component.EventType]
+            [cljs.reader]
+            [org.nfrac.comportex.core :as core])
   (:require-macros [c2.util :refer [bind!]]))
 
 (defn now [] (.getTime (js/Date.)))
@@ -42,7 +44,7 @@
 
 (defn keys->id
   [keys]
-  (apply str "display-" (interpose "-" (map name keys))))
+  (apply str "display-" (interpose "_" (map name keys))))
 
 (defn checkbox
   [m keys txt]
@@ -59,6 +61,13 @@
       [:option {:value (name optval)
                 :selected (when (= (get-in m keys) optval) "selected")}
        (name optval)])]])
+
+(defn parameter-input
+  [[k v]]
+  [:label
+   [:span.parameter-label (name k)]
+   [:input {:id (keys->id [k])
+            :value (str v)}]])
 
 (defn init!
   [model sim-go? main-options keep-steps viz-options sim-step! draw-now!]
@@ -82,7 +91,8 @@
            [:label "Step every:"
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
-            [:span [:a#sim-faster {:href "#"} "faster"]]]]
+            [:span [:a#sim-faster {:href "#"} "faster"]]]
+           [:button#sim-reset "Reset"]]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
@@ -114,7 +124,16 @@
                         "Synapses from ") [:br]
               (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
               (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
-              (checkbox viz [:lat-synapses :permanences] "Permanences")]])])
+              (checkbox viz [:lat-synapses :permanences] "Permanences")]])
+
+          (let [spec (-> @model :region :spec)]
+            [:form#region-spec-form
+             [:fieldset#region-spec
+              [:legend "Parameters"]
+              (map parameter-input (sort spec))
+              [:p.detail [:input {:type "submit" :value "Set!"}]
+               (str " (will be set immediately, but then use Reset above for any"
+                    " parameters that apply only in initialisation)")]]])])
 
   (event/on-raw "#sim-start" :click
                 (fn [_] (reset! sim-go? true)))
@@ -128,6 +147,11 @@
   (event/on-raw "#sim-slower" :click
                 (fn [_] (swap! main-options update-in [:sim-step-ms]
                               #(+ % 100))))
+  (event/on-raw "#sim-reset" :click
+                (fn [_] (swap! model
+                               (fn [{:keys [in region]}]
+                                 (core/cla-model (core/input-reset in)
+                                                 (:spec region))))))
 
   (event/on-raw "#anim-start" :click
                 (fn [_] (swap! main-options assoc :anim-go? true)))
@@ -149,4 +173,17 @@
     (event/on-raw el :change
                   (fn [_]
                     (let [v (when-let [s (dom/val el)] (keyword s))]
-                      (swap! viz-options assoc-in [k subk] v))))))
+                      (swap! viz-options assoc-in [k subk] v)))))
+
+  (let [spec (-> @model :region :spec)
+        form-el (->dom "#region-spec-form")]
+    (event/on-raw form-el :submit
+                  (fn [_]
+                    (let [s (reduce (fn [s k]
+                                      (let [id (keys->id [k])
+                                            el (->dom (str "#" id))
+                                            v (cljs.reader/read-string (dom/val el))]
+                                        (assoc s k v)))
+                                    {} (keys spec))]
+                      (swap! model assoc-in [:region :spec] s)
+                      false)))))

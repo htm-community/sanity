@@ -29,8 +29,7 @@
                         :inactive nil
                         :permanences nil}}))
 
-(def width-px 800)
-(def height-px 1600)
+(def height-px 1400)
 (def pad 0.85)
 (def bit-w-px 5)
 (def bit-h-px 2)
@@ -352,8 +351,8 @@
         nseg-pad (apply + nsegbycell-pad)
         our-left (cells-x-offset)
         segs-left (+ our-left seg-r-px (* cell-r-px 2))
-        our-height (* 0.9 (.-innerHeight js/window))
-        our-top (+ (.-pageYOffset js/window) (/ our-height 9))
+        our-height (* 0.95 (.-innerHeight js/window))
+        our-top (+ (.-pageYOffset js/window) cell-r-px)
         seg->px (fn [cell-idx idx]
                   (let [i-all (apply + idx (take cell-idx nsegbycell-pad))
                         frac (/ i-all nseg-pad)]
@@ -661,8 +660,10 @@
         sel-state (nth @steps sel-dt)
         bit-width (core/bit-width (:in sel-state))
         ncol (count (:columns (:region sel-state)))
-        ctx (c/get-context (->dom "#viz") "2d")
-        bg-img (inbits-grid-image bit-width opts)]
+        canvas-el (->dom "#viz")
+        ctx (c/get-context canvas-el "2d")
+        bg-img (inbits-grid-image bit-width opts)
+        width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
@@ -710,15 +711,18 @@
 
 ;; ## Event stream processing
 
-(defn listen [el type]
+(defn listen [el type capture-fn]
   (let [out (chan)]
     (gevents/listen el type
-                    (fn [e] (put! out e)))
+                    (fn [e] (put! out e)
+                      (when (capture-fn e)
+                        (.preventDefault e)
+                        false)))
     out))
 
 (defn handle-canvas-clicks
   [el selection]
-  (let [clicks (listen el "click")]
+  (let [clicks (listen el "click" (fn [_] false))]
     (go
      (while true
        (let [e (<! clicks)
@@ -736,9 +740,7 @@
              (reset! selection {:cid nil :dt 0}))))))))
 
 (def code-key
-  {32 :space
-   33 :page-up
-   34 :page-down
+  {;32 :space
    37 :left
    38 :up
    39 :right
@@ -746,12 +748,12 @@
 
 (defn handle-canvas-keys
   [selection sim-step!]
-  (let [presses (listen js/document goog.events.EventType.KEYDOWN)]
+  (let [presses (listen js/document goog.events.EventType.KEYDOWN
+                        (fn [e] (code-key (.-keyCode e))))]
     (go
      (while true
        (let [e (<! presses)
-             kc (.-keyCode e)
-             k (code-key kc)
+             k (code-key (.-keyCode e))
              ;; we need to assume there is a previous step, so:
              max-dt (- (count @steps) 2)]
          (when k
@@ -767,10 +769,6 @@
                         (fn [x] (if x (dec x) 0)))
              :down (swap! selection update-in [:cid]
                           (fn [x] (if x (inc x) 0)))
-             :page-up (swap! selection update-in [:cid]
-                             (fn [x] (max 0 (- x 10))))
-             :page-down (swap! selection update-in [:cid]
-                               (fn [x] (max 0 (+ x 10))))
              )))))))
 
 (defn init!
@@ -783,7 +781,7 @@
                                (vec))))
           (recur))))
   (let [el (->dom "#viz")]
-    (set! (.-width el) width-px)
+    (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))
     (set! (.-height el) height-px)
     (handle-canvas-clicks el selection)
     (handle-canvas-keys selection sim-step!)))

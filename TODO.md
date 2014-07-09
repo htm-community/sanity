@@ -1,14 +1,8 @@
 # TODO
 
-* ui controls for dendrite segments
-
-* rethink arcs to best matching
-
-* display predicted bits as translucent overlay, shaded by votes
-
-* show parameter values
-* ui to change parameter values
-* and restart sim
+* explanatory text
+  * " time --> "
+  * " red = active, blue = predicted (so, purple = both)"
 
 * start small! (#cells / sequence length)
 
@@ -17,18 +11,11 @@
 * summary of % predicted etc in recent time
 
 * tabs
-  * description
-  * controls
-  * noise (nb control channel)
-  * parameter values (edit!)
-  * region details
-  * selected column details
-  * plots
 
+* controls to add noise to input generator
 
 * trace back predicted columns to inputs (reverse encoders?)
 
-* legend for colours
 * display duty cycles
 * display numbers of dendrites
 * snapshots (store state of `steps`)

@@ -4,7 +4,6 @@
             [org.nfrac.comportex.util :as util]
             [comportexviz.parameters]))
 
-;; inputs
 (def bit-width 300)
 (def cat-bit-width 60)
 (def numb-bit-width (- bit-width cat-bit-width))
@@ -12,22 +11,22 @@
 (def numb-domain [0 numb-max])
 (def on-bits 30)
 
-(def initial-input [0 :up])
+(def initial-input [:up 0])
 
 (defn input-transform
-  [[i dir]]
+  [[dir i]]
   (let [new-i (-> (case dir
                     :up (inc i)
                     :down (dec i))
                   (min numb-max)
                   (max 0))
         new-dir (util/rand-nth [:up :down])]
-    [new-i new-dir]))
+    [new-dir new-i]))
 
 (def efn
   (enc/juxtapose-encoder
-   (enc/linear-number-encoder numb-bit-width on-bits numb-domain)
-   (enc/category-encoder cat-bit-width [:down :up])))
+   (enc/category-encoder cat-bit-width [:down :up])
+   (enc/linear-number-encoder numb-bit-width on-bits numb-domain)))
 
 (defn ^:export model
   []

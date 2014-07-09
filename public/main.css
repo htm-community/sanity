@@ -10,11 +10,12 @@ body {
 #viz {
   float: left;
   clear: left;
+  /* NB - set on load to 70% width in code */
 }
 
 #sidebar {
   float: left;
-  width: 30%;
+  width: 29%;
 }
 
 #viz-options > div {
@@ -50,6 +51,22 @@ body {
 #sidebar span {
   margin-left: 5px;
   margin-right: 5px;
+}
+
+#region-spec label {
+  display: block;
+}
+
+#region-spec .parameter-label {
+  display: inline-block;
+  width: 18em;
+  font-family: monospace;
+}
+
+#region-spec label input {
+  width: 6em;
+  font-family: monospace;
+  margin: 0px;
 }
 
 .detail {
