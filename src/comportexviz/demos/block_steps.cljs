@@ -10,11 +10,11 @@
 
 (def initial-input {:value 0, :dir :up, :counter 0})
 
-(def alter-every 4)
+(def step-every 3)
 
 (defn input-transform
   [{:keys [value dir counter] :as m}]
-  (if (< counter alter-every)
+  (if (< counter step-every)
     ;; pass through value
     (update-in m [:counter] inc)
     ;; update value
@@ -27,7 +27,7 @@
                   :else dir)]
       {:value newval
        :dir newdir
-       :counter 0})))
+       :counter 1})))
 
 (def efn
   (let [f (enc/linear-number-encoder bit-width on-bits numb-domain)]

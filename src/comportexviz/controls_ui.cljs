@@ -83,6 +83,7 @@
               (gstring/format "%.1f steps/sec."
                               (sim-rate @model)))]
            [:br]
+           [:button#sim-reset "Reset"]
            [:button#sim-start
             {:style {:display (when @sim-go? "none")}} "Start"]
            [:button#sim-stop
@@ -91,8 +92,7 @@
            [:label "Step every:"
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
-            [:span [:a#sim-faster {:href "#"} "faster"]]]
-           [:button#sim-reset "Reset"]]
+            [:span [:a#sim-faster {:href "#"} "faster"]]]]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
@@ -109,17 +109,21 @@
           (let [viz @viz-options]
             [:fieldset#viz-options
              [:legend "Visualisation"]
-             [:div
+             [:fieldset
+              [:legend "Input"]
               (checkbox viz [:input :active] "Active bits") [:br]
               (checkbox viz [:input :predicted] "Predicted bits")]
-             [:div
+             [:fieldset
+              [:legend "Columns"]
               (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns")]
-             [:div
+             [:fieldset
+              [:legend "Feed-forward synapses"]
               (checkbox viz [:ff-synapses :active] "Active in-synapses") [:br]
               (checkbox viz [:ff-synapses :inactive] "Inactive in-synapses") [:br]
               (checkbox viz [:ff-synapses :permanences] "Permanences")]
-             [:div
+             [:fieldset
+              [:legend "Dendrite segments"]
               (combobox viz [:lat-synapses :from] [:learning :all :none]
                         "Synapses from ") [:br]
               (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
@@ -178,7 +182,7 @@
   (let [spec (-> @model :region :spec)
         form-el (->dom "#region-spec-form")]
     (event/on-raw form-el :submit
-                  (fn [_]
+                  (fn [e]
                     (let [s (reduce (fn [s k]
                                       (let [id (keys->id [k])
                                             el (->dom (str "#" id))
@@ -186,4 +190,5 @@
                                         (assoc s k v)))
                                     {} (keys spec))]
                       (swap! model assoc-in [:region :spec] s)
+                      (.preventDefault e)
                       false)))))

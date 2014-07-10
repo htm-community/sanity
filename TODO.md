@@ -1,9 +1,5 @@
 # TODO
 
-* explanatory text
-  * " time --> "
-  * " red = active, blue = predicted (so, purple = both)"
-
 * start small! (#cells / sequence length)
 
 * plot most recent sliding window

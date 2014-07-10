@@ -18,8 +18,10 @@ body {
   width: 29%;
 }
 
-#viz-options > div {
+#viz-options fieldset {
   float: left;
+  width: 40%;
+  font-size: 80%;
 }
 
 .slider-box {

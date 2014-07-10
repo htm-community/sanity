@@ -91,6 +91,10 @@
      (* @keep-steps col-grid-px)
      h-spacing-px))
 
+(defn segs-x-offset
+  []
+  (+ (cells-x-offset) (* 2 seg-r-px) (* 2 cell-r-px)))
+
 (defn region-dt-offset
   "Returns the pixel offsets `[x-px y-px]` from the canvas origin for
    drawing the region columns at time delay `dt`."
@@ -349,10 +353,10 @@
         nsegbycell (map (comp count :segments) cells)
         nsegbycell-pad (map (partial max 1) nsegbycell)
         nseg-pad (apply + nsegbycell-pad)
-        our-left (cells-x-offset)
-        segs-left (+ our-left seg-r-px (* cell-r-px 2))
+        cells-left (cells-x-offset)
+        segs-left (segs-x-offset)
         our-height (* 0.95 (.-innerHeight js/window))
-        our-top (+ (.-pageYOffset js/window) cell-r-px)
+        our-top (+ (.-pageYOffset js/window) (* 2 cell-r-px))
         seg->px (fn [cell-idx idx]
                   (let [i-all (apply + idx (take cell-idx nsegbycell-pad))
                         frac (/ i-all nseg-pad)]
@@ -360,7 +364,7 @@
                      (+ our-top head-px (* frac our-height))]))
         cell->px (fn [cell-idx]
                    (let [[sx sy] (seg->px cell-idx 0)]
-                     [our-left sy]))
+                     [cells-left sy]))
         [colx coly] (column->px cid 0)
         stroke-col-to-cell (fn [ctx cell-idx]
                              (let [[cellx celly] (cell->px cell-idx)]
@@ -437,9 +441,8 @@
                                     (= si (:segment-idx learning)))]]
         ;; draw segment as a rectangle
         (let [seg-w (* 2 seg-r-px)
-              seg-cx (+ sx seg-r-px)
-              s (centred-rect seg-cx sy seg-w 10)
-              hs (centred-rect seg-cx sy (+ seg-w 8) (+ 10 8))]
+              s (centred-rect sx sy seg-w 10)
+              hs (centred-rect sx sy (+ seg-w 8) (+ 10 8))]
           (when learn-seg?
             (doto ctx
               (c/fill-style (:highlight state-colors))
@@ -463,10 +466,10 @@
         (c/fill-style ctx "black")
         (c/text ctx {:text (str "[" si "],  active / conn. = " conn-act
                                 " / " conn-tot)
-                     :x (+ sx 5 (* 2 seg-r-px)) :y (- sy 5)})
+                     :x (+ sx 5 seg-r-px) :y (- sy 5)})
         (c/text ctx {:text (str "   active / disconn. = " disc-act
                                 " / " disc-tot)
-                     :x (+ sx 5 (* 2 seg-r-px)) :y (+ sy 5)})
+                     :x (+ sx 5 seg-r-px) :y (+ sy 5)})
         ;; synapses
         (c/stroke-width ctx 1)
         (let [perms? (get-in opts [:lat-synapses :permanences])
@@ -665,6 +668,14 @@
         bg-img (inbits-grid-image bit-width opts)
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (c/text ctx {:text "input bits.    time -->"
+                 :x 0 :y (- head-px 2)})
+    (c/text ctx {:text "columns.    time -->"
+                 :x (rgns-x-offset) :y (- head-px 3)})
+    (c/text ctx {:text (str "segments. "
+                            (if sel-cid "(arrows keys to move)"
+                                "(click on a column)"))
+                 :x (segs-x-offset) :y (- head-px 3)})
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) {})

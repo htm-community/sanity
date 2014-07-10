@@ -58,7 +58,7 @@
 
 (defn update-ts-plot
   [agg-ts]
-  (plots/bind-ts-plot "#plots" agg-ts 400 240
+  (plots/bind-ts-plot "#plots" agg-ts 400 180
                       [:active :active-predicted :predicted]
                       viz/state-colors))
 

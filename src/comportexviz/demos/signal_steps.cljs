@@ -34,5 +34,5 @@
                             {:bit-width bit-width})
         spec (assoc comportexviz.parameters/small
                :input-size bit-width
-               :potential-radius (quot bit-width 4))]
+               :potential-radius (quot bit-width 2))]
     (core/cla-model gen spec)))
