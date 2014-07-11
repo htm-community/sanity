@@ -1,4 +1,4 @@
-(defproject comportexviz "0.0.1"
+(defproject comportexviz "0.0.2-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
 
   :dependencies [[org.clojure/clojure "1.6.0"]
