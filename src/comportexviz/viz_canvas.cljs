@@ -314,18 +314,17 @@
                       :active :inactive)])
                  syns))
 
-(defn column-learning-segment-and-cell
+(defn column-learning-segments
   [prev-rgn current-ac cid]
   (let [col-ac (set (filter (fn [[i _]] (= i cid))
                             current-ac))]
     (when (seq col-ac)
       (let [col (get-in prev-rgn [:columns cid])
             ac (:active-cells prev-rgn)
-            lc (:learn-cells prev-rgn)
             bursting? (= (count col-ac)
                          (count (:cells col)))]
-        (sm/column-learning-segment-and-cell col bursting? col-ac lc ac
-                                             (:spec prev-rgn))))))
+        (sm/column-learning-segments col bursting? col-ac ac
+                                     (:spec prev-rgn))))))
 
 (defn natural-curve
   [ctx x0 y0 x1 y1]
@@ -347,7 +346,9 @@
         active? (get-in rgn [:active-columns cid])
         bursting? (get-in rgn [:bursting-columns cid])
         current-ac (:active-cells rgn)
-        learning (column-learning-segment-and-cell prev-rgn current-ac cid)
+        learning (->> (column-learning-segments prev-rgn current-ac cid)
+                      (map (juxt :cell-id :segment-idx))
+                      (into {}))
         cells (:cells col)
         ncells (count cells)
         nsegbycell (map (comp count :segments) cells)
@@ -392,7 +393,8 @@
             :let [[cellx celly] (cell->px ci)
                   cell-id [cid ci]
                   cell-active? (current-ac cell-id)
-                  learn-cell? (= cell-id (:cell-id learning))
+                  learn-cell? (find learning cell-id)
+                  learn-seg-idx (when learn-cell? (val learn-cell?))
                   seg-sg (mapv #(group-synapses (:synapses %) ac pcon) segs)
                   on? (fn [sg] (>= (count (sg [:connected :active])) th))
                   cell-state (cond
@@ -424,8 +426,8 @@
       (c/text ctx {:text (str "cell " ci
                               (when learn-cell?
                                 (str "   (learning on "
-                                     (if-let [si (:segment-idx learning)]
-                                       (str "segment " si)
+                                     (if learn-seg-idx
+                                       (str "segment " learn-seg-idx)
                                        "new segment")
                                      ")")))
                    :x cellx :y (- celly cell-r-px 5)})
@@ -437,8 +439,7 @@
                     disc-tot (+ disc-act (count (sg [:disconnected :inactive])))
                     z (-> (/ conn-act th)
                           (min 1.0))
-                    learn-seg? (and learn-cell?
-                                    (= si (:segment-idx learning)))]]
+                    learn-seg? (and learn-cell? (= si learn-seg-idx))]]
         ;; draw segment as a rectangle
         (let [seg-w (* 2 seg-r-px)
               s (centred-rect sx sy seg-w 10)
@@ -596,19 +597,6 @@
                (if (ac id)
                  :active :inactive)])
             syns))
-
-(defn get-column-learning-segment
-  [prev-rgn current-ac cid]
-  (when (current-ac cid)
-    (let [col (get-in prev-rgn [:columns cid])
-          ac (:active-cells prev-rgn)
-          lc (:learn-cells prev-rgn)
-          col-ac (set (filter (fn [[_ i]] (= i cid))
-                              current-ac))
-          bursting? (= (count col-ac)
-                       (count (:cells col)))
-          spec (:spec prev-rgn)]
-      (sm/column-learning-segment-and-cell col bursting? col-ac lc ac spec))))
 
 (defn image-buffer
   [w h]

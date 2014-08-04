@@ -14,7 +14,7 @@ Get [Leiningen](http://leiningen.org/) first.
 Use git to clone [Comportex](http://github.com/floybix/comportex/), and:
 
 ```
-lein do cljx once, check, install
+lein do check, install
 ```
 
 Then use git to clone this repository, and:
