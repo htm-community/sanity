@@ -4,6 +4,7 @@
             [goog.events :as gevents]
             [goog.string :as gstring]
             [goog.string.format]
+            [clojure.string :as str]
             [goog.ui.Slider]
             [goog.ui.Component.EventType]
             [cljs.reader]
@@ -44,7 +45,10 @@
 
 (defn keys->id
   [keys]
-  (apply str "display-" (interpose "_" (map name keys))))
+  (->> (map name keys)
+       (map #(str/replace % \? "_QMARK_"))
+       (interpose "_")
+       (apply str "display-")))
 
 (defn checkbox
   [m keys txt]
@@ -83,7 +87,6 @@
               (gstring/format "%.1f steps/sec."
                               (sim-rate @model)))]
            [:br]
-           [:button#sim-reset "Reset"]
            [:button#sim-start
             {:style {:display (when @sim-go? "none")}} "Start"]
            [:button#sim-stop
@@ -92,7 +95,8 @@
            [:label "Step every:"
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
-            [:span [:a#sim-faster {:href "#"} "faster"]]]]
+            [:span [:a#sim-faster {:href "#"} "faster"]]]
+           [:button#sim-reset "Reset"]]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
