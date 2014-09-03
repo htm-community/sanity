@@ -20,7 +20,8 @@
   (atom {:input {:active true
                  :predicted true}
          :columns {:overlaps nil
-                   :predictive true}
+                   :predictive true
+                   :scroll-top 0}
          :ff-synapses {:active nil
                        :inactive nil
                        :permanences nil}
@@ -29,7 +30,7 @@
                         :inactive nil
                         :permanences nil}}))
 
-(def height-px 1400)
+(def height-px 1000)
 (def pad 0.85)
 (def bit-w-px 5)
 (def bit-h-px 2)
@@ -42,6 +43,13 @@
 (def seg-r-px 15)
 (def head-px 10)
 (def h-spacing-px 80)
+(def onscreen-cols (/ (- height-px head-px) col-grid-px))
+
+(defn get-input
+  [state]
+  (if-let [subs (:subs state)]
+    (recur (first subs))
+    state))
 
 (defn hsl
   ([h s l] (hsl h s l 1.0))
@@ -72,10 +80,14 @@
   (let [v (long (* z 255))]
     (str "rgb(" v "," v "," v ")")))
 
+(defn alpha-black
+  [z]
+  (str "rgba(0,0,0," z ")"))
+
 (def state-colors
   {:inactive "white"
    :active (hsl :red 1.0 0.5)
-   :predicted (hsl :blue 1.0 0.5)
+   :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
    })
@@ -111,23 +123,24 @@
   "Returns pixel coordinates `[x-px y-px]` for the centre of a
    region column `cid`, in local coordinates, or in absolute canvas
    coordinates if time delay `dt` is given."
-  ([cid]
+  ([cid scroll-top]
      (let [x-px col-r-px
-           y-px (* (+ cid 0.5) col-grid-px)]
+           y-px (-> cid (- scroll-top) (+ 0.5) (* col-grid-px))]
        [x-px y-px]))
-  ([cid dt]
+  ([cid scroll-top dt]
      (mapv + (region-dt-offset dt)
-           (column->px cid))))
+           (column->px cid scroll-top))))
 
 (defn px->column
   "Returns column id and time delay `[cid dt]` located by given pixel
    coordinates on the canvas. Otherwise nil."
-  [x-px y-px]
+  [x-px y-px scroll-top]
   (let [left (rgns-x-offset)
         width (* @keep-steps col-grid-px)
         right (+ left width)
-        cid (Math/floor (/ (- y-px head-px) col-grid-px))
-        dt (Math/floor (/ (- right x-px) col-grid-px))]
+        dt (Math/floor (/ (- right x-px) col-grid-px))
+        cid* (Math/floor (/ (- y-px head-px) col-grid-px))
+        cid (+ cid* scroll-top)]
     (when (and (<= 0 dt (count @steps))
                (<= 0 cid))
       [cid dt])))
@@ -218,8 +231,7 @@
     (doseq [[i v] bit-votes
             :let [[x-px y-px] (inbit->px-top-left i)]]
       (c/alpha ctx (->> (/ v 8)
-                        (min 1.0)
-                        (* 0.5)))
+                        (min 1.0)))
       (.fillRect ctx x-px y-px w h)))
   ctx)
 
@@ -238,26 +250,26 @@
   (.arc ctx x y r 0 (* (.-PI js/Math) 2) true))
 
 (defn column-color
-  [col-states cid]
-  (let [col-state (col-states cid :inactive)]
-    (or (state-colors col-state)
-        (->> (/ col-state 10)
-             (min 1.0)
-             (- 1)
-             (sixteenths)
-             (grey)))))
+  [col-state]
+  (or (state-colors col-state)
+      (->> (/ col-state 16)
+           (min 1.0)
+           (sixteenths)
+           (alpha-black))))
 
 (defn draw-region-1
   "Draws with relative pixel positions, assuming the context has been
    transformed already."
-  [ctx col-states ncol]
+  [ctx col-states ncol scroll-top]
   (c/save ctx)
-  (let [color-groups (group-by (partial column-color col-states)
-                               (range ncol))]
+  (let [onscreen-cids (filter #(<= scroll-top % (+ scroll-top ncol))
+                              (keys col-states))
+        color-groups (group-by #(column-color (col-states %))
+                               onscreen-cids)]
     (doseq [[color cids] color-groups]
       (c/begin-path ctx)
       (doseq [cid cids
-              :let [[x-px y-px] (column->px cid)]]
+              :let [[x-px y-px] (column->px cid scroll-top)]]
         (circle ctx x-px y-px col-r-px-pad))
       (c/fill-style ctx color)
       (c/fill ctx)))
@@ -265,17 +277,17 @@
   ctx)
 
 (defn draw-region-selection
-  [ctx sel-dt sel-cid ncol]
+  [ctx sel-dt sel-cid ncol scroll-top]
   ;; draw axis on selection: vertical dt and horizonal cid
-  (let [[x y1] (column->px 0 sel-dt)
-        [_ y2] (column->px (dec ncol) sel-dt)
+  (let [[x y1] (column->px 0 scroll-top sel-dt)
+        [_ y2] (column->px (dec ncol) scroll-top sel-dt)
         y (/ (+ y1 y2) 2)
         w (+ 1 col-grid-px)
         h (+ 10 col-grid-px (- y2 y1))]
     (highlight-rect ctx (centred-rect x y w h)))
   (when sel-cid
-    (let [[x1 y] (column->px sel-cid 0)
-          [x2 _] (column->px sel-cid (dec @keep-steps))
+    (let [[x1 y] (column->px sel-cid scroll-top 0)
+          [x2 _] (column->px sel-cid scroll-top (dec @keep-steps))
           x (/ (+ x1 x2) 2)
           w (+ 10 col-grid-px (Math/abs (- x2 x1)))
           h (+ 1 col-grid-px)]
@@ -286,22 +298,23 @@
   [ctx data dt opts]
   (c/save ctx)
   (c/stroke-width ctx 1)
-  (doseq [[cid m] data
-          :let [[cx cy] (column->px cid dt)
-                perms? (get-in opts [:ff-synapses :permanences])
-                draw (fn [syns active?]
-                       (c/stroke-style ctx (if active? "red" "black"))
-                       (doseq [[id perm] syns
-                               :let [[ix iy] (inbit->px id dt)]]
-                         (doto ctx
-                           (c/alpha (if perms? perm 1))
-                           (c/begin-path)
-                           (c/move-to (- cx 1) cy) ;; -1 avoid obscuring colour
-                           (c/line-to ix iy)
-                           (c/stroke)))
-                       )]]
-    (draw (:inactive m) false)
-    (draw (:active m) true))
+  (let [scroll-top (get-in opts [:columns :scroll-top])
+        perms? (get-in opts [:ff-synapses :permanences])]
+    (doseq [[cid m] data
+            :let [[cx cy] (column->px cid scroll-top dt)
+                  draw (fn [syns active?]
+                         (c/stroke-style ctx (if active? "red" "black"))
+                         (doseq [[id perm] syns
+                                 :let [[ix iy] (inbit->px id dt)]]
+                           (doto ctx
+                             (c/alpha (if perms? perm 1))
+                             (c/begin-path)
+                             (c/move-to (- cx 1) cy) ;; -1 avoid obscuring colour
+                             (c/line-to ix iy)
+                             (c/stroke)))
+                         )]]
+      (draw (:inactive m) false)
+      (draw (:active m) true)))
   (c/restore ctx)
   ctx)
 
@@ -366,7 +379,8 @@
         cell->px (fn [cell-idx]
                    (let [[sx sy] (seg->px cell-idx 0)]
                      [cells-left sy]))
-        [colx coly] (column->px cid 0)
+        scroll-top (get-in opts [:columns :scroll-top])
+        [colx coly] (column->px cid scroll-top 0)
         stroke-col-to-cell (fn [ctx cell-idx]
                              (let [[cellx celly] (cell->px cell-idx)]
                                (doto ctx
@@ -482,7 +496,7 @@
                                       active? (hsl :red 0.5 0.5)
                                       (not active?) (grey 0.5)))
                      (doseq [[[to-cid _] perm] syns
-                             :let [[cx cy] (column->px to-cid (inc dt))]]
+                             :let [[cx cy] (column->px to-cid scroll-top (inc dt))]]
                        (doto ctx
                          (c/alpha (if perms? perm 1))
                          (c/begin-path)
@@ -506,7 +520,7 @@
   [{:keys [dt cid] :as selection}]
   (let [state (nth @steps dt)
         rgn (:region state)
-        ingen (:in state)
+        ingen (get-input state)
         in (core/domain-value ingen)
         bits (core/bits-value ingen)]
     (->>
@@ -568,22 +582,11 @@
      (interpose \newline)
      (apply str))))
 
-(defn rgn-column-states
-  [rgn opts]
-  (if (get-in opts [:columns :predictive])
-    (let [pred-cids (set (keys (:prev-predictive-cells-by-column rgn)))
-          active-cids (:active-columns rgn)
-          hit-cids (set/intersection pred-cids active-cids)]
-      (merge (zipmap pred-cids (repeat :predicted))
-             (zipmap active-cids (repeat :active))
-             (zipmap hit-cids (repeat :active-predicted))))
-    (zipmap (:active-columns rgn) (repeat :active))))
-
 (defn in-synapse-display-data
   [state cid opts]
   (when (get-in opts [:ff-synapses :active])
     (let [col (get-in state [:region :columns cid])
-          on-bits (core/bits-value (:in state))
+          on-bits (core/bits-value (get-input state))
           syns (-> col :in-synapses :connected)]
       {:active (select-keys syns on-bits)
        :inactive (when (get-in opts [:ff-synapses :inactive])
@@ -605,14 +608,14 @@
     (set! (.-height el) h)
     el))
 
-(defn inbits-grid-image
+(defn bits-bg-image
   [bit-width opts]
   (let [el (image-buffer bit-w-px (* bit-h-px bit-width))
         ctx (c/get-context el "2d")]
     (draw-bits-1 ctx (range bit-width) (:inactive state-colors))
     el))
 
-(defn inbits-image
+(defn active-bits-image
   [in bit-width opts]
   (let [inbits (core/bits-value in)
         el (image-buffer bit-w-px (* bit-h-px bit-width))
@@ -620,7 +623,7 @@
     (draw-bits-1 ctx inbits (:active state-colors))
     el))
 
-(defn predbits-image
+(defn pred-bits-image
   [prev-rgn bit-width opts]
   (let [pcbc (:predictive-cells-by-column prev-rgn)
         bit-votes (sm/predicted-bit-votes prev-rgn pcbc)
@@ -629,17 +632,35 @@
     (draw-predbits-1 ctx bit-votes)
     el))
 
-(defn region-image
-  [rgn opts]
-  (let [col-states (rgn-column-states rgn opts)
-        col-vals (if (get-in opts [:columns :overlaps])
-                   (merge (:overlaps rgn) col-states)
-                   col-states)
-        ncol (count (:columns rgn))
+(defn columns-image
+  [col-vals opts]
+  (let [ncol onscreen-cols
         el (image-buffer col-grid-px (* col-grid-px ncol))
-        ctx (c/get-context el "2d")]
-    (draw-region-1 ctx col-vals ncol)
+        ctx (c/get-context el "2d")
+        scroll-top (get-in opts [:columns :scroll-top])]
+    (draw-region-1 ctx col-vals ncol scroll-top)
     el))
+
+(defn columns-bg-image
+  [ncol opts]
+  (let [col-vals (zipmap (range ncol) (repeat :inactive))]
+    (columns-image col-vals opts)))
+
+(defn active-columns-image
+  [rgn opts]
+  (let [col-vals (zipmap (:active-columns rgn) (repeat :active))]
+    (columns-image col-vals opts)))
+
+(defn pred-columns-image
+  [rgn opts]
+  (let [pred-cids (keys (:prev-predictive-cells-by-column rgn))
+        col-vals (zipmap pred-cids (repeat :predicted))]
+    (columns-image col-vals opts)))
+
+(defn overlaps-columns-image
+  [rgn opts]
+  (let [col-vals (:overlaps rgn)]
+    (columns-image col-vals opts)))
 
 (defn draw!
   [{sel-dt :dt
@@ -649,11 +670,13 @@
            (if sel-cid (detail-text selection) ""))
   (let [opts @viz-options
         sel-state (nth @steps sel-dt)
-        bit-width (core/bit-width (:in sel-state))
+        bit-width (core/bit-width (get-input sel-state))
         ncol (count (:columns (:region sel-state)))
         canvas-el (->dom "#viz")
         ctx (c/get-context canvas-el "2d")
-        bg-img (inbits-grid-image bit-width opts)
+        bits-bg (bits-bg-image bit-width opts)
+        columns-bg (columns-bg-image ncol opts)
+        scroll-top (get-in opts [:columns :scroll-top])
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (c/text ctx {:text "input bits.    time -->"
@@ -669,34 +692,44 @@
                   prev-state (nth @steps (inc dt) {})
                   rgn (:region state)
                   cache (::cache (meta state))
-                  cached-opts (:viz-options @cache)]]
+                  cached-opts (:opts @cache)]]
       ;; refresh cache if necessary
       (when (not= (:input opts) (:input cached-opts))
-        (let [img (inbits-image (:in state) bit-width opts)]
-          (swap! cache assoc
-                 :viz-options opts
-                 :inbits-image img))
-        (let [img (predbits-image (:region prev-state) bit-width opts)]
-          (swap! cache assoc
-                 :viz-options opts
-                 :predbits-image img)))
-      ;; refresh cache if necessary
+        (swap! cache assoc :opts opts
+               :active-bits-image
+               (active-bits-image (get-input state) bit-width opts))
+        (when (get-in opts [:input :predicted])
+          (swap! cache assoc :opts opts
+                 :pred-bits-image
+                 (pred-bits-image (:region prev-state) bit-width opts))))
       (when (not= (:columns opts) (:columns cached-opts))
-        (let [img (region-image (:region state) opts)]
-          (swap! cache assoc
-                 :viz-options opts
-                 :region-image img)))
+        (swap! cache assoc :opts opts
+               :active-columns-image
+               (active-columns-image (:region state) opts))
+        (when (get-in opts [:columns :predictive])
+          (swap! cache assoc :opts opts
+                 :pred-columns-image
+                 (pred-columns-image (:region state) opts)))
+        (when (get-in opts [:columns :overlaps])
+          (swap! cache assoc :opts opts
+                 :overlaps-columns-image
+                 (overlaps-columns-image (:region state) opts))))
       ;; draw from the cached off-screen buffers
       (let [[xo yo] (inbits-dt-offset dt)]
-        (c/draw-image ctx bg-img xo yo)
+        (c/draw-image ctx bits-bg xo yo)
         (when (get-in opts [:input :active])
-          (c/draw-image ctx (:inbits-image @cache) xo yo))
+          (c/draw-image ctx (:active-bits-image @cache) xo yo))
         (when (get-in opts [:input :predicted])
-          (c/draw-image ctx (:predbits-image @cache) xo yo)))
+          (c/draw-image ctx (:pred-bits-image @cache) xo yo)))
       (let [[xo yo] (region-dt-offset dt)]
-        (c/draw-image ctx (:region-image @cache) xo yo)))
+        (c/draw-image ctx columns-bg xo yo)
+        (when (get-in opts [:columns :overlaps])
+          (c/draw-image ctx (:overlaps-columns-image @cache) xo yo))
+        (c/draw-image ctx (:active-columns-image @cache) xo yo)
+        (when (get-in opts [:columns :predictive])
+          (c/draw-image ctx (:pred-columns-image @cache) xo yo))))
     (draw-inbits-selection ctx sel-dt bit-width)
-    (draw-region-selection ctx sel-dt sel-cid ncol)
+    (draw-region-selection ctx sel-dt sel-cid ncol scroll-top)
     ;; extra visuals
     (let [rgn (:region sel-state)
           prev-rgn (:region (nth @steps (inc sel-dt) {}))
@@ -727,9 +760,10 @@
        (let [e (<! clicks)
              x (.-offsetX e)
              y (.-offsetY e)
+             scroll-top (get-in @viz-options [:columns :scroll-top])
              ;; we need to assume there is a previous step, so:
              max-dt (- (count @steps) 2)]
-         (if-let [[cid dt] (px->column x y)]
+         (if-let [[cid dt] (px->column x y scroll-top)]
            ;; column clicked
            (reset! selection {:cid cid :dt (min dt max-dt)})
            (if-let [[id dt] (px->inbit x y)]
@@ -739,7 +773,8 @@
              (reset! selection {:cid nil :dt 0}))))))))
 
 (def code-key
-  {;32 :space
+  {33 :page-up
+   34 :page-down
    37 :left
    38 :up
    39 :right
@@ -768,6 +803,14 @@
                         (fn [x] (if x (dec x) 0)))
              :down (swap! selection update-in [:cid]
                           (fn [x] (if x (inc x) 0)))
+             :page-up (do (swap! viz-options update-in [:columns :scroll-top]
+                                 (fn [x] (max 0 (- x onscreen-cols))))
+                          (swap! selection update-in [:cid]
+                                 (fn [x] (when x (max 0 (- x onscreen-cols))))))
+             :page-down (do (swap! viz-options update-in [:columns :scroll-top]
+                                   (fn [x] (+ x onscreen-cols)))
+                          (swap! selection update-in [:cid]
+                                 (fn [x] (when x (+ x onscreen-cols)))))
              )))))))
 
 (defn init!

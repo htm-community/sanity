@@ -40,13 +40,7 @@
 (defn sim-step!
   []
   (->>
-   (swap! model core/step)
-   (put! steps-c)))
-
-(defn ^:export set-model
-  [x]
-  (->>
-   (reset! model x)
+   (swap! model core/feed-forward-step)
    (put! steps-c)))
 
 (defn draw!
@@ -61,12 +55,6 @@
   (plots/bind-ts-plot "#plots" agg-ts 400 180
                       [:active :active-predicted :predicted]
                       viz/state-colors))
-
-(defn init-ui!
-  []
-  (comportexviz.viz-canvas/init! (tap-c steps-mult) selection sim-step!)
-  (comportexviz.controls-ui/init! model sim-go? main-options viz/keep-steps
-                                  viz/viz-options sim-step! draw!))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -109,4 +97,15 @@
             (draw!)))
         (recur c))))
 
-(c2.event/on-load init-ui!)
+(defn- init-ui!
+  []
+  (comportexviz.viz-canvas/init! (tap-c steps-mult) selection sim-step!)
+  (comportexviz.controls-ui/init! model sim-go? main-options viz/keep-steps
+                                  viz/viz-options sim-step! draw!))
+
+(defn ^:export set-model
+  {:pre (nil? @model)} ; currently
+  [x]
+  (->> (reset! model x)
+       (put! steps-c))
+  (init-ui!))

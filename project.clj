@@ -2,7 +2,7 @@
   :description "Web visualisation of HTM algorithm as implemented in comportex"
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/clojurescript "0.0-2280"]
+                 [org.clojure/clojurescript "0.0-2322"]
                  [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
                  [com.cemerick/pprng "0.0.2"]
                  [org.nfrac/comportex "0.0.2-SNAPSHOT"]

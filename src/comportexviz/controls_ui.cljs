@@ -156,10 +156,7 @@
                 (fn [_] (swap! main-options update-in [:sim-step-ms]
                               #(+ % 100))))
   (event/on-raw "#sim-reset" :click
-                (fn [_] (swap! model
-                               (fn [{:keys [in region]}]
-                                 (core/cla-model (core/input-reset in)
-                                                 (:spec region))))))
+                (fn [_] (swap! model core/reset)))
 
   (event/on-raw "#anim-start" :click
                 (fn [_] (swap! main-options assoc :anim-go? true)))
@@ -177,7 +174,8 @@
   (doseq [[k km] @viz-options
           [subk v] km
           :let [id (keys->id [k subk])
-                el (->dom (str "#" id))]]
+                el (->dom (str "#" id))]
+          :when el]
     (event/on-raw el :change
                   (fn [_]
                     (let [v (when-let [s (dom/val el)] (keyword s))]

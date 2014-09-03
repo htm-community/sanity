@@ -29,16 +29,12 @@
        :dir newdir
        :counter 1})))
 
-(def efn
-  (let [f (enc/linear-number-encoder bit-width on-bits numb-domain)]
-    (fn [m]
-      (f (:value m)))))
+(def encoder
+  (enc/pre-transform :value
+                     (enc/linear-encoder bit-width on-bits numb-domain)))
 
 (defn ^:export model
   []
-  (let [gen (core/generator initial-input input-transform efn
-                            {:bit-width bit-width})
-        spec (assoc comportexviz.parameters/small
-               :input-size bit-width
-               :potential-radius (quot bit-width 4))]
-    (core/cla-model gen spec)))
+  (let [gen (core/input-generator initial-input input-transform encoder)
+        spec comportexviz.parameters/small]
+    (core/tree core/cla-region spec [gen])))

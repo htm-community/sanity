@@ -40,17 +40,13 @@
            (update-in m [:value] (:step m))))
         ms))
 
-(def efn
-  (let [f (enc/superpose-encoder
-           (enc/linear-number-encoder bit-width on-bits numb-domain))]
-    (fn [ms]
-      (f (map :value ms)))))
+(def encoder
+  (enc/ensplat
+   (enc/pre-transform :value
+                      (enc/linear-encoder bit-width on-bits numb-domain))))
 
 (defn ^:export model
   []
-  (let [gen (core/generator initial-input input-transform efn
-                            {:bit-width bit-width})
-        spec (assoc comportexviz.parameters/small
-               :input-size bit-width
-               :potential-radius (quot bit-width 2))]
-    (core/cla-model gen spec)))
+  (let [gen (core/input-generator initial-input input-transform encoder)
+        spec comportexviz.parameters/small]
+    (core/tree core/cla-region spec [gen])))

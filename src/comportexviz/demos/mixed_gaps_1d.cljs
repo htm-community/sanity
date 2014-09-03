@@ -54,26 +54,33 @@
   (when (:index m)
     (get (:seq m) (:index m))))
 
-(def efn
-  (let [f (enc/superpose-encoder
-           (enc/linear-number-encoder bit-width on-bits numb-domain))]
-    (fn [ms]
-      (f (map current-value ms)))))
+(def spec
+  {:ncol 1000
+   :activation-level 0.04
+   :global-inhibition false
+   :stimulus-threshold 3
+   :sp-perm-inc 0.03
+   :sp-perm-dec 0.03
+   :sp-perm-connected 0.1
+   :duty-cycle-period 100000
+   :max-boost 2.0
+   ;; sequence memory:
+   :depth 8
+   :new-synapse-count 10
+   :activation-threshold 7
+   :min-threshold 5
+   :connected-perm 0.20
+   :initial-perm 0.16
+   :permanence-inc 0.05
+   :permanence-dec 0.01
+   })
+
+(def encoder
+  (enc/ensplat
+   (enc/pre-transform current-value
+                      (enc/linear-encoder bit-width on-bits numb-domain))))
 
 (defn ^:export model
   []
-  (let [gen (core/generator (initial-input) input-transform efn
-                            {:bit-width bit-width})
-        spec (assoc comportexviz.parameters/small
-               :input-size bit-width
-               :potential-radius (quot bit-width 4)
-               :ncol 1000
-               :depth 8
-               :duty-cycle-period 100000
-               :global-inhibition false
-               :permanence-dec 0.01
-               :permanence-inc 0.05
-               :sp-perm-dec 0.03
-               :sp-perm-inc 0.03
-               )]
-    (core/cla-model gen spec)))
+  (let [gen (core/input-generator (initial-input) input-transform encoder)]
+    (core/tree core/cla-region spec [gen])))

@@ -23,16 +23,13 @@
         new-dir (util/rand-nth [:up :down])]
     [new-dir new-i]))
 
-(def efn
-  (enc/juxtapose-encoder
-   (enc/category-encoder cat-bit-width [:down :up])
-   (enc/linear-number-encoder numb-bit-width on-bits numb-domain)))
+(def encoder
+  (enc/encat 2
+             (enc/category-encoder cat-bit-width [:down :up])
+             (enc/linear-encoder numb-bit-width on-bits numb-domain)))
 
 (defn ^:export model
   []
-  (let [gen (core/generator initial-input input-transform efn
-                            {:bit-width bit-width})
-        spec (assoc comportexviz.parameters/small
-               :input-size bit-width
-               :potential-radius (quot bit-width 2))]
-    (core/cla-model gen spec)))
+  (let [gen (core/input-generator initial-input input-transform encoder)
+        spec comportexviz.parameters/small]
+    (core/tree core/cla-region spec [gen])))
