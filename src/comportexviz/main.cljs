@@ -22,7 +22,7 @@
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
 
-(def freqs-c (async/map< (comp core/column-state-freqs :region)
+(def freqs-c (async/map< (comp core/column-state-freqs first viz/get-regions)
                          (tap-c steps-mult)))
 (def freqs-mult (async/mult freqs-c))
 (def agg-freqs-ts (plots/aggregated-ts-ref (tap-c freqs-mult) 200))
@@ -33,7 +33,7 @@
          :anim-go? true
          :anim-every 1}))
 
-(def selection (atom {:cid nil :dt 0}))
+(def selection (atom {:region nil :cid nil :dt 0}))
 
 ;; ## ENTRY POINTS
 
@@ -98,8 +98,9 @@
         (recur c))))
 
 (defn- init-ui!
-  []
-  (comportexviz.viz-canvas/init! (tap-c steps-mult) selection sim-step!)
+  [init-model]
+  (comportexviz.viz-canvas/init! init-model (tap-c steps-mult) selection
+                                 sim-step!)
   (comportexviz.controls-ui/init! model sim-go? main-options viz/keep-steps
                                   viz/viz-options sim-step! draw!))
 
@@ -108,4 +109,4 @@
   [x]
   (->> (reset! model x)
        (put! steps-c))
-  (init-ui!))
+  (init-ui! x))

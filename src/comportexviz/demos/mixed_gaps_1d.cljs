@@ -83,4 +83,6 @@
 (defn ^:export model
   []
   (let [gen (core/input-generator (initial-input) input-transform encoder)]
-    (core/tree core/cla-region spec [gen])))
+    (core/tree core/cla-region (assoc spec :ncol 500)
+               [(core/tree core/cla-region spec
+                           [gen])])))
