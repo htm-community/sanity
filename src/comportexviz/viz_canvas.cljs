@@ -23,6 +23,7 @@
                  :predicted true}
          :columns {:overlaps nil
                    :predictive true
+                   :temporal-pooling true
                    :scroll-counter 0}
          :ff-synapses {:active nil
                        :inactive nil
@@ -102,6 +103,7 @@
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
+   :temporal-pooling (hsl :green 1 0.75 0.7)
    })
 
 ;;; ## Layouts
@@ -581,6 +583,12 @@
       "__Learn cells__"
       (str (sort (:learn-cells rgn)))
       ""
+      "__Signal cells__"
+      (str (sort (:signal-cells rgn)))
+      ""
+      "__TP scores__"
+      (str (sort (:temporal-pooling-scores rgn)))
+      ""
       "__Predicted cells__"
       (str (sort (:predictive-cells rgn)))
       ""
@@ -694,6 +702,16 @@
     (c/fill ctx)
     el))
 
+(defn tp-columns-image
+  [lay rgn]
+  (let [el (image-buffer (layout-bounds lay))
+        ctx (c/get-context el "2d")
+        ids (keys (:temporal-pooling-scores rgn))]
+    (c/fill-style ctx (:temporal-pooling state-colors))
+    (draw-element-group ctx lay ids)
+    (c/fill ctx)
+    el))
+
 (defn overlaps-columns-image
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
@@ -768,6 +786,10 @@
         (when (get-in opts [:columns :predictive])
           (->> (pred-columns-image r-lay rgn)
                (with-cache cache [::pcols rid] opts :columns)
+               (draw-image-dt ctx r-lay dt)))
+        (when (get-in opts [:columns :temporal-pooling])
+          (->> (tp-columns-image r-lay rgn)
+               (with-cache cache [::tpcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt))))
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))

@@ -56,19 +56,20 @@
 
 (def spec
   {:ncol 1000
-   :activation-level 0.04
+   :potential-radius 128
+   :activation-level 0.03
    :global-inhibition false
    :stimulus-threshold 3
-   :sp-perm-inc 0.03
-   :sp-perm-dec 0.03
-   :sp-perm-connected 0.1
+   :sp-perm-inc 0.05
+   :sp-perm-dec 0.01
+   :sp-perm-connected 0.20
    :duty-cycle-period 100000
    :max-boost 2.0
    ;; sequence memory:
    :depth 8
-   :new-synapse-count 10
-   :activation-threshold 7
-   :min-threshold 5
+   :new-synapse-count 12
+   :activation-threshold 9
+   :min-threshold 7
    :connected-perm 0.20
    :initial-perm 0.16
    :permanence-inc 0.05
