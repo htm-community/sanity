@@ -1,19 +1,15 @@
 
 body {
-  background:#ccc;
+  background :#ccc;
 }
 
-#header {
-
-}
-
-#viz {
+#comportex-viz {
   float: left;
   clear: left;
   /* NB - set on load to 70% width in code */
 }
 
-#sidebar {
+#comportex-sidebar {
   float: left;
   width: 29%;
 }
@@ -24,48 +20,22 @@ body {
   font-size: 80%;
 }
 
-.slider-box {
-  display: inline-block;
-  vertical-align: middle;
-  width: 150px;
-  height: 1em;
-}
-
-.goog-slider-horizontal {
-  width: 100%;
-  height: 100%;
-  background-color: #eee;
-  border: 1px groove #eee;
-  position: relative;
-  overflow: hidden;
-}
-
-.goog-slider-horizontal
-.goog-slider-thumb {
-  top: 0;
-  width: 20px;
-  height: 100%;
-  position: absolute;
-  background-color: #bbb;
-  overflow: hidden;
-}
-
-#sidebar span {
+#comportex-sidebar span {
   margin-left: 5px;
   margin-right: 5px;
 }
 
-#region-spec label {
+.region-spec label {
   display: block;
 }
 
-#region-spec .parameter-label {
+.region-spec .parameter-label {
   display: inline-block;
   width: 18em;
   font-family: monospace;
 }
 
-#region-spec label input {
+.region-spec label input {
   width: 6em;
   font-family: monospace;
   margin: 0px;
@@ -76,12 +46,139 @@ body {
   opacity: 0.8;
 }
 
-#sidebar a {
+#comportex-controls a {
   font-size: 80%;
   text-decoration: none;
 }
 
 #detail-text {
-  width: 80ex;
+  width: 100%;
   height: 60ex;
+}
+
+/* GOOGLE CLOSURE UI */
+
+.goog-tabpane {
+    padding-left: 1px;
+    position: relative;
+}
+
+.goog-tabpane-tabs {
+    list-style: none;
+    margin: 0px;
+    padding: 0px;
+    height: 1ex;
+    position: relative;
+}
+
+.goog-tabpane-left .goog-tabpane-tabs {
+    float: left;
+}
+.goog-tabpane-right .goog-tabpane-tabs {
+    float: right;
+}
+
+.goog-tabpane-cont {
+    overflow: auto;
+    border: 1px solid;
+    border-color: threedhighlight threedshadow threedshadow threedhighlight;
+    padding: 2px;
+}
+
+.goog-tabpane-tab, .goog-tabpane-tab-selected {
+    display: block;
+    padding: 0px 3ex;
+    border: 1px solid;
+    margin: 0px;
+}
+
+.goog-tabpane-tab {
+    background: threedface;
+}
+
+.goog-tabpane-top .goog-tabpane-tab,
+.goog-tabpane-top .goog-tabpane-tab-selected,
+.goog-tabpane-bottom .goog-tabpane-tab,
+.goog-tabpane-bottom .goog-tabpane-tab-selected {
+    float: left;
+}
+
+.goog-tabpane-top .goog-tabpane-tab,
+.goog-tabpane-top .goog-tabpane-tab-selected {
+    border-color: threedhighlight threedshadow threedface threedhighlight;
+}
+
+.goog-tabpane-bottom .goog-tabpane-tab,
+.goog-tabpane-bottom .goog-tabpane-tab-selected {
+    border-color: threedface threedshadow threedshadow threedhighlight;
+}
+
+.goog-tabpane-left .goog-tabpane-tab,
+.goog-tabpane-left .goog-tabpane-tab-selected {
+    border-color: threedhighlight threedface threedshadow threedhighlight;
+}
+
+.goog-tabpane-right .goog-tabpane-tab,
+.goog-tabpane-right .goog-tabpane-tab-selected {
+    border-color: threedhighlight threedshadow threedshadow threedface;
+}
+
+.goog-tabpane-top .goog-tabpane-tab {
+    margin-top: 3px;
+}
+
+.goog-tabpane-tab-selected {
+    font-weight: bold;
+}
+
+ .goog-tabpane-tab-selected,
+.goog-tabpane-tab-selected {
+    padding-bottom: 2px;
+    padding-top: 2px;
+}
+
+.goog-tabpane-top .goog-tabpane-tab-selected {
+    position: relative;
+    top: 1px;
+}
+
+.goog-tabpane-bottom .goog-tabpane-tab-selected {
+    position: relative;
+    top: -1px;
+}
+
+.goog-tabpane-left .goog-tabpane-tab-selected {
+    position: relative;
+    left: 1px;
+}
+
+.goog-tabpane-right .goog-tabpane-tab-selected {
+    position: relative;
+    left: -1px;
+}
+
+.slider-box {
+  display: inline-block;
+  vertical-align: middle;
+  width: 150px;
+  height: 1em;
+}
+
+.goog-slider-horizontal {
+    width: 100%;
+    height: 100%;
+    background-color: #eee;
+    border: 1px groove #eee;
+    position: relative;
+    overflow: hidden;
+}
+
+.goog-slider-horizontal
+.goog-slider-thumb {
+    top: 0;
+    width: 20px;
+    height: 100%;
+    position: absolute;
+    background-color: #bbb;
+    overflow: hidden;
 }

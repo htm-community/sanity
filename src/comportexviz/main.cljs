@@ -1,9 +1,11 @@
 (ns comportexviz.main
   (:require [c2.dom :as dom :refer [->dom]]
             [org.nfrac.comportex.core :as core]
-            [comportexviz.controls-ui]
+            [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
+            [goog.ui.TabPane]
+            [goog.ui.TabPane.TabPage]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
@@ -22,7 +24,7 @@
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
 
-(def freqs-c (async/map< (comp core/column-state-freqs first viz/get-regions)
+(def freqs-c (async/map< (comp core/column-state-freqs first core/region-seq)
                          (tap-c steps-mult)))
 (def freqs-mult (async/mult freqs-c))
 (def agg-freqs-ts (plots/aggregated-ts-ref (tap-c freqs-mult) 200))
@@ -33,7 +35,7 @@
          :anim-go? true
          :anim-every 1}))
 
-(def selection (atom {:region nil :cid nil :dt 0}))
+(def selection (atom {:region 0 :dt 0 :cid nil}))
 
 ;; ## ENTRY POINTS
 
@@ -52,7 +54,7 @@
 
 (defn update-ts-plot
   [agg-ts]
-  (plots/bind-ts-plot "#plots" agg-ts 400 180
+  (plots/bind-ts-plot "#comportex-plots" agg-ts 400 180
                       [:active :active-predicted :predicted]
                       viz/state-colors))
 
@@ -99,10 +101,11 @@
 
 (defn- init-ui!
   [init-model]
-  (comportexviz.viz-canvas/init! init-model (tap-c steps-mult) selection
-                                 sim-step!)
-  (comportexviz.controls-ui/init! model sim-go? main-options viz/keep-steps
-                                  viz/viz-options sim-step! draw!))
+  (goog.ui.TabPane. (->dom "#comportex-tabs"))
+  (viz/init! init-model (tap-c steps-mult) selection sim-step!)
+  (cui/handle-controls! model sim-go? main-options sim-step! draw!)
+  (cui/handle-options! model viz/keep-steps viz/viz-options)
+  (cui/handle-parameters! model selection))
 
 (defn ^:export set-model
   {:pre (nil? @model)} ; currently

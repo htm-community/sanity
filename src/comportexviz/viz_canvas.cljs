@@ -21,7 +21,8 @@
 (def viz-options
   (atom {:input {:active true
                  :predicted true}
-         :columns {:overlaps nil
+         :columns {:active true
+                   :overlaps nil
                    :predictive true
                    :temporal-pooling true
                    :scroll-counter 0}
@@ -48,27 +49,6 @@
 (def keep-steps (atom 25))
 (def steps (atom []))
 (def layouts (atom nil))
-
-(defn get-regions
-  [state]
-  (->> (tree-seq :subs :subs state)
-       (keep :region)
-       (reverse) ;; put in bottom to top order, for first path down tree
-       (vec)))
-
-(defn get-trees
-  [state]
-  (->> (tree-seq :subs :subs state)
-       (filter :region)
-       (reverse) ;; put in bottom to top order, for first path down tree
-       (vec)))
-
-(defn get-input
-  [state]
-  (->> (tree-seq :subs :subs state)
-       (remove :region)
-       ;; for now, assume only one input)
-       (first)))
 
 ;;; ## Colours
 
@@ -103,7 +83,7 @@
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
-   :temporal-pooling (hsl :green 1 0.75 0.7)
+   :temporal-pooling (hsl :green 1 0.5 0.4)
    })
 
 ;;; ## Layouts
@@ -333,10 +313,10 @@
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-perm? (get-in opts [:ff-synapses :permanences])]
     (doseq [cid cids
-            active? [true false]
+            active? [false true]
             :when (or active? do-inactive?)
             :let [col (get-in prev-rgn [:columns cid])
-                  syns (-> col :in-synapses :connected)
+                  syns (-> col :ff-synapses :connected)
                   sub-syns (if active?
                              (select-keys syns src-bits)
                              (apply dissoc syns src-bits))
@@ -363,18 +343,6 @@
                       :active :inactive)])
                  syns))
 
-(defn column-learning-segments
-  [prev-rgn current-ac cid]
-  (let [col-ac (set (filter (fn [[i _]] (= i cid))
-                            current-ac))]
-    (when (seq col-ac)
-      (let [col (get-in prev-rgn [:columns cid])
-            ac (:active-cells prev-rgn)
-            bursting? (= (count col-ac)
-                         (count (:cells col)))]
-        (sm/column-learning-segments col bursting? col-ac ac
-                                     (:spec prev-rgn))))))
-
 (defn natural-curve
   [ctx x0 y0 x1 y1]
   (let [x-third (/ (- x1 x0) 3)]
@@ -392,13 +360,10 @@
         th (:activation-threshold (:spec rgn))
         pcon (:connected-perm spec)
         ac (:active-cells prev-rgn)
-        lc (:learn-cells prev-rgn)
+        learning (:learn-segments rgn)
         active? (get-in rgn [:active-columns cid])
         bursting? (get-in rgn [:bursting-columns cid])
         current-ac (:active-cells rgn)
-        learning (->> (column-learning-segments prev-rgn current-ac cid)
-                      (map (juxt :cell-id :segment-idx))
-                      (into {}))
         cells (:cells col)
         ncells (count cells)
         nsegbycell (map (comp count :segments) cells)
@@ -524,12 +489,10 @@
               (c/stroke-width 2)
               (cell-seg-line ci si)))
           (c/fill-style ctx "black")
-          (c/text ctx {:text (str "[" si "],  active / conn. = " conn-act
-                                  " / " conn-tot)
-                       :x (+ sx 5 seg-r-px) :y (- sy 5)})
-          (c/text ctx {:text (str "   active / disconn. = " disc-act
-                                  " / " disc-tot)
-                       :x (+ sx 5 seg-r-px) :y (+ sy 5)})
+          (c/text ctx {:text (str "[" si "],  active " conn-act
+                                  " / " conn-tot " conn."
+                                  " (" disc-act " / " disc-tot " disconn.)")
+                       :x (+ sx 5 seg-r-px) :y sy})
           ;; synapses
           (c/stroke-width ctx 1)
           (let [do-perm? (get-in opts [:lat-synapses :permanences])
@@ -560,9 +523,9 @@
     cid :cid
     :as selection}]
   (let [state (nth @steps dt)
-        rgns (get-regions state)
+        rgns (core/region-seq state)
         rgn (nth rgns rid)
-        inp (get-input state)
+        inp (first (core/inputs-seq state))
         in (core/domain-value inp)
         bits (core/bits-value inp)]
     (->>
@@ -595,12 +558,18 @@
       (if cid
         (let [dtp (inc dt)
               pstate (nth @steps dtp)
-              prgn (nth (get-regions pstate) rid)
+              prgn (nth (core/region-seq pstate) rid)
               pcbc (:predictive-cells-by-column prgn)
-              
               pcells (:active-cells prgn)
               pcol (get-in prgn [:columns cid])
-              col (get-in rgn [:columns cid])]
+              col (get-in rgn [:columns cid])
+              pcon (:connected-perm (:spec prgn))
+              rgn-tree (nth (core/region-tree-seq state) rid)
+              bits (core/incoming-bits-value rgn-tree)
+              sig-bits (if (pos? rid)
+                         (core/signal-bits-value
+                          (nth (core/region-tree-seq state) (dec rid)))
+                         {})]
           ["__Active cells prev__"
            (str (sort (:active-cells prgn)))
            ""
@@ -610,16 +579,15 @@
            "__Predicted cells prev__"
            (str (sort (:predictive-cells prgn)))
            ""
-           "__Predicted bit votes__"
-           (str (sort (sm/predicted-bit-votes prgn pcbc)))
-           ""
            "__Selected column__"
-           "__Connected In-synapses__"
-           (let [syns (:connected (:in-synapses pcol))]
+           "__Connected ff-synapses__"
+           (let [syns (:connected (:ff-synapses pcol))]
              (for [[id p] (sort syns)]
                (str "  " id " :=> "
                     (gstring/format "%.2f" p)
-                    (if (bits id) " A"))))
+                    (if (sig-bits id) " S")
+                    (if (bits id) (str " A "
+                                       (core/source-of-incoming-bit rgn-tree id))))))
            "__Cells and their Dendrite segments__"
            (->> (:cells pcol)
                 (map-indexed
@@ -630,11 +598,14 @@
                      [(str "CELL " i)
                       (str (count ds) " = "
                            (sort (map (comp count :synapses) ds)))
+                      (str "Lateral excitation from this cell: "
+                           (sm/lateral-excitation-from prgn (:depth (:spec prgn)) (:id cell)))
                       (for [i (range (count ds))
                             :let [syns (:synapses (ds i))]]
                         [(str "  SEGMENT " i)
                          (for [[id p] (sort syns)]
-                           (str "  " id " :=> "
+                           (str "  " id
+                                (if (>= p pcon) " :=> " " :.: ")
                                 (gstring/format "%.2f" p)
                                 (if (lc id) " L"
                                     (if (ac id) " A"))))])
@@ -735,7 +706,7 @@
         r-lays (:regions @layouts)
         sel-state (nth @steps sel-dt)
         sel-prev-state (nth @steps (inc sel-dt) {})
-        canvas-el (->dom "#viz")
+        canvas-el (->dom "#comportex-viz")
         ctx (c/get-context canvas-el "2d")
         inbits-bg (bg-image i-lay)
         columns-bgs (map bg-image r-lays)
@@ -758,13 +729,13 @@
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) {})
-                  prev-first-region (first (get-regions prev-state))
-                  rgns (get-regions state)
+                  prev-first-region (first (core/region-seq prev-state))
+                  rgns (core/region-seq state)
                   cache (::cache (meta state))]]
       (->> inbits-bg
            (draw-image-dt ctx i-lay dt))
       (when (get-in opts [:input :active])
-        (->> (active-bits-image i-lay (get-input state))
+        (->> (active-bits-image i-lay (first (core/inputs-seq state)))
              (with-cache cache ::abits opts :input)
              (draw-image-dt ctx i-lay dt)))
       (when (get-in opts [:input :predicted])
@@ -779,7 +750,7 @@
           (->> (overlaps-columns-image r-lay rgn)
                (with-cache cache [::ocols rid] opts :columns)
                (draw-image-dt ctx r-lay dt)))
-        (when true ;; always do this
+        (when (get-in opts [:columns :active])
           (->> (active-columns-image r-lay rgn)
                (with-cache cache [::acols rid] opts :columns)
                (draw-image-dt ctx r-lay dt)))
@@ -806,21 +777,22 @@
       (doseq [[rid rgn prev-rgn src r-lay src-lay]
               (map vector
                    (range)
-                   (get-regions sel-state)
-                   (get-regions sel-prev-state)
-                   (list* (get-input sel-state) (get-trees sel-state))
+                   (core/region-seq sel-state)
+                   (core/region-seq sel-prev-state)
+                   (list* (first (core/inputs-seq sel-state))
+                          (core/region-tree-seq sel-state))
                    r-lays
                    (list* i-lay r-lays))]
-        (when (or (not sel-rid)
+        (when (or (not sel-cid)
                   (= sel-rid rid))
           (draw-ff-synapses ctx rgn prev-rgn r-lay src src-lay
                             sel-cid sel-dt opts))))
     ;; draw selected cells and segments
     (when (and sel-cid
                (< (inc sel-dt) (count @steps)))
-      (let [rgn (-> (get-regions sel-state)
+      (let [rgn (-> (core/region-seq sel-state)
                     (nth sel-rid))
-            prev-rgn (-> (get-regions sel-prev-state)
+            prev-rgn (-> (core/region-seq sel-prev-state)
                          (nth sel-rid))
             lay (nth r-lays sel-rid)]
         (draw-cell-segments ctx rgn prev-rgn lay
@@ -861,7 +833,7 @@
                                     :dt (min dt max-dt)})
                  (recur (inc rid)))
                ;; checked all, nothing clicked
-               (reset! selection {:region nil :cid nil :dt 0})))))))))
+               (swap! selection assoc :cid nil)))))))))
 
 (def code-key
   {33 :page-up
@@ -872,8 +844,8 @@
    40 :down})
 
 (defn handle-canvas-keys
-  [selection sim-step!]
-  (let [presses (listen js/document goog.events.EventType.KEYDOWN
+  [el selection sim-step!]
+  (let [presses (listen el goog.events.EventType.KEYDOWN
                         (fn [e] (code-key (.-keyCode e))))]
     (go
      (while true
@@ -900,9 +872,9 @@
 
 (defn init!
   [init-model steps-c selection sim-step!]
-  (let [rgns (get-regions init-model)
+  (let [rgns (core/region-seq init-model)
         ;; for now assume only one input
-        inp (get-input init-model)
+        inp (first (core/inputs-seq init-model))
         d-opts (:drawing @viz-options)
         nbits (core/bit-width inp)
         i-lay (inbits-1d-layout nbits 0 d-opts)
@@ -927,8 +899,8 @@
                                (take @keep-steps)
                                (vec))))
           (recur))))
-  (let [el (->dom "#viz")]
+  (let [el (->dom "#comportex-viz")]
     (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))
     (set! (.-height el) height-px)
     (handle-canvas-clicks el selection)
-    (handle-canvas-keys selection sim-step!)))
+    (handle-canvas-keys el selection sim-step!)))

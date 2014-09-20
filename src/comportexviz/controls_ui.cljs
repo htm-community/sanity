@@ -45,10 +45,10 @@
 
 (defn keys->id
   [keys]
-  (->> (map name keys)
+  (->> (map (fn [x] (if (number? x) (str x) (name x))) keys)
        (map #(str/replace % \? "_QMARK_"))
        (interpose "_")
-       (apply str "display-")))
+       (apply str "comportex-")))
 
 (defn checkbox
   [m keys txt]
@@ -67,16 +67,16 @@
        (name optval)])]])
 
 (defn parameter-input
-  [[k v]]
+  [prefix [k v]]
   [:label
    [:span.parameter-label (name k)]
-   [:input {:id (keys->id [k])
+   [:input {:id (keys->id [prefix k])
             :value (str v)}]])
 
-(defn init!
-  [model sim-go? main-options keep-steps viz-options sim-step! draw-now!]
-  (bind! "#controls"
-         [:div#controls
+(defn handle-controls!
+  [model sim-go? main-options sim-step! draw-now!]
+  (bind! "#comportex-controls"
+         [:div#comportex-controls
 
           [:fieldset#sim-controls
            [:legend "Simulation"]
@@ -96,7 +96,8 @@
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
             [:span [:a#sim-faster {:href "#"} "faster"]]]
-           [:button#sim-reset "Reset"]]
+           [:button#sim-reset "Reset"]
+           [:span#sim-reset-status {:class "detail"}]]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
@@ -109,39 +110,7 @@
             [:span#anim-every-text (str (:anim-every @main-options) " steps")]
             [:span [:a#anim-slower {:href "#"} "slower"]]
             [:span [:a#anim-faster {:href "#"} "faster"]]]]
-
-          (let [viz @viz-options]
-            [:fieldset#viz-options
-             [:legend "Visualisation"]
-             [:fieldset
-              [:legend "Input"]
-              (checkbox viz [:input :active] "Active bits") [:br]
-              (checkbox viz [:input :predicted] "Predicted bits")]
-             [:fieldset
-              [:legend "Columns"]
-              (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
-              (checkbox viz [:columns :predictive] "Predictive columns")]
-             [:fieldset
-              [:legend "Feed-forward synapses"]
-              (checkbox viz [:ff-synapses :active] "Active in-synapses") [:br]
-              (checkbox viz [:ff-synapses :inactive] "Inactive in-synapses") [:br]
-              (checkbox viz [:ff-synapses :permanences] "Permanences")]
-             [:fieldset
-              [:legend "Dendrite segments"]
-              (combobox viz [:lat-synapses :from] [:learning :all :none]
-                        "Synapses from ") [:br]
-              (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
-              (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
-              (checkbox viz [:lat-synapses :permanences] "Permanences")]])
-
-          (let [spec (-> @model :region :spec)]
-            [:form#region-spec-form
-             [:fieldset#region-spec
-              [:legend "Parameters"]
-              (map parameter-input (sort spec))
-              [:p.detail [:input {:type "submit" :value "Set!"}]
-               (str " (will be set immediately, but then use Reset above for any"
-                    " parameters that apply only in initialisation)")]]])])
+          ])
 
   (event/on-raw "#sim-start" :click
                 (fn [_] (reset! sim-go? true)))
@@ -156,7 +125,10 @@
                 (fn [_] (swap! main-options update-in [:sim-step-ms]
                               #(+ % 100))))
   (event/on-raw "#sim-reset" :click
-                (fn [_] (swap! model core/reset)))
+                (fn [_]
+                  (let [el (->dom "#sim-reset-status")]
+                    (swap! model core/reset)
+                    (dom/text el "reset complete."))))
 
   (event/on-raw "#anim-start" :click
                 (fn [_] (swap! main-options assoc :anim-go? true)))
@@ -169,8 +141,38 @@
                               #(-> (dec %) (max 1)))))
   (event/on-raw "#anim-slower" :click
                 (fn [_] (swap! main-options update-in [:anim-every]
-                              #(inc %))))
+                              #(inc %)))))
 
+(defn handle-options!
+  [model keep-steps viz-options]
+  (bind! "#comportex-options"
+         [:div#comportex-options
+          (let [viz @viz-options]
+            [:fieldset#viz-options
+             [:legend "Visualisation"]
+             [:fieldset
+              [:legend "Input"]
+              (checkbox viz [:input :active] "Active bits") [:br]
+              (checkbox viz [:input :predicted] "Predicted bits")]
+             [:fieldset
+              [:legend "Columns"]
+              (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
+              (checkbox viz [:columns :active] "Active columns") [:br]
+              (checkbox viz [:columns :predictive] "Predictive columns") [:br]
+              (checkbox viz [:columns :temporal-pooling] "TP columns")]
+             [:fieldset
+              [:legend "Feed-forward synapses"]
+              (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]
+              (checkbox viz [:ff-synapses :inactive] "Inactive ff-synapses") [:br]
+              (checkbox viz [:ff-synapses :permanences] "Permanences")]
+             [:fieldset
+              [:legend "Lateral dendrite segments"]
+              (combobox viz [:lat-synapses :from] [:learning :all :none]
+                        "Synapses from ") [:br]
+              (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
+              (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
+              (checkbox viz [:lat-synapses :permanences] "Permanences")]])
+          ])
   (doseq [[k km] @viz-options
           [subk v] km
           :let [id (keys->id [k subk])
@@ -179,18 +181,41 @@
     (event/on-raw el :change
                   (fn [_]
                     (let [v (when-let [s (dom/val el)] (keyword s))]
-                      (swap! viz-options assoc-in [k subk] v)))))
+                      (swap! viz-options assoc-in [k subk] v))))))
 
-  (let [spec (-> @model :region :spec)
-        form-el (->dom "#region-spec-form")]
+(defn handle-parameters!
+  [model selection]
+  (bind! "#comportex-parameters"
+         (let [sel-rid (:region @selection)]
+           [:div#comportex-parameters
+            (let [rgns (core/region-seq @model)]
+              (for [rid (range (count rgns))
+                    :let [rgn (nth rgns rid)
+                          spec (:spec rgn)]]
+                [:div {:style {:display (if (not= rid sel-rid) "none")}}
+                 [:form {:id (str "region-spec-form-" rid)}
+                  [:p (str "Region " rid) [:br]
+                   [:span.detail "(click on a region to select it)"]]
+                  [:fieldset.region-spec
+                   [:legend "Parameters"]
+                   (map (partial parameter-input rid) (sort spec))
+                   [:p.detail [:input {:type "submit" :value "Set!"}]
+                    (str " (will be set immediately, but then use Reset above for any"
+                         " parameters that apply only in initialisation)")]]]]))]
+           ))
+
+  (doseq [rid (range (count (core/region-seq @model)))
+          :let [form-el (->dom (str "#region-spec-form-" rid))]]
     (event/on-raw form-el :submit
                   (fn [e]
-                    (let [s (reduce (fn [s k]
-                                      (let [id (keys->id [k])
+                    (let [rgn (nth (core/region-seq @model) rid)
+                          s (reduce (fn [s k]
+                                      (let [id (keys->id [rid k])
                                             el (->dom (str "#" id))
                                             v (cljs.reader/read-string (dom/val el))]
                                         (assoc s k v)))
-                                    {} (keys spec))]
-                      (swap! model assoc-in [:region :spec] s)
+                                    {} (keys (:spec rgn)))]
+                      (swap! model core/update-by-uuid (:uuid rgn)
+                             #(assoc % :spec s))
                       (.preventDefault e)
                       false)))))

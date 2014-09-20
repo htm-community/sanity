@@ -1,12 +1,10 @@
 # TODO
 
-* start small! (#cells / sequence length)
+* plot applies to selected region
 
 * plot most recent sliding window
 
 * summary of % predicted etc in recent time
-
-* tabs
 
 * controls to add noise to input generator
 
@@ -17,6 +15,5 @@
 * snapshots (store state of `steps`)
 * 2D input fields
 * 2D column layouts
-* multiple regions in hierarchy
 
 * allow different viz to be plugged in (runtime config)

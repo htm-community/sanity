@@ -56,7 +56,7 @@
      (let [{:keys [ts keep-n]} agg
            step-width (/ width keep-n)
            ncol (:ncol (peek ts))
-           scale (scale/linear :domain [0 (* ncol 0.15)]
+           scale (scale/linear :domain [0 (* ncol 0.09)]
                                :range [0 (dec height)])]
        (when (pos? ncol)
          [:div

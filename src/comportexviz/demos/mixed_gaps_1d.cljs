@@ -4,7 +4,7 @@
             [org.nfrac.comportex.util :as util]
             [comportexviz.parameters]))
 
-(def bit-width 400)
+(def bit-width 500)
 (def on-bits 25)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
@@ -19,7 +19,7 @@
    :saw-10-15 [10 12 11 13 12 14 13 15]})
 
 (def gap-range
-  (->> (vals patterns) (map count) (reduce +) (long)))
+  (->> (vals patterns) (map count) (reduce +) (long) (* 2)))
 
 (defn initial-input
   []
@@ -55,9 +55,7 @@
     (get (:seq m) (:index m))))
 
 (def spec
-  {:ncol 1000
-   :potential-radius 128
-   :activation-level 0.03
+  {:activation-level 0.02
    :global-inhibition false
    :stimulus-threshold 3
    :sp-perm-inc 0.05
@@ -67,6 +65,8 @@
    :max-boost 2.0
    ;; sequence memory:
    :depth 8
+   :max-segments 5
+   :max-synapse-count 18
    :new-synapse-count 12
    :activation-threshold 9
    :min-threshold 7
@@ -84,6 +84,6 @@
 (defn ^:export model
   []
   (let [gen (core/input-generator (initial-input) input-transform encoder)]
-    (core/tree core/cla-region (assoc spec :ncol 500)
-               [(core/tree core/cla-region spec
+    (core/tree core/cla-region (assoc spec :ncol 1000, :potential-radius 800)
+               [(core/tree core/cla-region (assoc spec :ncol 1000 :potential-radius 50)
                            [gen])])))
