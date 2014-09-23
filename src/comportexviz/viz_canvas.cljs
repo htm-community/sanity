@@ -15,8 +15,8 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-cache]]))
 
-(def height-px 1000)
-(def top-px 10)
+(def height-px 900)
+(def top-px 20)
 
 (def viz-options
   (atom {:input {:active true
@@ -694,13 +694,21 @@
     (c/fill ctx)
     el))
 
+(defn scroll-status-str
+  [lay]
+  (str "Showing " (top-id-onscreen lay)
+       "--" (+ (top-id-onscreen lay)
+               (n-onscreen lay) -1)
+       " of " (:elements-per-dt lay)))
+
 (defn draw!
   [{sel-dt :dt
     sel-rid :region
     sel-cid :cid
     :as selection}]
   (dom/val "#detail-text"
-           (if sel-cid (detail-text selection) ""))
+           (if sel-cid (detail-text selection)
+               "Select a column (by clicking on it) to see details."))
   (let [opts @viz-options
         i-lay (:input @layouts)
         r-lays (:regions @layouts)
@@ -714,18 +722,25 @@
                       (get-in opts [:drawing :h-space-px]))
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    (c/text ctx {:text "input bits.    time -->"
+    (c/text ctx {:text "Input bits.    Time -->"
+                 :x (:x (layout-bounds i-lay))
+                 :y (- top-px 13)})
+    (c/text ctx {:text (scroll-status-str i-lay)
                  :x (:x (layout-bounds i-lay))
                  :y (- top-px 3)})
-    (doseq [r-lay r-lays]
-      (c/text ctx {:text "columns.    time -->"
+    (doseq [[rid r-lay] (map-indexed vector r-lays)
+            :let []]
+      (c/text ctx {:text (str "Region " rid " columns.")
+                   :x (:x (layout-bounds r-lay))
+                   :y (- top-px 13)})
+      (c/text ctx {:text (scroll-status-str r-lay)
                    :x (:x (layout-bounds r-lay))
                    :y (- top-px 3)}))
     (let [segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))]
-          (c/text ctx {:text (str "segments. "
+          (c/text ctx {:text (str "Segments. "
                              (if sel-cid "(arrows keys to move)"
                                  "(click on a column)"))
-                       :x segs-left :y (- top-px 3)}))
+                       :x segs-left :y (- top-px 13)}))
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) {})
@@ -903,4 +918,4 @@
     (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))
     (set! (.-height el) height-px)
     (handle-canvas-clicks el selection)
-    (handle-canvas-keys el selection sim-step!)))
+    (handle-canvas-keys js/document selection sim-step!)))

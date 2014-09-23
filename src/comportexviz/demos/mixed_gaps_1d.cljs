@@ -4,7 +4,7 @@
             [org.nfrac.comportex.util :as util]
             [comportexviz.parameters]))
 
-(def bit-width 500)
+(def bit-width 400)
 (def on-bits 25)
 (def numb-max 15)
 (def numb-domain [0 numb-max])
@@ -13,9 +13,8 @@
   {:run-0-5 [0 1 2 3 4 5]
    :rev-5-1 [5 4 3 2 1]
    :run-6-10 [6 7 8 9 10]
+   :jump-6-12 [6 7 8 11 12]
    :twos [0 2 4 6 8 10 12 14]
-   :reps-0-5 [0 0 1 1 2 2 3 3 4 4 5 5]
-   :jump-7-11 [5 6 7 11 12]
    :saw-10-15 [10 12 11 13 12 14 13 15]})
 
 (def gap-range

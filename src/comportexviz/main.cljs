@@ -7,7 +7,8 @@
             [goog.ui.TabPane]
             [goog.ui.TabPane.TabPage]
             [cljs.core.async :as async :refer [chan put! <!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [c2.util :refer [bind!]]))
 
 (enable-console-print!)
 
@@ -17,46 +18,28 @@
     (async/tap mult c)
     c))
 
-;; ## DATA
+;;; ## Data
 
 (def model (atom nil))
+
+(def selection (atom {:region 0 :dt 0 :cid nil}))
 
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
 
-(def freqs-c (async/map< (comp core/column-state-freqs first core/region-seq)
-                         (tap-c steps-mult)))
-(def freqs-mult (async/mult freqs-c))
-(def agg-freqs-ts (plots/aggregated-ts-ref (tap-c freqs-mult) 200))
-
 (def sim-go? (atom false))
 (def main-options
-  (atom {:sim-step-ms 500
+  (atom {:sim-step-ms 200
          :anim-go? true
          :anim-every 1}))
 
-(def selection (atom {:region 0 :dt 0 :cid nil}))
-
-;; ## ENTRY POINTS
+;;; ## Simulation
 
 (defn sim-step!
   []
   (->>
    (swap! model core/feed-forward-step)
    (put! steps-c)))
-
-(defn draw!
-  []
-  (dom/request-animation-frame
-   #(viz/draw! @selection)))
-
-;; ## HELPERS
-
-(defn update-ts-plot
-  [agg-ts]
-  (plots/bind-ts-plot "#comportex-plots" agg-ts 400 180
-                      [:active :active-predicted :predicted]
-                      viz/state-colors))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -71,15 +54,46 @@
        (sim-step!)
        (<! tc)))))
 
-;; ## TRIGGERS
-
 (add-watch sim-go? :run-sim
            (fn [_ _ _ v]
              (when v (run-sim))))
 
-(add-watch agg-freqs-ts :ts-plot
-           (fn [_ _ _ v]
-             (update-ts-plot v)))
+;;; ## Plots
+
+(defn update-ts-plot
+  [el agg-ts]
+  (plots/bind-ts-plot el agg-ts 400 180
+                      [:active :active-predicted :predicted]
+                      viz/state-colors))
+
+(defn init-plots!
+  [init-model el]
+  (let [rgns (core/region-seq init-model)]
+    (bind! el
+           [:div
+            (for [rid (range (count rgns))
+                  :let [id (str "comportex-plot-" rid)]]
+              [:fieldset
+               [:legend (str "Region " rid)]
+               [:div {:id id}]])])
+    (doseq [rid (range (count rgns))
+            :let [id (str "comportex-plot-" rid)]]
+      (let [this-el (->dom (str "#" id))
+            freqs-c (async/map< (comp core/column-state-freqs
+                                      #(nth % rid)
+                                      core/region-seq)
+                                (tap-c steps-mult))
+            agg-freqs-ts (plots/aggregated-ts-ref freqs-c 200)]
+        (add-watch agg-freqs-ts :ts-plot
+                   (fn [_ _ _ v]
+                     (update-ts-plot this-el v)))))))
+
+;;; ## Visualisation
+
+(defn draw!
+  []
+  (dom/request-animation-frame
+   #(viz/draw! @selection)))
 
 (add-watch viz/viz-options :redraw
            (fn [_ _ _ _]
@@ -89,7 +103,8 @@
            (fn [_ _ _ _]
              (draw!)))
 
-;; animation loop
+;;; # Animation loop
+
 (go (loop [c (tap-c steps-mult)]
       (when-let [state (<! c)]
         (let [t (:timestep (:region state))
@@ -99,9 +114,12 @@
             (draw!)))
         (recur c))))
 
+;;; ## Entry point
+
 (defn- init-ui!
   [init-model]
   (goog.ui.TabPane. (->dom "#comportex-tabs"))
+  (init-plots! init-model (->dom "#comportex-plots"))
   (viz/init! init-model (tap-c steps-mult) selection sim-step!)
   (cui/handle-controls! model sim-go? main-options sim-step! draw!)
   (cui/handle-options! model viz/keep-steps viz/viz-options)
@@ -113,3 +131,4 @@
   (->> (reset! model x)
        (put! steps-c))
   (init-ui! x))
+
