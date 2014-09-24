@@ -145,8 +145,8 @@
 
 (defn handle-options!
   [model keep-steps viz-options]
-  (bind! "#comportex-options"
-         [:div#comportex-options
+  (bind! "#comportex-drawing"
+         [:div#comportex-drawing
           (let [viz @viz-options]
             [:fieldset#viz-options
              [:legend "Visualisation"]
@@ -171,6 +171,7 @@
                         "Synapses from ") [:br]
               (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
               (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
+              (checkbox viz [:lat-synapses :disconnected] "Disconnected synapses") [:br]
               (checkbox viz [:lat-synapses :permanences] "Permanences")]])
           ])
   (doseq [[k km] @viz-options

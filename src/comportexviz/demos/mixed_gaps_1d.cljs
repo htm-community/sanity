@@ -86,3 +86,8 @@
     (core/tree core/cla-region (assoc spec :ncol 1000, :potential-radius 800)
                [(core/tree core/cla-region (assoc spec :ncol 1000 :potential-radius 50)
                            [gen])])))
+
+(defn ^:export model3
+  []
+  (core/tree core/cla-region (assoc spec :ncol 1000, :potential-radius 800)
+             [(model)]))
