@@ -753,8 +753,7 @@
     (c/text ctx {:text (scroll-status-str i-lay)
                  :x (:x (layout-bounds i-lay))
                  :y (- top-px 3)})
-    (doseq [[rid r-lay] (map-indexed vector r-lays)
-            :let []]
+    (doseq [[rid r-lay] (map-indexed vector r-lays)]
       (c/text ctx {:text (str "Region " rid " columns.")
                    :x (:x (layout-bounds r-lay))
                    :y (- top-px 13)})
@@ -764,7 +763,8 @@
     (let [segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))]
           (c/text ctx {:text (str "Segments. "
                              (if sel-cid "(arrows keys to move)"
-                                 "(click on a column)"))
+                                 "(click on a column)")
+                             " Page up / page down to scroll columns.")
                        :x segs-left :y (- top-px 13)}))
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
