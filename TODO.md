@@ -1,7 +1,5 @@
 # TODO
 
-* plot applies to selected region
-
 * plot most recent sliding window
 
 * summary of % predicted etc in recent time
