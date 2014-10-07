@@ -1,6 +1,7 @@
 (ns comportexviz.main
   (:require [c2.dom :as dom :refer [->dom]]
             [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
@@ -22,7 +23,7 @@
 
 (def model (atom nil))
 
-(def selection (atom {:region 0 :dt 0 :cid nil}))
+(def selection (atom {:region 0 :dt 0 :col nil}))
 
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
@@ -38,7 +39,7 @@
 (defn sim-step!
   []
   (->>
-   (swap! model core/feed-forward-step)
+   (swap! model p/feed-forward-step)
    (put! steps-c)))
 
 (defn now [] (.getTime (js/Date.)))
@@ -47,7 +48,7 @@
   []
   (swap! model assoc
          :run-start {:time (now)
-                     :timestep (:timestep (:region @model))})
+                     :timestep (p/timestep @model)})
   (go
    (while @sim-go?
      (let [tc (async/timeout (:sim-step-ms @main-options))]
@@ -107,7 +108,7 @@
 
 (go (loop [c (tap-c steps-mult)]
       (when-let [state (<! c)]
-        (let [t (:timestep (:region state))
+        (let [t (p/timestep state)
               n (:anim-every @main-options)]
           (when (and (:anim-go? @main-options)
                      (zero? (mod t n)))

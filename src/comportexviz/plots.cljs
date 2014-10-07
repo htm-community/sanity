@@ -56,7 +56,7 @@
     (bind! el
      (let [{:keys [ts keep-n bucket]} agg
            n-timesteps (* bucket keep-n)
-           ncol (:ncol (peek ts))
+           ncol (:size (peek ts))
            v-max (* ncol 0.10)
            h-scale (scale/linear :domain [0 n-timesteps]
                                  :range [0 (dec width)])

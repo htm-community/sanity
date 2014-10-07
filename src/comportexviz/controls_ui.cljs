@@ -8,7 +8,8 @@
             [goog.ui.Slider]
             [goog.ui.Component.EventType]
             [cljs.reader]
-            [org.nfrac.comportex.core :as core])
+            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.protocols :as p])
   (:require-macros [c2.util :refer [bind!]]))
 
 (defn now [] (.getTime (js/Date.)))
@@ -21,7 +22,7 @@
     (let [m (:run-start model)
           dur-ms (- (now)
                     (:time m))
-          steps (- (:timestep (:region model))
+          steps (- (p/timestep model)
                    (:timestep m))]
       (-> (/ steps dur-ms)
           (* 1000)))))
@@ -81,7 +82,7 @@
           [:fieldset#sim-controls
            [:legend "Simulation"]
            [:label "Timestep:" [:span#sim-timestep
-                                (:timestep (:region @model))]]
+                                (p/timestep @model)]]
            [:span#sim-rate {:class "detail"}
             (when @sim-go?
               (gstring/format "%.1f steps/sec."
@@ -127,7 +128,7 @@
   (event/on-raw "#sim-reset" :click
                 (fn [_]
                   (let [el (->dom "#sim-reset-status")]
-                    (swap! model core/reset)
+                    (swap! model p/reset)
                     (dom/text el "reset complete."))))
 
   (event/on-raw "#anim-start" :click
@@ -192,7 +193,7 @@
             (let [rgns (core/region-seq @model)]
               (for [rid (range (count rgns))
                     :let [rgn (nth rgns rid)
-                          spec (:spec rgn)]]
+                          spec (p/params rgn)]]
                 [:div {:style {:display (if (not= rid sel-rid) "none")}}
                  [:form {:id (str "region-spec-form-" rid)}
                   [:p (str "Region " rid) [:br]
@@ -210,13 +211,16 @@
     (event/on-raw form-el :submit
                   (fn [e]
                     (let [rgn (nth (core/region-seq @model) rid)
+                          ospec (p/params rgn)
                           s (reduce (fn [s k]
                                       (let [id (keys->id [rid k])
                                             el (->dom (str "#" id))
                                             v (cljs.reader/read-string (dom/val el))]
                                         (assoc s k v)))
-                                    {} (keys (:spec rgn)))]
+                                    {} (keys ospec))]
                       (swap! model core/update-by-uuid (:uuid rgn)
-                             #(assoc % :spec s))
+                             #(-> %
+                                  (assoc-in [:column-field :spec] s)
+                                  (assoc-in [:layer :spec] s)))
                       (.preventDefault e)
                       false)))))
