@@ -9,7 +9,6 @@
             [monet.core]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.sequence-memory :as sm]
             [org.nfrac.comportex.util :as util]
             [clojure.set :as set]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -313,7 +312,7 @@
   (let [cf (:column-field rgn)
         ff-sg (:ff-sg cf)
         cols (if sel-col [sel-col]
-                 (p/active-columns cf))
+                 (p/active-columns (:layer-3 rgn)))
         src-bits (p/bits-value src)
         src-sbits (p/signal-bits-value src)
         do-inactive? (get-in opts [:ff-synapses :inactive])
@@ -425,14 +424,14 @@
         th (:seg-stimulus-threshold spec)
         pcon (:distal-perm-connected spec)
         cf (:column-field rgn)
-        layer (:layer rgn)
+        layer (:layer-3 rgn)
         prev-cf (:column-field prev-rgn)
-        prev-layer (:layer prev-rgn)
+        prev-layer (:layer-3 prev-rgn)
         ac (p/active-cells layer)
         prev-ac (p/active-cells prev-layer)
         prev-pc (p/predictive-cells prev-layer)
         learning (:learn-segments layer)
-        active? (get (p/active-columns cf) col)
+        active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
         distal-sg (:distal-sg layer)
         segs-by-cell (all-cell-segments col (p/layer-depth layer) distal-sg)
@@ -566,7 +565,7 @@
         rgns (core/region-seq state)
         rgn (nth rgns rid)
         cf (:column-field rgn)
-        layer (:layer rgn)
+        layer (:layer-3 rgn)
         inp (first (core/inputs-seq state))
         in (p/domain-value inp)
         bits (p/bits-value inp)]
@@ -580,7 +579,7 @@
       (str in " (" (count bits) " bits)")
       ""
       "__Active columns__"
-      (str (sort (p/active-columns cf)))
+      (str (sort (p/active-columns layer)))
       ""
       "__Active cells__"
       (str (sort (p/active-cells layer)))
@@ -605,18 +604,15 @@
               p-state (nth @steps dtp)
               p-rgn (nth (core/region-seq p-state) rid)
               p-cf (:column-field p-rgn)
-              p-layer (:layer p-rgn)
+              p-layer (:layer-3 p-rgn)
               p-ff-sg (:ff-sg p-cf)
               p-distal-sg (:distal-sg p-layer)
               ac (p/active-cells p-layer)
               lc (or (p/learnable-cells p-layer) #{})
               pcon (:distal-perm-connected (p/params p-rgn))
               rgn-tree (nth (core/region-tree-seq state) rid)
-              bits (p/incoming-bits-value rgn-tree)
-              sig-bits (if (pos? rid)
-                         (p/signal-bits-value
-                          (nth (core/region-tree-seq state) (dec rid)))
-                         #{})]
+              bits (core/incoming-bits-value rgn-tree p/bits-value)
+              sig-bits (core/incoming-bits-value rgn-tree p/signal-bits-value)]
           ["__Active cells prev__"
            (str (sort ac))
            ""
@@ -687,7 +683,7 @@
   [lay prev-rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        pcols (->> (p/predictive-cells (:layer prev-rgn))
+        pcols (->> (p/predictive-cells (:layer-3 prev-rgn))
                    (map first)
                    (distinct)) ;; ?
         bit-votes (core/predicted-bit-votes prev-rgn pcols)
@@ -700,7 +696,7 @@
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        cols (p/active-columns (:column-field rgn))]
+        cols (p/active-columns (:layer-3 rgn))]
     (c/fill-style ctx (:active state-colors))
     (draw-element-group ctx lay cols)
     (c/fill ctx)
@@ -710,7 +706,7 @@
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        cols (->> (p/prior-predictive-cells (:layer rgn))
+        cols (->> (p/prior-predictive-cells (:layer-3 rgn))
                   (map first)
                   (distinct))]
     (c/fill-style ctx (:predicted state-colors))
@@ -722,7 +718,8 @@
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        cols (p/temporal-pooling-columns (:column-field rgn))]
+        cols (->> (p/temporal-pooling-cells (:layer-3 rgn))
+                  (map first))]
     (c/fill-style ctx (:temporal-pooling state-colors))
     (draw-element-group ctx lay cols)
     (c/fill ctx)
@@ -937,7 +934,8 @@
         ;; for now assume only one input
         inp (first (core/inputs-seq init-model))
         d-opts (:drawing @viz-options)
-        nbits (p/bit-width inp)
+        ;; for now assume one dimensional
+        nbits (first (p/dims-of inp))
         i-lay (inbits-1d-layout nbits 0 d-opts)
         ;; for now draw regions in a horizontal stack
         spacer (:h-space-px d-opts)
