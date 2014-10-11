@@ -1,5 +1,9 @@
 # TODO
 
+* config of drawing opts - keep steps / draw steps, size of bits, size of cols
+
+* allow shifting back in time beyond draw-steps to extent of keep-steps
+
 * plot most recent sliding window
 
 * summary of % predicted etc in recent time

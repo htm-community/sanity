@@ -1,4 +1,4 @@
-(ns comportexviz.demos.directional_steps_1d
+(ns comportexviz.demos.directional-steps-1d
   (:require [org.nfrac.comportex.demos.directional-steps-1d :as demo]))
 
 (defn ^:export n-region-model

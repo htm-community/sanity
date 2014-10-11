@@ -35,6 +35,7 @@
                         :disconnected nil
                         :permanences nil}
          :drawing {:draw-steps 25
+                   :input-w-px 150
                    :bit-w-px 5
                    :bit-h-px 2
                    :bit-shrink 0.85
@@ -44,7 +45,7 @@
                    :seg-w-px 30
                    :seg-h-px 10
                    :seg-h-space-px 50
-                   :h-space-px 80}
+                   :h-space-px 60}
          }))
 
 (def keep-steps (atom 25))
@@ -764,25 +765,37 @@
                       (get-in opts [:drawing :h-space-px]))
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    (c/text ctx {:text "Input bits.    Time -->"
+    (c/text-baseline ctx :top)
+    (c/text ctx {:text "Input on selected timestep."
+                 :x 2
+                 :y 0})
+    (c/text ctx {:text "Encoded bits.    Time -->"
                  :x (:x (layout-bounds i-lay))
-                 :y (- top-px 13)})
+                 :y 0})
     (c/text ctx {:text (scroll-status-str i-lay)
                  :x (:x (layout-bounds i-lay))
-                 :y (- top-px 3)})
+                 :y 10})
     (doseq [[rid r-lay] (map-indexed vector r-lays)]
       (c/text ctx {:text (str "Region " rid " columns.")
                    :x (:x (layout-bounds r-lay))
-                   :y (- top-px 13)})
+                   :y 0})
       (c/text ctx {:text (scroll-status-str r-lay)
                    :x (:x (layout-bounds r-lay))
-                   :y (- top-px 3)}))
+                   :y 10}))
     (let [segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))]
           (c/text ctx {:text (str "Segments. "
                              (if sel-col "(arrows keys to move)"
                                  "(click on a column)")
                              " Page up / page down to scroll columns.")
-                       :x segs-left :y (- top-px 13)}))
+                       :x segs-left :y 0}))
+    (let [inp-w-px (get-in opts [:drawing :input-w-px])
+          inp (first (core/inputs-seq sel-state))
+          rgn (first (core/region-seq sel-state))]
+      (when-let [draw-input (:comportexviz/draw-input inp)]
+        (c/save ctx)
+        (c/translate ctx 0 top-px)
+        (draw-input inp ctx inp-w-px (- height-px top-px) rgn)
+        (c/restore ctx)))
     (doseq [dt (range (count @steps))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) {})
@@ -931,24 +944,25 @@
 (defn init!
   [init-model steps-c selection sim-step!]
   (let [rgns (core/region-seq init-model)
+        d-opts (:drawing @viz-options)
         ;; for now assume only one input
         inp (first (core/inputs-seq init-model))
-        d-opts (:drawing @viz-options)
+        inp-w-px (:input-w-px d-opts)
         ;; for now assume one dimensional
         nbits (first (p/dims-of inp))
-        i-lay (inbits-1d-layout nbits 0 d-opts)
+        enc-lay (inbits-1d-layout nbits (+ inp-w-px 10) d-opts)
         ;; for now draw regions in a horizontal stack
         spacer (:h-space-px d-opts)
         r-lays (reduce (fn [lays rgn]
                          (let [ncol (p/size (p/topology rgn))
-                               left (-> (or (peek lays) i-lay)
+                               left (-> (or (peek lays) enc-lay)
                                         (right-px)
                                         (+ spacer))]
                            (conj lays (columns-1d-layout
                                        ncol left d-opts))))
                        []
                        rgns)]
-    (reset! layouts {:input i-lay
+    (reset! layouts {:input enc-lay
                      :regions r-lays}))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
