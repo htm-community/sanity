@@ -14,22 +14,20 @@
   (c/restore ctx))
 
 (defn draw-sentence-fn
-  [split-sentences terminator n-predictions n-ff-votes]
+  "For sensory input of a sequence of sentences, each of which is a
+   sequence of words. Returns a function used by viz-canvas to draw
+   the input."
+  [split-sentences n-predictions]
   (fn [this ctx w-px h-px rgn]
     (let [[curr-sen-i curr-word-j _] (p/domain-value this)
-          split-sentences split-sentences
-          curr-sen (-> (get split-sentences curr-sen-i)
-                       (conj terminator))
+          curr-sen (get split-sentences curr-sen-i)
           pr-cols (->> (p/predictive-cells (:layer-3 rgn))
                        (map first))
           pr-votes (core/predicted-bit-votes rgn pr-cols)
-          pr-bits (->> pr-votes
-                       (keep (fn [[i n]] (when (>= n n-ff-votes) i)))
-                       (set))
-          pr-words (p/decode (:encoder this) pr-bits n-predictions)
+          pr-words (p/decode (:encoder this) pr-votes n-predictions)
           left-x 5
-          cov-x (- w-px 5)
-          prc-x (- w-px 30)
+          vf-x (- w-px 30)
+          vpb-x (- w-px 5)
           sents-top 5
           curr-top (quot h-px 3)
           pr-top (* 2 (quot h-px 3))
@@ -37,8 +35,8 @@
       (c/save ctx)
       (c/font-style ctx "small-caps 14px sans-serif")
       (c/text-align ctx :right)
-      (text-rotated ctx {:text "coverage %" :x cov-x :y (+ pr-top 14)})
-      (text-rotated ctx {:text "precision %" :x prc-x :y (+ pr-top 14)})
+      (text-rotated ctx {:text "votes %" :x vf-x :y (+ pr-top 14)})
+      (text-rotated ctx {:text "votes per bit" :x vpb-x :y (+ pr-top 14)})
       (c/font-style ctx "small-caps bold 14px sans-serif")
       (c/text-baseline ctx :top)
       (c/text-align ctx :left)
@@ -69,15 +67,15 @@
           (c/fill-style ctx "#000"))
         (c/text ctx {:text word :x left-x :y y}))
       ;; predictions for next word
-      (doseq [[j {:keys [value coverage precision]
+      (doseq [[j {:keys [value votes-frac votes-per-bit]
                   }] (map-indexed vector pr-words)]
         (let [jy (+ pr-top (* spacing (inc j)))
               txt value]
           (c/text-align ctx :left)
           (c/text ctx {:text txt :x left-x :y jy})
           (c/text-align ctx :right)
-          (c/text ctx {:text (str (round (* coverage 100)))
-                       :x cov-x :y jy})
-          (c/text ctx {:text (str (round (* precision 100)))
-                       :x prc-x :y jy})))
+          (c/text ctx {:text (str (round (* votes-frac 100)))
+                       :x vf-x :y jy})
+          (c/text ctx {:text (str (round votes-per-bit))
+                       :x vpb-x :y jy})))
       (c/restore ctx))))

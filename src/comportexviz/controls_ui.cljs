@@ -160,7 +160,8 @@
               (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
               (checkbox viz [:columns :active] "Active columns") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns") [:br]
-              (checkbox viz [:columns :temporal-pooling] "TP columns")]
+              (checkbox viz [:columns :temporal-pooling] "TP columns")
+              (checkbox viz [:columns :vicarious] "Vicarious")]
              [:fieldset
               [:legend "Feed-forward synapses"]
               (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]
@@ -221,6 +222,6 @@
                       (swap! model core/update-by-uuid (:uuid rgn)
                              #(-> %
                                   (assoc-in [:column-field :spec] s)
-                                  (assoc-in [:layer :spec] s)))
+                                  (assoc-in [:layer-3 :spec] s)))
                       (.preventDefault e)
                       false)))))

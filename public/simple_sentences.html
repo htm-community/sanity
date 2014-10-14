@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>Simple sentences - comportex viz</title>
+  <link href="main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="comportex-viz"></canvas>
+  <div id="comportex-sidebar">
+    <div id="comportex-controls"></div>
+    <div id="comportex-tabs">
+      <div><h2>intro</h2>
+        <h3>Simple sentences</h3>
+        <p>A testbed for looking at generalisation in sequence
+        learning. The text is split into sentences at each period (.)
+        and each sentence into words. The words are presented through
+        a category encoder, i.e. with non-overlapping input bits.</p>
+        <form id="comportex-input-text-form">
+          Times to repeat each sentence:
+          <input id="comportex-input-repeats" value="3" />
+          <br/>
+          <textarea id="comportex-input-text" style="width:90%; height:35em">
+Jane has eyes .
+Jane has a head .
+Jane has a mouth .
+Jane has a brain .
+Jane has a book .
+Jane has no friends .
+
+Chifung has eyes .
+Chifung has a head .
+Chifung has a mouth .
+Chifung has a brain .
+Chifung has no book .
+Chifung has friends .
+
+Jane is something .
+Jane is alive .
+Jane is a person .
+Jane can talk .
+Jane can walk .
+Jane can eat .
+
+Chifung is something .
+Chifung is alive .
+Chifung is a person .
+Chifung can talk .
+Chifung can walk .
+Chifung can eat .
+
+the fox has eyes .
+the fox has a head .
+the fox has a mouth .
+the fox has a brain .
+the fox has a tail .
+the fox is something .
+the fox is alive .
+the fox is not a person .
+the fox can not talk .
+the fox can walk .
+the fox can eat .
+
+does Jane have eyes ? yes .
+does Jane have a head ? yes .
+does Jane have a mouth ? yes .
+does Jane have a brain ? yes .
+does Jane have a book ? yes .
+does Jane have friends ? no .
+does Jane have a tail ? no .
+
+does Chifung have eyes ? yes .
+does Chifung have a head ? yes .
+does Chifung have a mouth ? yes .
+does Chifung have a brain ? yes .
+does Chifung have a book ? no .
+does Chifung have friends ? yes .
+does Chifung have a tail ? no .
+
+does the fox have eyes ? yes .
+does the fox have a head ? yes .
+does the fox have a mouth ? yes .
+does the fox have a brain ? yes .
+does the fox have a book ? no .
+does the fox have friends ? no .
+does the fox have a tail ? yes .
+          </textarea>
+          <br/>
+          <input type="submit" value="Restart with this input" />
+          (this will also reset all parameter values)
+        </form>
+      </div>
+      <div><h2>drawing</h2>
+        <div id="comportex-drawing"></div>
+      </div>
+      <div><h2>parameters</h2>
+        <div id="comportex-parameters"></div>
+      </div>
+      <div><h2>plots</h2>
+        <div id="comportex-plots"></div>
+      </div>
+      <div><h2>details</h2>
+        <textarea id="detail-text"></textarea>
+      </div>
+  </div>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.main");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.simple_sentences");</script>
+  <script type="text/javascript">
+    comportexviz.demos.simple_sentences.restart_from_ui();
+  </script>
+</body>

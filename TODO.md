@@ -1,5 +1,7 @@
 # TODO
 
+* remove state from Layouts, just keep scroll-top & elements-per-dt in an atom
+
 * config of drawing opts - keep steps / draw steps, size of bits, size of cols
 
 * allow shifting back in time beyond draw-steps to extent of keep-steps

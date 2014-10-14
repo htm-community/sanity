@@ -127,9 +127,9 @@
   (cui/handle-parameters! model selection))
 
 (defn ^:export set-model
-  {:pre (nil? @model)} ; currently
   [x]
-  (->> (reset! model x)
-       (put! steps-c))
-  (init-ui! x))
-
+  (let [init? (nil? @model)]
+    (->> (reset! model x)
+         (put! steps-c))
+    (when init?
+      (init-ui! x))))

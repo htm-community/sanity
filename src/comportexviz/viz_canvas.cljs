@@ -25,6 +25,7 @@
                    :overlaps nil
                    :predictive true
                    :temporal-pooling true
+                   :vicarious true
                    :scroll-counter 0}
          :ff-synapses {:active nil
                        :inactive nil
@@ -87,6 +88,7 @@
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
    :temporal-pooling (hsl :green 1 0.5 0.4)
+   :vicarious (hsl 40 1 0.5 0.75)
    })
 
 ;;; ## Layouts
@@ -432,6 +434,7 @@
         prev-ac (p/active-cells prev-layer)
         prev-pc (p/predictive-cells prev-layer)
         learning (:learn-segments layer)
+        vlearning (:vicarious-segs layer)
         active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
         distal-sg (:distal-sg layer)
@@ -455,7 +458,8 @@
                   cell-id [col ci]
                   cell-active? (ac cell-id)
                   cell-predictive? (prev-pc cell-id)
-                  learn-cell? (find learning cell-id)
+                  vlearn-cell? (find vlearning cell-id)
+                  learn-cell? (or (find learning cell-id) vlearn-cell?)
                   learn-seg-idx (when learn-cell? (val learn-cell?))
                   seg-sg (mapv #(group-synapses % prev-ac pcon) segs)
                   on? (fn [sg] (>= (count (sg [:connected :active])) th))
@@ -491,6 +495,7 @@
                                      (if learn-seg-idx
                                        (str "segment " learn-seg-idx)
                                        "new segment")
+                                     (if vlearn-cell? " vicariously")
                                      ")")))
                    :x cell-x :y (- cell-y cell-r-px 5)})
       (doseq [[si sg] (map-indexed vector seg-sg)
@@ -594,6 +599,9 @@
       "__Signal cells__"
       (str (sort (p/signal-cells layer)))
       ""
+      "__Vicarious cells / segs__"
+      (str (sort (:vicarious-segs layer)))
+      ""
       "__TP scores__"
       (str (sort (:tp-scores cf)))
       ""
@@ -648,7 +656,10 @@
                         (if (lc id) " L"
                             (if (ac id) " A"))))])
               ])
-           ]))]
+           ]))
+      ""
+      "__spec__"
+      (sort (p/params rgn))]
      (flatten)
      (interpose \newline)
      (apply str))))
@@ -722,6 +733,17 @@
         cols (->> (p/temporal-pooling-cells (:layer-3 rgn))
                   (map first))]
     (c/fill-style ctx (:temporal-pooling state-colors))
+    (draw-element-group ctx lay cols)
+    (c/fill ctx)
+    el))
+
+(defn vicarious-columns-image
+  [lay rgn]
+  (let [el (image-buffer (layout-bounds lay))
+        ctx (c/get-context el "2d")
+        cols (->> (:vicarious-cells (:layer-3 rgn))
+                  (map first))]
+    (c/fill-style ctx (:vicarious state-colors))
     (draw-element-group ctx lay cols)
     (c/fill ctx)
     el))
@@ -832,6 +854,10 @@
         (when (get-in opts [:columns :temporal-pooling])
           (->> (tp-columns-image r-lay rgn)
                (with-cache cache [::tpcols rid] opts :columns)
+               (draw-image-dt ctx r-lay dt)))
+        (when (get-in opts [:columns :vicarious])
+          (->> (vicarious-columns-image r-lay rgn)
+               (with-cache cache [::vcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt))))
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))
