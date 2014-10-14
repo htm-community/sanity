@@ -25,7 +25,7 @@
                    :overlaps nil
                    :predictive true
                    :temporal-pooling true
-                   :vicarious true
+                   :alternative false
                    :scroll-counter 0}
          :ff-synapses {:active nil
                        :inactive nil
@@ -88,7 +88,7 @@
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
    :temporal-pooling (hsl :green 1 0.5 0.4)
-   :vicarious (hsl 40 1 0.5 0.75)
+   :alternative (hsl 40 1 0.5 0.75)
    })
 
 ;;; ## Layouts
@@ -434,7 +434,7 @@
         prev-ac (p/active-cells prev-layer)
         prev-pc (p/predictive-cells prev-layer)
         learning (:learn-segments layer)
-        vlearning (:vicarious-segs layer)
+        alt-learning (:alternative-segments layer)
         active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
         distal-sg (:distal-sg layer)
@@ -495,7 +495,7 @@
                                      (if learn-seg-idx
                                        (str "segment " learn-seg-idx)
                                        "new segment")
-                                     (if vlearn-cell? " vicariously")
+                                     (if alt-learn-cell? " alternatively")
                                      ")")))
                    :x cell-x :y (- cell-y cell-r-px 5)})
       (doseq [[si sg] (map-indexed vector seg-sg)
@@ -599,8 +599,8 @@
       "__Signal cells__"
       (str (sort (p/signal-cells layer)))
       ""
-      "__Vicarious cells / segs__"
-      (str (sort (:vicarious-segs layer)))
+      "__Alternative cells / segs__"
+      (str (sort (:alternative-segments layer)))
       ""
       "__TP scores__"
       (str (sort (:tp-scores cf)))
@@ -737,13 +737,13 @@
     (c/fill ctx)
     el))
 
-(defn vicarious-columns-image
+(defn alternative-columns-image
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        cols (->> (:vicarious-cells (:layer-3 rgn))
+        cols (->> (:alternative-cells (:layer-3 rgn))
                   (map first))]
-    (c/fill-style ctx (:vicarious state-colors))
+    (c/fill-style ctx (:alternative state-colors))
     (draw-element-group ctx lay cols)
     (c/fill ctx)
     el))
@@ -855,8 +855,8 @@
           (->> (tp-columns-image r-lay rgn)
                (with-cache cache [::tpcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt)))
-        (when (get-in opts [:columns :vicarious])
-          (->> (vicarious-columns-image r-lay rgn)
+        (when (get-in opts [:columns :alternative])
+          (->> (alternative-columns-image r-lay rgn)
                (with-cache cache [::vcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt))))
       (when (not= opts (:opts @cache))

@@ -161,7 +161,7 @@
               (checkbox viz [:columns :active] "Active columns") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns") [:br]
               (checkbox viz [:columns :temporal-pooling] "TP columns")
-              (checkbox viz [:columns :vicarious] "Vicarious")]
+              (checkbox viz [:columns :alternative] "Alternative")]
              [:fieldset
               [:legend "Feed-forward synapses"]
               (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]

@@ -13,9 +13,7 @@
 
 (def spec
   (assoc demo/spec
-    :back-flow-bursting? false
     :distal-punish? false
-    :spontaneous-activation? true
     :ff-potential-frac 0.3))
 
 (defn ^:export input-gen

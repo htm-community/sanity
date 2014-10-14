@@ -16,73 +16,84 @@
         and each sentence into words. The words are presented through
         a category encoder, i.e. with non-overlapping input bits.</p>
         <form id="comportex-input-text-form">
-          Times to repeat each sentence:
-          <input id="comportex-input-repeats" value="3" />
+          Repeats (each sentence):
+          <input id="comportex-input-repeats" size="3" value="3" />
+          Word encoder:
+          <select id="comportex-encoder">
+            <option value="categorical">categorical</option>
+            <option value="random">random</option>
+          </select>
           <br/>
           <textarea id="comportex-input-text" style="width:90%; height:35em">
-Jane has eyes .
-Jane has a head .
-Jane has a mouth .
-Jane has a brain .
-Jane has a book .
-Jane has no friends .
+Jane.
+Chifung.
 
-Chifung has eyes .
-Chifung has a head .
-Chifung has a mouth .
-Chifung has a brain .
-Chifung has no book .
-Chifung has friends .
+Jane has eyes.
+Jane has a head.
+Jane has a mouth.
+Jane has a brain.
+Jane has a book.
+Jane has no friends.
 
-Jane is something .
-Jane is alive .
-Jane is a person .
-Jane can talk .
-Jane can walk .
-Jane can eat .
+Chifung has eyes.
+Chifung has a head.
+Chifung has a mouth.
+Chifung has a brain.
+Chifung has no book.
+Chifung has friends.
 
-Chifung is something .
-Chifung is alive .
-Chifung is a person .
-Chifung can talk .
-Chifung can walk .
-Chifung can eat .
+Jane is something.
+Jane is alive.
+Jane is a person.
+Jane can talk.
+Jane can walk.
+Jane can eat.
 
-the fox has eyes .
-the fox has a head .
-the fox has a mouth .
-the fox has a brain .
-the fox has a tail .
-the fox is something .
-the fox is alive .
-the fox is not a person .
-the fox can not talk .
-the fox can walk .
-the fox can eat .
+Chifung is something.
+Chifung is alive.
+Chifung is a person.
+Chifung can talk.
+Chifung can walk.
+Chifung can eat.
 
-does Jane have eyes ? yes .
-does Jane have a head ? yes .
-does Jane have a mouth ? yes .
-does Jane have a brain ? yes .
-does Jane have a book ? yes .
-does Jane have friends ? no .
-does Jane have a tail ? no .
+a fox has eyes.
+a fox has a head.
+a fox has a mouth.
+a fox has a brain.
+a fox has a tail.
+a fox is something.
+a fox is alive.
+a fox is no person.
+a fox can no talk.
+a fox can walk.
+a fox can eat.
 
-does Chifung have eyes ? yes .
-does Chifung have a head ? yes .
-does Chifung have a mouth ? yes .
-does Chifung have a brain ? yes .
-does Chifung have a book ? no .
-does Chifung have friends ? yes .
-does Chifung have a tail ? no .
+does Jane have eyes ? yes.
+does Jane have a head ? yes.
+does Jane have a mouth ? yes.
+does Jane have a brain ? yes.
+does Jane have a book ? yes.
+does Jane have friends ? no.
+does Jane have a tail ? no.
 
-does the fox have eyes ? yes .
-does the fox have a head ? yes .
-does the fox have a mouth ? yes .
-does the fox have a brain ? yes .
-does the fox have a book ? no .
-does the fox have friends ? no .
-does the fox have a tail ? yes .
+does Chifung have eyes ? yes.
+does Chifung have a head ? yes.
+does Chifung have a mouth ? yes.
+does Chifung have a brain ? yes.
+does Chifung have a book ? no.
+does Chifung have friends ? yes.
+does Chifung have a tail ? no.
+
+does a fox have eyes ? yes.
+does a fox have a head ? yes.
+does a fox have a mouth ? yes.
+does a fox have a brain ? yes.
+does a fox have a book ? no.
+does a fox have friends ? no.
+does a fox have a tail ? yes.
+
+Jane has no tail.
+Chifung has no tail.
           </textarea>
           <br/>
           <input type="submit" value="Restart with this input" />
