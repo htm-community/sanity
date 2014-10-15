@@ -458,8 +458,8 @@
                   cell-id [col ci]
                   cell-active? (ac cell-id)
                   cell-predictive? (prev-pc cell-id)
-                  vlearn-cell? (find vlearning cell-id)
-                  learn-cell? (or (find learning cell-id) vlearn-cell?)
+                  alt-learn-cell? (find alt-learning cell-id)
+                  learn-cell? (or (find learning cell-id) alt-learn-cell?)
                   learn-seg-idx (when learn-cell? (val learn-cell?))
                   seg-sg (mapv #(group-synapses % prev-ac pcon) segs)
                   on? (fn [sg] (>= (count (sg [:connected :active])) th))
@@ -791,14 +791,14 @@
     (c/text ctx {:text "Input on selected timestep."
                  :x 2
                  :y 0})
-    (c/text ctx {:text "Encoded bits.    Time -->"
+    (c/text ctx {:text "Encoded bits.    => time =>"
                  :x (:x (layout-bounds i-lay))
                  :y 0})
     (c/text ctx {:text (scroll-status-str i-lay)
                  :x (:x (layout-bounds i-lay))
                  :y 10})
     (doseq [[rid r-lay] (map-indexed vector r-lays)]
-      (c/text ctx {:text (str "Region " rid " columns.")
+      (c/text ctx {:text (str "Region " rid " columns.   => time =>")
                    :x (:x (layout-bounds r-lay))
                    :y 0})
       (c/text ctx {:text (scroll-status-str r-lay)
