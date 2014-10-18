@@ -11,10 +11,7 @@
 
 (def n-predictions 8)
 
-(def spec
-  (assoc demo/spec
-    :distal-punish? false
-    :ff-potential-frac 0.3))
+(def spec demo/spec)
 
 (defn ^:export input-gen
   [text n-repeats]

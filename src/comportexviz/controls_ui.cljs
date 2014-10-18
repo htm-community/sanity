@@ -158,14 +158,16 @@
              [:fieldset
               [:legend "Columns"]
               (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
+              (checkbox viz [:columns :n-segments] "Num segments") [:br]
               (checkbox viz [:columns :active] "Active columns") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns") [:br]
-              (checkbox viz [:columns :temporal-pooling] "TP columns")
+              (checkbox viz [:columns :temporal-pooling] "TP columns") [:br]
               (checkbox viz [:columns :alternative] "Alternative")]
              [:fieldset
               [:legend "Feed-forward synapses"]
               (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]
               (checkbox viz [:ff-synapses :inactive] "Inactive ff-synapses") [:br]
+              (checkbox viz [:ff-synapses :disconnected] "Disconnected ff-synapses") [:br]
               (checkbox viz [:ff-synapses :permanences] "Permanences")]
              [:fieldset
               [:legend "Lateral dendrite segments"]

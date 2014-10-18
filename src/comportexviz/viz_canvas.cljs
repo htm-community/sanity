@@ -23,12 +23,14 @@
                  :predicted true}
          :columns {:active true
                    :overlaps nil
+                   :n-segments nil
                    :predictive true
                    :temporal-pooling true
                    :alternative false
                    :scroll-counter 0}
          :ff-synapses {:active nil
                        :inactive nil
+                       :disconnected nil
                        :permanences nil}
          :lat-synapses {:from :learning ;; :learning, :all, :none
                         :active true
@@ -83,6 +85,8 @@
 (def state-colors
   {:background "white"
    :inactive "white"
+   :inactive-syn "black"
+   :disconnected "white"
    :active (hsl :red 1.0 0.5)
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
@@ -319,16 +323,19 @@
         src-bits (p/bits-value src)
         src-sbits (p/signal-bits-value src)
         do-inactive? (get-in opts [:ff-synapses :inactive])
+        do-disconn? (get-in opts [:ff-synapses :disconnected])
         do-perm? (get-in opts [:ff-synapses :permanences])]
     (doseq [col cols
-            syn-state (concat (when do-inactive? [:inactive])
+            syn-state (concat (when do-disconn? [:disconnected])
+                              (when do-inactive? [:inactive-syn])
                               [:active :active-predicted])
             :let [all-syns (p/in-synapses ff-sg col)
                   syns (select-keys all-syns (p/sources-connected-to ff-sg col))
                   sub-syns (case syn-state
                              :active (select-keys syns src-bits)
                              :active-predicted (select-keys syns src-sbits)
-                             :inactive (apply dissoc syns src-bits))
+                             :inactive-syn (apply dissoc syns src-bits)
+                             :disconnected (apply dissoc all-syns (keys syns)))
                   [this-x this-y] (element-xy r-lay col sel-dt)]]
       (c/stroke-style ctx (state-colors syn-state))
       (doseq [[in-id perm] sub-syns
@@ -349,7 +356,7 @@
                    [(if (>= p pcon)
                       :connected :disconnected)
                     (if (ac id)
-                      :active :inactive)])
+                      :active :inactive-syn)])
                  syns))
 
 (defn natural-curve
@@ -544,7 +551,7 @@
               do-from (get-in opts [:lat-synapses :from])]
           (when (or (= do-from :all)
                     (and (= do-from :learning) learn-seg?))
-            (doseq [syn-state (concat (when do-ina? [:inactive])
+            (doseq [syn-state (concat (when do-ina? [:inactive-syn])
                                       (when do-act? [:active]))
                     syn-conn (concat (when do-disc? [:disconnected])
                                      [:connected])
@@ -759,6 +766,29 @@
     (c/fill ctx)
     el))
 
+(defn count-segs-in-column
+  [distal-sg depth col]
+  (reduce (fn [n ci]
+            (+ n (util/count-filter seq
+                                    (p/cell-segments distal-sg [col ci]))))
+          (range depth)))
+
+(defn n-segments-columns-image
+  [lay rgn]
+  (let [el (image-buffer (layout-bounds lay))
+        ctx (c/get-context el "2d")
+        layer (:layer-3 rgn)
+        sg (:distal-sg layer)
+        n-cols (p/size-of layer)
+        depth (p/layer-depth layer)
+        col-m (->> (map #(count-segs-in-column sg depth %) (range n-cols))
+                   (zipmap (range n-cols))
+                   (util/remap #(min 1.0 (/ % 16))))]
+    (c/fill-style ctx "black")
+    (fill-elements ctx lay col-m c/alpha)
+    (c/fill ctx)
+    el))
+
 (defn scroll-status-str
   [lay]
   (str "Showing " (top-id-onscreen lay)
@@ -842,6 +872,10 @@
         (when (get-in opts [:columns :overlaps])
           (->> (overlaps-columns-image r-lay rgn)
                (with-cache cache [::ocols rid] opts :columns)
+               (draw-image-dt ctx r-lay dt)))
+        (when (get-in opts [:columns :n-segments])
+          (->> (n-segments-columns-image r-lay rgn)
+               (with-cache cache [::nsegcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt)))
         (when (get-in opts [:columns :active])
           (->> (active-columns-image r-lay rgn)
