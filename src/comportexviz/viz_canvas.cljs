@@ -1,5 +1,18 @@
 (ns comportexviz.viz-canvas
-  (:require [c2.dom :as dom :refer [->dom]]
+  (:require [comportexviz.viz-layouts :as lay
+             :refer [layout-bounds
+                     n-onscreen
+                     top-id-onscreen
+                     element-xy
+                     draw-element-group
+                     fill-elements
+                     circle
+                     centred-rect
+                     inbits-1d-layout
+                     columns-1d-layout
+                     inbits-2d-layout
+                     columns-2d-layout]]
+            [c2.dom :as dom :refer [->dom]]
             [c2.event]
             [goog.events.EventType]
             [goog.events :as gevents]
@@ -16,44 +29,7 @@
                    [comportexviz.macros :refer [with-cache]]))
 
 (def height-px 900)
-(def top-px 20)
-
-(def viz-options
-  (atom {:input {:active true
-                 :predicted true}
-         :columns {:active true
-                   :overlaps nil
-                   :n-segments nil
-                   :predictive true
-                   :temporal-pooling true
-                   :alternative false
-                   :scroll-counter 0}
-         :ff-synapses {:active nil
-                       :inactive nil
-                       :disconnected nil
-                       :permanences nil}
-         :lat-synapses {:from :learning ;; :learning, :all, :none
-                        :active true
-                        :inactive nil
-                        :disconnected nil
-                        :permanences nil}
-         :drawing {:draw-steps 25
-                   :input-w-px 150
-                   :bit-w-px 5
-                   :bit-h-px 2
-                   :bit-shrink 0.85
-                   :col-d-px 5
-                   :col-shrink 0.85
-                   :cell-r-px 10
-                   :seg-w-px 30
-                   :seg-h-px 10
-                   :seg-h-space-px 50
-                   :h-space-px 60}
-         }))
-
-(def keep-steps (atom 25))
-(def steps (atom []))
-(def layouts (atom nil))
+(def top-px 30)
 
 ;;; ## Colours
 
@@ -95,204 +71,48 @@
    :alternative (hsl 40 1 0.5 0.75)
    })
 
-;;; ## Layouts
+(def viz-options
+  (atom {:input {:active true
+                 :predicted true}
+         :columns {:active true
+                   :overlaps nil
+                   :n-segments nil
+                   :predictive true
+                   :temporal-pooling true
+                   :alternative false
+                   :scroll-counter 0}
+         :ff-synapses {:active nil
+                       :inactive nil
+                       :disconnected nil
+                       :permanences nil}
+         :lat-synapses {:from :learning ;; :learning, :all, :none
+                        :active true
+                        :inactive nil
+                        :disconnected nil
+                        :permanences nil}
+         :drawing {:draw-steps 25
+                   :input-w-px 150
+                   :bit-w-px 4
+                   :bit-h-px 3
+                   :bit-shrink 0.85
+                   :col-d-px 5
+                   :col-shrink 0.85
+                   :cell-r-px 10
+                   :seg-w-px 30
+                   :seg-h-px 10
+                   :seg-h-space-px 50
+                   :h-space-px 60
+                   :highlight-color (:highlight state-colors)}
+         }))
 
-(defprotocol PArrayLayout
-  (layout-bounds [this]
-    "Returns `{:x :y :w :h}` defining bounding box from top left.")
-  (origin-px-topleft [this dt]
-    "Returns [x y] pixel coordinates for top left of time offset dt.")
-  (local-px-topleft [this id]
-    "Returns [x y] pixel coordinates for id relative to the dt origin.")
-  (element-size-px [this]
-    "The size [w h] in pixels of each drawn array element.")
-  (n-onscreen [this]
-    "Number of elements per timestep visible on the screen, for pagination.")
-  (top-id-onscreen [this]
-    "Current scroll position, giving the first element id visible on screen.")
-  (clicked-id [this x y]
-    "Returns [dt id] for the [x y] pixel coordinates, or null.")
-  (draw-element [this ctx id]
-    "Draws the element id in local coordinates. Does not stroke or fill.")
-  (highlight-dt [this ctx dt]
-    "Draws highlight on the time offset dt in global coordinates.")
-  (highlight-element [this ctx dt id]
-    "Draws highlight on the element id in global coordinates."))
-
-(defn right-px
-  [this]
-  (let [b (layout-bounds this)]
-    (+ (:x b) (:w b))))
-
-(defn element-xy
-  "Returns pixel coordinates on the canvas `[x y]` for the
-   center of an input element `id` at time delay `dt`."
-  [lay id dt]
-  (let [[w h] (element-size-px lay)
-        [x y] (origin-px-topleft lay dt)
-        [lx ly] (local-px-topleft lay id)]
-    [(+ x lx (* w 0.5))
-     (+ y ly (* h 0.5))]))
-
-(defn draw-element-group
-  "Draws all elements with the given ids in a single path, without
-   filling or stroking it. For efficiency, skips any ids which are
-   currently offscreen."
-  [ctx lay ids]
-  (let [j0 (top-id-onscreen lay)
-        j1 (+ j0 (n-onscreen lay) -1)]
-    (c/begin-path ctx)
-    (doseq [i ids
-           :when (<= j0 i j1)]
-      (draw-element lay ctx i))
-    ctx))
-
-(defn fill-elements
-  [ctx lay id-styles set-style]
-  (c/save ctx)
-  (doseq [[style ids] (group-by id-styles (keys id-styles))]
-    (draw-element-group ctx lay ids)
-    (set-style ctx style)
-    (c/fill ctx))
-  (c/restore ctx)
-  ctx)
+(def keep-steps (atom 25))
+(def steps (atom []))
+(def layouts (atom nil))
 
 (defn draw-image-dt
   [ctx lay dt img]
-  (let [[x y] (origin-px-topleft lay dt)]
+  (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
-
-;;; ## Grid Layouts support
-
-(defn circle
-  [ctx x y r]
-  (.arc ctx x y r 0 (* (.-PI js/Math) 2) true))
-
-(defn circle-from-bounds
-  [ctx x y w]
-  (let [r (* w 0.5)]
-    (circle ctx (+ x r) (+ y r) r)))
-
-(defn centred-rect
-  [cx cy w h]
-  {:x (- cx (/ w 2))
-   :y (- cy (/ h 2))
-   :w w
-   :h h})
-
-(defn highlight-rect
-  [ctx rect]
-  (doto ctx
-    (c/stroke-style (:highlight state-colors))
-    (c/stroke-width 3)
-    (c/stroke-rect rect)
-    (c/stroke-style "black")
-    (c/stroke-width 1)
-    (c/stroke-rect rect)))
-
-;;; ## Grid Layouts
-
-(defrecord Grid1dLayout
-    [elements-per-dt
-     scroll-top
-     draw-steps
-     element-w
-     element-h
-     shrink
-     left-px
-     circles?]
-  PArrayLayout
-  (layout-bounds [_]
-    {:x left-px :y top-px
-     :w (* draw-steps element-w)
-     :h (* elements-per-dt element-h)})
-  
-  (origin-px-topleft [_ dt]
-    (let [right (+ left-px (* draw-steps element-w))
-          off-x-px (* (+ dt 1) element-w)
-          x-px (- right off-x-px)]
-      [x-px top-px]))
-  
-  (local-px-topleft [_ id]
-    [0 (* (- id scroll-top) element-h)])
-  
-  (element-size-px [_]
-    [element-w element-h])
-  
-  (n-onscreen [_]
-    (min elements-per-dt
-         (/ (- height-px top-px) element-h)))
-  
-  (top-id-onscreen [_]
-    scroll-top)
-  
-  (clicked-id [this x y]
-    (let [right (+ left-px (* draw-steps element-w))
-          dt (Math/floor (/ (- right x) element-w))
-          id* (Math/floor (/ (- y top-px) element-h))
-          id (+ id* scroll-top)]
-      (when (and (<= 0 dt (count @steps))
-                 (<= 0 id* (n-onscreen this)))
-        [dt id])))
-  
-  (draw-element [this ctx id]
-    (let [[x y] (local-px-topleft this id)]
-      (if circles?
-        (circle-from-bounds ctx x y
-                            (* element-w shrink))
-        (.rect ctx x y
-               (* element-w shrink)
-               (* element-h shrink)))))
-  
-  (highlight-dt [this ctx dt]
-    ;; draw vertical axis on selected dt
-    (let [[x y] (origin-px-topleft this dt)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x x
-                           :y (- y 5)
-                           :w (+ element-w 1)
-                           :h (+ 10 (:h bb))})))
-  
-  (highlight-element [this ctx dt id]
-    ;; draw horizontal axis on selected id
-    (let [[x y] (origin-px-topleft this dt)
-          [lx ly] (local-px-topleft this id)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x (- (:x bb) 5)
-                           :y (+ y ly)
-                           :w (+ (:w bb) 10)
-                           :h (+ element-h 1)}))))
-
-(defn inbits-1d-layout
-  [nbits left opts]
-  (let [{:keys [draw-steps
-                bit-w-px
-                bit-h-px
-                bit-shrink]} opts]
-    (map->Grid1dLayout
-     {:elements-per-dt nbits
-      :scroll-top 0
-      :draw-steps draw-steps
-      :element-w bit-w-px
-      :element-h bit-h-px
-      :shrink bit-shrink
-      :left-px left
-      :circles? false})))
-
-(defn columns-1d-layout
-  [ncol left opts]
-  (let [{:keys [draw-steps
-                col-d-px
-                col-shrink]} opts]
-    (map->Grid1dLayout
-     {:elements-per-dt ncol
-      :scroll-top 0
-      :draw-steps draw-steps
-      :element-w col-d-px
-      :element-h col-d-px
-      :shrink col-shrink
-      :left-px left
-      :circles? true})))
 
 (defn scroll-columns!
   [down?]
@@ -794,7 +614,7 @@
   (str "Showing " (top-id-onscreen lay)
        "--" (+ (top-id-onscreen lay)
                (n-onscreen lay) -1)
-       " of " (:elements-per-dt lay)))
+       " of " (p/size (:topo lay))))
 
 (defn draw!
   [{sel-dt :dt
@@ -807,13 +627,14 @@
   (let [opts @viz-options
         i-lay (:input @layouts)
         r-lays (:regions @layouts)
+        draw-steps (get-in opts [:drawing :draw-steps])
         sel-state (nth @steps sel-dt)
         sel-prev-state (nth @steps (inc sel-dt) {})
         canvas-el (->dom "#comportex-viz")
         ctx (c/get-context canvas-el "2d")
         inbits-bg (bg-image i-lay)
         columns-bgs (map bg-image r-lays)
-        cells-left (+ (right-px (last r-lays))
+        cells-left (+ (lay/right-px (last r-lays))
                       (get-in opts [:drawing :h-space-px]))
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
@@ -848,25 +669,32 @@
         (c/translate ctx 0 top-px)
         (draw-input inp ctx inp-w-px (- height-px top-px) rgn)
         (c/restore ctx)))
-    (doseq [dt (range (count @steps))
+    (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) {})
                   prev-first-region (first (core/region-seq prev-state))
                   rgns (core/region-seq state)
+                  inp (first (core/inputs-seq state))
                   cache (::cache (meta state))]]
-      (->> inbits-bg
-           (draw-image-dt ctx i-lay dt))
-      (when (get-in opts [:input :active])
-        (->> (active-bits-image i-lay (first (core/inputs-seq state)))
-             (with-cache cache ::abits opts :input)
-             (draw-image-dt ctx i-lay dt)))
-      (when (and (get-in opts [:input :predicted])
-                 prev-first-region)
-        (->> (pred-bits-image i-lay prev-first-region)
-             (with-cache cache ::pbits opts :input)
-             (draw-image-dt ctx i-lay dt)))
+      ;; draw encoded inbits
+      (when (or (== 1 (count (p/dims-of inp)))
+                (== dt sel-dt))
+        (->> inbits-bg
+             (draw-image-dt ctx i-lay dt))
+        (when (get-in opts [:input :active])
+          (->> (active-bits-image i-lay inp)
+               (with-cache cache ::abits opts :input)
+               (draw-image-dt ctx i-lay dt)))
+        (when (and (get-in opts [:input :predicted])
+                   prev-first-region)
+          (->> (pred-bits-image i-lay prev-first-region)
+               (with-cache cache ::pbits opts :input)
+               (draw-image-dt ctx i-lay dt))))
+      ;; draw regions
       (doseq [[rid r-lay rgn bg-i]
-              (map vector (range) r-lays rgns columns-bgs)]
+              (map vector (range) r-lays rgns columns-bgs)
+              :when (or (== 1 (count (p/dims-of rgn)))
+                        (== dt sel-dt))]
         (->> bg-i
              (draw-image-dt ctx r-lay dt))
         (when (get-in opts [:columns :overlaps])
@@ -896,12 +724,12 @@
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))
     ;; highlight selection
-    (highlight-dt i-lay ctx sel-dt)
+    (lay/highlight-dt i-lay ctx sel-dt)
     (doseq [r-lay r-lays]
-      (highlight-dt r-lay ctx sel-dt))
+      (lay/highlight-dt r-lay ctx sel-dt))
     (when sel-col
       (let [r-lay (nth r-lays sel-rid)]
-        (highlight-element r-lay ctx sel-dt sel-col)))
+        (lay/highlight-element r-lay ctx sel-dt sel-col)))
     ;; draw feed-forward synapses
     ;; TODO mapping multiple input sources
     (when (get-in opts [:ff-synapses :active])
@@ -953,13 +781,13 @@
              r-lays (:regions @layouts)
              ;; we need to assume there is a previous step, so:
              max-dt (- (count @steps) 2)]
-         (if-let [[dt _] (clicked-id i-lay x y)]
+         (if-let [[dt _] (lay/clicked-id i-lay x y)]
            ;; in-bit clicked
            (swap! selection assoc :dt (min dt max-dt))
            ;; otherwise, check regions
            (loop [rid 0]
              (if (< rid (count r-lays))
-               (if-let [[dt id] (clicked-id (nth r-lays rid) x y)]
+               (if-let [[dt id] (lay/clicked-id (nth r-lays rid) x y)]
                  (reset! selection {:region rid :col id
                                     :dt (min dt max-dt)})
                  (recur (inc rid)))
@@ -1008,18 +836,24 @@
         ;; for now assume only one input
         inp (first (core/inputs-seq init-model))
         inp-w-px (:input-w-px d-opts)
-        ;; for now assume one dimensional
-        nbits (first (p/dims-of inp))
-        enc-lay (inbits-1d-layout nbits (+ inp-w-px 10) d-opts)
+        ;; check dimensionality of input
+        itopo (p/topology inp)
+        enc-lay (if (== 1 (count (p/dimensions itopo)))
+                  (inbits-1d-layout itopo top-px (+ inp-w-px 10) height-px d-opts)
+                  (inbits-2d-layout itopo top-px (+ inp-w-px 10) height-px d-opts))
         ;; for now draw regions in a horizontal stack
         spacer (:h-space-px d-opts)
         r-lays (reduce (fn [lays rgn]
-                         (let [ncol (p/size (p/topology rgn))
+                         (let [topo (p/topology rgn)
                                left (-> (or (peek lays) enc-lay)
-                                        (right-px)
-                                        (+ spacer))]
-                           (conj lays (columns-1d-layout
-                                       ncol left d-opts))))
+                                        (lay/right-px)
+                                        (+ spacer))
+                               r-lay (if (== 1 (count (p/dimensions topo)))
+                                       (columns-1d-layout
+                                        topo top-px left height-px d-opts)
+                                       (columns-2d-layout
+                                        topo top-px left height-px d-opts))]
+                           (conj lays r-lay)))
                        []
                        rgns)]
     (reset! layouts {:input enc-lay
