@@ -7,7 +7,8 @@
                  [com.cemerick/pprng "0.0.2"]
                  [org.nfrac/comportex "0.0.5-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
-                 [com.keminglabs/c2 "0.2.4-SNAPSHOT"]]
+                 [com.keminglabs/c2 "0.2.4-SNAPSHOT"]
+                 [cljs-http "0.1.18"]]
   
   :plugins [[lein-cljsbuild "1.0.3"]]
 

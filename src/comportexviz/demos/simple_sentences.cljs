@@ -33,9 +33,11 @@
         text (dom/val (->dom "#comportex-input-text"))]
     (comportexviz.main.set-model (n-region-model text n-reps 1))))
 
-(let [form-el (->dom "#comportex-input-text-form")]
-  (event/on-raw form-el :submit
-                (fn [e]
-                  (restart-from-ui)
-                  (.preventDefault e)
-                  false)))
+(defn ^:export handle-user-input-form
+  []
+  (let [form-el (->dom "#comportex-input-text-form")]
+    (event/on-raw form-el :submit
+                  (fn [e]
+                    (restart-from-ui)
+                    (.preventDefault e)
+                    false))))
