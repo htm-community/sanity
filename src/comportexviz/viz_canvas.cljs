@@ -92,7 +92,7 @@
                         :permanences nil}
          :drawing {:draw-steps 25
                    :input-w-px 150
-                   :bit-w-px 4
+                   :bit-w-px 3
                    :bit-h-px 3
                    :bit-shrink 0.85
                    :col-d-px 5

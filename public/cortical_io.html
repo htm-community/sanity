@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>cortical.io - comportex viz</title>
+  <link href="main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="comportex-viz"></canvas>
+  <div id="comportex-sidebar">
+    <div id="comportex-controls"></div>
+    <div id="comportex-tabs">
+      <div><h2>intro</h2>
+        <h3>cortical.io</h3>
+        <p></p>
+        <form id="comportex-input-text-form">
+          Repeats (each sentence):
+          <input id="comportex-input-repeats" size="3" value="1" />
+          API key:
+          <input id="comportex-api-key" size="16" />
+          <br/>
+          <textarea id="comportex-input-text" style="width:90%; height:35em">
+	    enter text here.
+          </textarea>
+          <br/>
+          <input type="submit" value="Restart with this input" />
+          (this will also reset all parameter values)
+        </form>
+      </div>
+      <div><h2>drawing</h2>
+        <div id="comportex-drawing"></div>
+      </div>
+      <div><h2>parameters</h2>
+        <div id="comportex-parameters"></div>
+      </div>
+      <div><h2>plots</h2>
+        <div id="comportex-plots"></div>
+      </div>
+      <div><h2>details</h2>
+        <textarea id="detail-text"></textarea>
+      </div>
+  </div>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.main");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.cortical_io_demo");</script>
+  <script type="text/javascript">
+    comportexviz.demos.cortical_io_demo.handle_user_input_form();
+    // comportexviz.demos.cortical_io_demo.restart_from_ui();
+  </script>
+</body>
