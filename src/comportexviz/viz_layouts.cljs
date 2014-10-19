@@ -252,9 +252,9 @@
     (let [[w h] (p/dimensions topo)
           xi (Math/floor (/ (- x left-px) element-w))
           yi (Math/floor (/ (- y top-px) element-h))]
-      (when (and (<= 0 xi w)
-                 (<= 0 yi h))
-        (let [id* (p/index-of-coordinates topo [w h])
+      (when (and (<= 0 xi (dec w))
+                 (<= 0 yi (dec h)))
+        (let [id* (p/index-of-coordinates topo [xi yi])
               id (- id* scroll-top)]
           [0 id]))))
   
