@@ -1,7 +1,7 @@
 # ComportexViz
 
 A web-based visualization layer for
-[Comportex](http://github.com/floybix/comportex/).
+[Comportex](http://github.com/nupic-community/comportex/).
 
 See it in action in (this blog
 post)[http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/].
@@ -11,21 +11,20 @@ post)[http://floybix.github.io/2014/07/11/visualization-driven-development-of-th
 
 Get [Leiningen](http://leiningen.org/) first.
 
-Use git to clone [Comportex](http://github.com/floybix/comportex/), and:
+Clone [Comportex](http://github.com/nupic-community/comportex/), and then install it:
 
 ```
 lein do check, install
 ```
 
-Then use git to clone this repository, and:
+Clone ComportexViz from this repository, and then build it:
 
 ```
-lein cljsbuild clean
-lein cljsbuild once
+lein do cljsbuild clean, cljsbuild once
 ```
 
 Now open `public/*.html` in a web browser, preferably Google
-Chrome. Each HTML page loads the corresponding input generator defined
+Chrome. Each HTML page loads the corresponding model defined
 in `src/comportexviz/demos/`.
 
 
