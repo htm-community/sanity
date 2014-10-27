@@ -120,7 +120,7 @@
          (fn [r-lays]
            (mapv (fn [lay]
                    (let [n (n-onscreen lay)
-                         ncol (:elements-per-dt lay)]
+                         ncol (p/size (:topo lay))]
                      (update-in lay [:scroll-top]
                                (fn [x]
                                  (if down?
