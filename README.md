@@ -3,8 +3,8 @@
 A web-based visualization layer for
 [Comportex](http://github.com/nupic-community/comportex/).
 
-See it in action in (this blog
-post)[http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/].
+See it in action in [this blog
+post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
 
 ## Usage

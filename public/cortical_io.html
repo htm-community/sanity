@@ -11,7 +11,17 @@
     <div id="comportex-tabs">
       <div><h2>intro</h2>
         <h3>cortical.io</h3>
-        <p></p>
+        <p>This demo looks up
+        the <a href="http://cortical.io/">cortical.io</a> fingerprint
+        for each word. Enter your API key below to start. The
+        pre-loaded text below is the
+        famous <a href="https://github.com/numenta/nupic.nlp-examples/blob/master/resources/associations/foxeat.csv">"fox
+        eats what?" example</a>, but you can enter whatever text you
+        like. Words that are not found in cortical.io associative_en
+        retina are assigned a random SDR.</p>
+        <p>Note that even though only a single time step is shown, you
+        can still use the right/left arrow keys to look back through
+        the last 25 time steps.</p>
         <form id="comportex-input-text-form">
           Repeats (each sentence):
           <input id="comportex-input-repeats" size="3" value="1" />
@@ -19,7 +29,43 @@
           <input id="comportex-api-key" size="16" />
           <br/>
           <textarea id="comportex-input-text" style="width:90%; height:35em">
-	    enter text here.
+frog 	eat 	flies.
+cow 	eat 	grain.
+elephant 	eat 	leaves.
+goat 	eat 	grass.
+wolf 	eat 	rabbit.
+cat 	likes 	ball.
+elephant 	likes 	water.
+sheep 	eat 	grass.
+cat 	eat 	salmon.
+wolf 	eat 	mice.
+lion 	eat 	cow.
+dog 	likes 	sleep.
+coyote 	eat 	mice.
+coyote 	eat 	rodent.
+coyote 	eat 	rabbit.
+wolf 	eat 	squirrel.
+cow 	eat 	grass.
+frog 	eat 	flies.
+cow 	eat 	grain.
+elephant 	eat 	leaves.
+goat 	eat 	grass.
+wolf 	eat 	rabbit.
+sheep 	eat 	grass.
+cat 	eat 	salmon.
+wolf 	eat 	mice.
+lion 	eat 	cow.
+coyote 	eat 	mice.
+elephant 	likes 	water.
+cat 	likes 	ball.
+coyote 	eat 	rodent.
+coyote 	eat 	rabbit.
+wolf 	eat 	squirrel.
+dog 	likes 	sleep.
+cat 	eat 	salmon.
+cat 	likes 	ball.
+cow 	eat 	grass.
+fox 	eat 	something.
           </textarea>
           <br/>
           <input type="submit" value="Restart with this input" />
