@@ -193,7 +193,7 @@
   (bind! "#comportex-parameters"
          (let [sel-rid (:region @selection)]
            [:div#comportex-parameters
-            (let [rgns (core/region-seq @model)]
+            (let [rgns (p/region-seq @model)]
               (for [rid (range (count rgns))
                     :let [rgn (nth rgns rid)
                           spec (p/params rgn)]]
@@ -209,11 +209,11 @@
                          " parameters that apply only in initialisation)")]]]]))]
            ))
 
-  (doseq [rid (range (count (core/region-seq @model)))
+  (doseq [rid (range (count (p/region-seq @model)))
           :let [form-el (->dom (str "#region-spec-form-" rid))]]
     (event/on-raw form-el :submit
                   (fn [e]
-                    (let [rgn (nth (core/region-seq @model) rid)
+                    (let [rgn (nth (p/region-seq @model) rid)
                           ospec (p/params rgn)
                           s (reduce (fn [s k]
                                       (let [id (keys->id [rid k])
@@ -221,7 +221,7 @@
                                             v (cljs.reader/read-string (dom/val el))]
                                         (assoc s k v)))
                                     {} (keys ospec))]
-                      (swap! model core/update-by-uuid (:uuid rgn)
+                      (swap! model p/update-by-uuid (:uuid rgn)
                              #(-> %
                                   (assoc-in [:column-field :spec] s)
                                   (assoc-in [:layer-3 :spec] s)))

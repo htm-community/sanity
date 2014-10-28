@@ -140,8 +140,8 @@
         ff-sg (:ff-sg cf)
         cols (if sel-col [sel-col]
                  (p/active-columns (:layer-3 rgn)))
-        src-bits (p/bits-value src)
-        src-sbits (p/signal-bits-value src)
+        src-bits (p/bits-value src 0)
+        src-sbits (p/signal-bits-value src 0)
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-disconn? (get-in opts [:ff-synapses :disconnected])
         do-perm? (get-in opts [:ff-synapses :permanences])]
@@ -395,13 +395,13 @@
     col :col
     :as selection}]
   (let [state (nth @steps dt)
-        rgns (core/region-seq state)
+        rgns (p/region-seq state)
         rgn (nth rgns rid)
         cf (:column-field rgn)
         layer (:layer-3 rgn)
-        inp (first (core/inputs-seq state))
+        inp (first (p/input-seq state))
         in (p/domain-value inp)
-        bits (p/bits-value inp)]
+        bits (p/bits-value inp 0)]
     (->>
      ["__Selection__"
       (str "* timestep " (p/timestep rgn)
@@ -438,7 +438,7 @@
       (if col
         (let [dtp (inc dt)
               p-state (nth @steps dtp)
-              p-rgn (nth (core/region-seq p-state) rid)
+              p-rgn (nth (p/region-seq p-state) rid)
               p-cf (:column-field p-rgn)
               p-layer (:layer-3 p-rgn)
               p-ff-sg (:ff-sg p-cf)
@@ -446,9 +446,11 @@
               ac (p/active-cells p-layer)
               lc (or (p/learnable-cells p-layer) #{})
               pcon (:distal-perm-connected (p/params p-rgn))
+              ;; yuck:
               rgn-tree (nth (core/region-tree-seq state) rid)
-              bits (core/incoming-bits-value rgn-tree p/bits-value)
-              sig-bits (core/incoming-bits-value rgn-tree p/signal-bits-value)]
+              bits #{} ; TODO (core/incoming-bits-value rgn-tree p/bits-value)
+              sig-bits #{} ; TODO (core/incoming-bits-value rgn-tree p/signal-bits-value)
+              ]
           ["__Active cells prev__"
            (str (sort ac))
            ""
@@ -512,7 +514,7 @@
   [lay inp]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        inbits (p/bits-value inp)]
+        inbits (p/bits-value inp 0)]
     (c/fill-style ctx (:active state-colors))
     (draw-element-group ctx lay inbits)
     (c/fill ctx)
@@ -629,7 +631,7 @@
         r-lays (:regions @layouts)
         draw-steps (get-in opts [:drawing :draw-steps])
         sel-state (nth @steps sel-dt)
-        sel-prev-state (nth @steps (inc sel-dt) {})
+        sel-prev-state (nth @steps (inc sel-dt) nil)
         canvas-el (->dom "#comportex-viz")
         ctx (c/get-context canvas-el "2d")
         inbits-bg (bg-image i-lay)
@@ -662,8 +664,8 @@
                              " Page up / page down to scroll columns.")
                        :x segs-left :y 0}))
     (let [inp-w-px (get-in opts [:drawing :input-w-px])
-          inp (first (core/inputs-seq sel-state))
-          rgn (first (core/region-seq sel-state))]
+          inp (first (p/input-seq sel-state))
+          rgn (first (p/region-seq sel-state))]
       (when-let [draw-input (:comportexviz/draw-input inp)]
         (c/save ctx)
         (c/translate ctx 0 top-px)
@@ -671,10 +673,11 @@
         (c/restore ctx)))
     (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
-                  prev-state (nth @steps (inc dt) {})
-                  prev-first-region (first (core/region-seq prev-state))
-                  rgns (core/region-seq state)
-                  inp (first (core/inputs-seq state))
+                  prev-state (nth @steps (inc dt) nil)
+                  prev-first-region (if prev-state
+                                      (first (p/region-seq prev-state)))
+                  rgns (p/region-seq state)
+                  inp (first (p/input-seq state))
                   cache (::cache (meta state))]]
       ;; draw encoded inbits
       (when (or (== 1 (count (p/dims-of inp)))
@@ -736,10 +739,10 @@
       (doseq [[rid rgn prev-rgn src r-lay src-lay]
               (map vector
                    (range)
-                   (core/region-seq sel-state)
-                   (core/region-seq sel-prev-state)
-                   (list* (first (core/inputs-seq sel-state))
-                          (core/region-tree-seq sel-state))
+                   (p/region-seq sel-state)
+                   (if sel-prev-state (p/region-seq sel-prev-state))
+                   (list* (first (p/input-seq sel-state))
+                          (p/region-seq sel-state))
                    r-lays
                    (list* i-lay r-lays))]
         (when (or (not sel-col)
@@ -749,10 +752,11 @@
     ;; draw selected cells and segments
     (when (and sel-col
                (< (inc sel-dt) (count @steps)))
-      (let [rgn (-> (core/region-seq sel-state)
+      (let [rgn (-> (p/region-seq sel-state)
                     (nth sel-rid))
-            prev-rgn (-> (core/region-seq sel-prev-state)
-                         (nth sel-rid))
+            prev-rgn (if sel-prev-state
+                       (-> (p/region-seq sel-prev-state)
+                           (nth sel-rid)))
             lay (nth r-lays sel-rid)]
         (draw-cell-segments ctx rgn prev-rgn lay
                             sel-col sel-dt cells-left opts))))
@@ -831,10 +835,10 @@
 
 (defn init!
   [init-model steps-c selection sim-step!]
-  (let [rgns (core/region-seq init-model)
+  (let [rgns (p/region-seq init-model)
         d-opts (:drawing @viz-options)
         ;; for now assume only one input
-        inp (first (core/inputs-seq init-model))
+        inp (first (p/input-seq init-model))
         inp-w-px (:input-w-px d-opts)
         ;; check dimensionality of input
         itopo (p/topology inp)

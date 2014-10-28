@@ -39,7 +39,7 @@
 (defn sim-step!
   []
   (->>
-   (swap! model p/feed-forward-step)
+   (swap! model p/htm-step)
    (put! steps-c)))
 
 (defn now [] (.getTime (js/Date.)))
@@ -69,7 +69,7 @@
 
 (defn init-plots!
   [init-model el]
-  (let [rgns (core/region-seq init-model)]
+  (let [rgns (p/region-seq init-model)]
     (bind! el
            [:div
             (for [rid (range (count rgns))
@@ -82,7 +82,7 @@
       (let [this-el (->dom (str "#" id))
             freqs-c (async/map< (comp core/column-state-freqs
                                       #(nth % rid)
-                                      core/region-seq)
+                                      p/region-seq)
                                 (tap-c steps-mult))
             agg-freqs-ts (plots/aggregated-ts-ref freqs-c 200)]
         (add-watch agg-freqs-ts :ts-plot
