@@ -447,7 +447,7 @@
               lc (or (p/learnable-cells p-layer) #{})
               pcon (:distal-perm-connected (p/params p-rgn))
               ;; yuck:
-              rgn-tree (nth (core/region-tree-seq state) rid)
+              ;rgn-tree (nth (core/region-tree-seq state) rid)
               bits #{} ; TODO (core/incoming-bits-value rgn-tree p/bits-value)
               sig-bits #{} ; TODO (core/incoming-bits-value rgn-tree p/signal-bits-value)
               ]
@@ -468,7 +468,9 @@
                     (gstring/format "%.2f" p)
                     (if (sig-bits id) " S")
                     (if (bits id) (str " A "
-                                       (p/source-of-incoming-bit rgn-tree id))))))
+                                       ;(p/source-of-incoming-bit
+                                       ;rgn-tree id)
+                                       )))))
            "__Cells and their Dendrite segments__"
            (for [ci (range (p/layer-depth layer))
                  :let [segs (p/cell-segments p-distal-sg [col ci])]]
@@ -644,14 +646,14 @@
     (c/text ctx {:text "Input on selected timestep."
                  :x 2
                  :y 0})
-    (c/text ctx {:text "Encoded bits.    => time =>"
+    (c/text ctx {:text "Encoded bits."
                  :x (:x (layout-bounds i-lay))
                  :y 0})
     (c/text ctx {:text (scroll-status-str i-lay)
                  :x (:x (layout-bounds i-lay))
                  :y 10})
     (doseq [[rid r-lay] (map-indexed vector r-lays)]
-      (c/text ctx {:text (str "Region " rid " columns.   => time =>")
+      (c/text ctx {:text (str "Region " rid " columns.")
                    :x (:x (layout-bounds r-lay))
                    :y 0})
       (c/text ctx {:text (scroll-status-str r-lay)
@@ -667,10 +669,7 @@
           inp (first (p/input-seq sel-state))
           rgn (first (p/region-seq sel-state))]
       (when-let [draw-input (:comportexviz/draw-input inp)]
-        (c/save ctx)
-        (c/translate ctx 0 top-px)
-        (draw-input inp ctx inp-w-px (- height-px top-px) rgn)
-        (c/restore ctx)))
+        (draw-input inp ctx 0 top-px inp-w-px (- height-px top-px) rgn)))
     (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
@@ -784,7 +783,7 @@
              i-lay (:input @layouts)
              r-lays (:regions @layouts)
              ;; we need to assume there is a previous step, so:
-             max-dt (- (count @steps) 2)]
+             max-dt (max 0 (- (count @steps) 2))]
          (if-let [[dt _] (lay/clicked-id i-lay x y)]
            ;; in-bit clicked
            (swap! selection assoc :dt (min dt max-dt))
@@ -815,7 +814,7 @@
        (let [e (<! presses)
              k (code-key (.-keyCode e))
              ;; we need to assume there is a previous step, so:
-             max-dt (- (count @steps) 2)]
+             max-dt (max 0 (- (count @steps) 2))]
          (when k
            (case k
              :left (swap! selection update-in [:dt]

@@ -1,7 +1,8 @@
 (ns comportexviz.demos.cortical-io-demo
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as enc]
-            [comportexviz.cortical-io :refer [cortical-io-encoder]]
+            [org.nfrac.comportex.cortical-io :refer [cortical-io-encoder
+                                                     cache-fingerprint!]]
             [comportexviz.sentence-drawing :refer [draw-sentence-fn]]
             ;; ui
             [comportexviz.main]
@@ -9,19 +10,19 @@
             [c2.event :as event]
             [clojure.string :as str]
             [cljs.reader]
-            [cljs.core.async :refer [>! <! chan put!]])
+            [cljs.core.async :refer [<! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
 (def spec
   {:column-dimensions [40 40]
-   :ff-init-frac 0.30
-   :ff-potential-radius 0.15
+   :ff-init-frac 0.15
+   :ff-potential-radius 1.0
    :ff-perm-inc 0.05
    :ff-perm-dec 0.005
    :ff-perm-connected 0.20
    :ff-stimulus-threshold 3
-   :global-inhibition false
-   :activation-level 0.03
+   :global-inhibition true
+   :activation-level 0.015
    :duty-cycle-period 100000
    :max-boost 2.0
    ;; sequence memory:
@@ -35,14 +36,13 @@
    :distal-perm-inc 0.05
    :distal-perm-dec 0.01
    :distal-perm-init 0.16
-   :distal-punish? false
+   :distal-punish? true
+   :proximal-vs-distal-weight 20
    :inhibition-base-distance 2
    :inhibition-speed 0.25
    })
 
-(def n-predictions 8)
-
-(def min-votes 2)
+(def n-predictions 5)
 
 (defn split-sentences
   [text]
@@ -73,22 +73,30 @@
         [i (inc j) rep]))))
 
 (defn sensory-input-from-text
-  [api-key text n-repeats]
+  [api-key text n-repeats cache]
   (let [split-sens (split-sentences text)
-        terms (distinct (apply concat split-sens))
         encoder (enc/pre-transform (fn [[i j _]]
                                      (get-in split-sens [i j]))
-                                   (cortical-io-encoder api-key min-votes
-                                                        terms))
+                                   (cortical-io-encoder api-key cache))
         xform (input-transform-fn split-sens n-repeats)]
     ;; [sentence index, word index, repeat number]
     (core/sensory-input [0 0 0] xform encoder)))
 
 (defn ^:export input-gen
   [api-key text n-repeats]
-  (let [inp (sensory-input-from-text api-key text n-repeats)
+  (let [cache (atom {})
+        inp (sensory-input-from-text api-key text n-repeats cache)
         split-sens (split-sentences text)
         draw-inp (draw-sentence-fn split-sens n-predictions)]
+    ;; kick off the process to load the fingerprints
+    (go
+     (doseq [term (->> (apply concat split-sens)
+                       (distinct)
+                       (map str/lower-case))]
+       (println "requesting fingerprint for:" term)
+       ;; one request at a time (just has to keep ahead of sim)
+       (<! (cache-fingerprint! api-key cache term))
+       (<! (timeout 100))))
     (assoc inp :comportexviz/draw-input draw-inp)))
 
 (defn ^:export n-region-model
@@ -104,7 +112,11 @@
         n-reps (cljs.reader/read-string
                 (dom/val (->dom "#comportex-input-repeats")))
         text (dom/val (->dom "#comportex-input-text"))]
-    (comportexviz.main.set-model (n-region-model api-key text n-reps 1))))
+    (go
+     (let [model (n-region-model api-key text n-reps 1)]
+       ;; allow some time for the first fingerprint request to cortical.io
+       (<! (timeout 3000))
+       (comportexviz.main.set-model model)))))
 
 (defn ^:export handle-user-input-form
   []
@@ -114,5 +126,3 @@
                     (restart-from-ui)
                     (.preventDefault e)
                     false))))
-
-

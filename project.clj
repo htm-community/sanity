@@ -3,7 +3,7 @@
   :url "http://github.com/nupic-community/comportexviz/"
 
   :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/clojurescript "0.0-2356"]
+                 [org.clojure/clojurescript "0.0-2371"]
                  [org.clojure/core.async "0.1.278.0-76b25b-alpha"]
                  [com.cemerick/pprng "0.0.2"]
                  [org.nfrac/comportex "0.0.6-SNAPSHOT"]
