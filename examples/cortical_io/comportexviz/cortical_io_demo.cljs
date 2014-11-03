@@ -1,17 +1,18 @@
-(ns comportexviz.demos.cortical-io-demo
+(ns comportexviz.cortical-io-demo
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as enc]
             [org.nfrac.comportex.cortical-io :refer [cortical-io-encoder
                                                      cache-fingerprint!]]
             [comportexviz.sentence-drawing :refer [draw-sentence-fn]]
             ;; ui
-            [comportexviz.main]
+            [comportexviz.main :as main]
             [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
             [clojure.string :as str]
             [cljs.reader]
             [cljs.core.async :refer [<! timeout]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [comportexviz.macros :refer [with-ui-loading]]))
 
 (def spec
   {:column-dimensions [40 40]
@@ -37,7 +38,7 @@
    :distal-perm-dec 0.01
    :distal-perm-init 0.16
    :distal-punish? true
-   :proximal-vs-distal-weight 20
+   :distal-vs-proximal-weight 0
    :inhibition-base-distance 2
    :inhibition-speed 0.25
    })
@@ -55,24 +56,26 @@
    [sentence index, word index, repeat number]"
   [split-sentences n-repeats]
   (fn [[i j rep]]
-    (let [sen (get split-sentences i)
-          n-sen (count split-sentences)]
-      ;; check end of a sentence
-      (if (== j (dec (count sen)))
-        ;; reached the end of a sentence
-        (if (== rep (dec n-repeats))
-          ;; finished repeating this sentence, move on
-          [(mod (inc i) n-sen)
-           0
-           0]
-          ;; next repeat
-          [i
-           0
-           (inc rep)])
-        ;; continuing this sentence
-        [i (inc j) rep]))))
+    (if (nil? i)
+      [0 0 0]
+      (let [sen (get split-sentences i)
+            n-sen (count split-sentences)]
+        ;; check end of a sentence
+        (if (== j (dec (count sen)))
+          ;; reached the end of a sentence
+          (if (== rep (dec n-repeats))
+            ;; finished repeating this sentence, move on
+            [(mod (inc i) n-sen)
+             0
+             0]
+            ;; next repeat
+            [i
+             0
+             (inc rep)])
+          ;; continuing this sentence
+          [i (inc j) rep])))))
 
-(defn ^:export input-gen
+(defn input-gen
   [api-key text n-repeats decode-locally? spatial-scramble?]
   (let [cache (atom {})
         split-sens (split-sentences text)
@@ -83,8 +86,7 @@
                                       :decode-locally? decode-locally?
                                       :spatial-scramble? spatial-scramble?))
         xform (input-transform-fn split-sens n-repeats)
-        ;; [sentence index, word index, repeat number]
-        inp (core/sensory-input [0 0 0] xform encoder)]
+        inp (core/sensory-input nil xform encoder)]
     ;; kick off the process to load the fingerprints
     (go
      (doseq [term (->> (apply concat split-sens)
@@ -92,8 +94,7 @@
                        (map str/lower-case))]
        (println "requesting fingerprint for:" term)
        ;; one request at a time (just has to keep ahead of sim)
-       (<! (cache-fingerprint! api-key cache term))
-       (<! (timeout 100))))
+       (<! (cache-fingerprint! api-key cache term))))
     (assoc inp :comportexviz/draw-input
            (draw-sentence-fn split-sens n-predictions))))
 
@@ -112,11 +113,12 @@
         spatial-scramble? (dom/val (->dom "#comportex-scramble"))
         text (dom/val (->dom "#comportex-input-text"))]
     (go
-     (let [input (input-gen api-key text n-reps decode-locally? spatial-scramble?)
-           model (n-region-model input 1)]
-       ;; allow some time for the first fingerprint request to cortical.io
-       (<! (timeout 3000))
-       (comportexviz.main.set-model model)))))
+     (with-ui-loading
+       (let [input (input-gen api-key text n-reps decode-locally?
+                              spatial-scramble?)]
+         ;; allow some time for the first fingerprint request to cortical.io
+         (<! (timeout 1000))
+         (main/set-model (n-region-model input 1)))))))
 
 (defn ^:export handle-user-input-form
   []

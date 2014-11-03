@@ -10,7 +10,8 @@
             [cljs.reader]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p])
-  (:require-macros [c2.util :refer [bind!]]))
+  (:require-macros [c2.util :refer [bind!]]
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -97,8 +98,7 @@
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
             [:span [:a#sim-faster {:href "#"} "faster"]]]
-           [:button#sim-reset "Reset"]
-           [:span#sim-reset-status {:class "detail"}]]
+           [:button#sim-reset "Reset"]]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
@@ -127,9 +127,8 @@
                               #(+ % 100))))
   (event/on-raw "#sim-reset" :click
                 (fn [_]
-                  (let [el (->dom "#sim-reset-status")]
-                    (swap! model p/reset)
-                    (dom/text el "reset complete."))))
+                  (with-ui-loading-message
+                    (swap! model p/reset))))
 
   (event/on-raw "#anim-start" :click
                 (fn [_] (swap! main-options assoc :anim-go? true)))

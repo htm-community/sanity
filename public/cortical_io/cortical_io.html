@@ -2,7 +2,7 @@
 <head>
   <meta charset="utf-8">
   <title>cortical.io - comportex viz</title>
-  <link href="main.css" rel="stylesheet" type="text/css" />
+  <link href="../main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="comportex-viz"></canvas>
@@ -91,12 +91,11 @@ fox 	eat 	something.
         <textarea id="detail-text"></textarea>
       </div>
   </div>
+  <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="comportexviz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.main");</script>
-  <script type="text/javascript">goog.require("comportexviz.demos.cortical_io_demo");</script>
+  <script type="text/javascript">goog.require("comportexviz.cortical_io_demo");</script>
   <script type="text/javascript">
-    comportexviz.demos.cortical_io_demo.handle_user_input_form();
-    // comportexviz.demos.cortical_io_demo.restart_from_ui();
+    comportexviz.cortical_io_demo.handle_user_input_form();
   </script>
 </body>

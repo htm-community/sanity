@@ -11,3 +11,14 @@
       (deref ~cache)
       (swap! ~cache assoc ~k ~expr))
     (get ~k)))
+
+(defmacro with-ui-loading-message
+  [& body]
+  `(let [el# (c2.dom/->dom "#comportex-loading")]
+     (c2.dom/style el# {:display "block"})
+     ;; need a timeout to allow redraw to show loading message
+     (js/setTimeout (fn []
+                      (try
+                        ~@body)
+                      (c2.dom/style el# {:display "none"}))
+                    100)))

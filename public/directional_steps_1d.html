@@ -29,13 +29,11 @@
         <textarea id="detail-text"></textarea>
       </div>
   </div>
+  <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="comportexviz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.main");</script>
   <script type="text/javascript">goog.require("comportexviz.demos.directional_steps_1d");</script>
   <script type="text/javascript">
-    comportexviz.main.set_model(
-      comportexviz.demos.directional_steps_1d.n_region_model(2)
-    );
+    comportexviz.demos.directional_steps_1d.set_n_region_model(2);
   </script>
 </body>

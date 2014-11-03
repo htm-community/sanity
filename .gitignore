@@ -10,6 +10,6 @@ pom.xml
 .lein-plugins
 .lein-cljsbuild-compiler*
 /public/out
-/public/comportexviz.js
-/public/comportexviz.js.map
+comportexviz.js
+comportexviz.js.map
 *~
