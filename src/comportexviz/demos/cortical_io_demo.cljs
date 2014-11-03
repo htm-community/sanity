@@ -72,22 +72,19 @@
         ;; continuing this sentence
         [i (inc j) rep]))))
 
-(defn sensory-input-from-text
-  [api-key text n-repeats cache]
-  (let [split-sens (split-sentences text)
-        encoder (enc/pre-transform (fn [[i j _]]
-                                     (get-in split-sens [i j]))
-                                   (cortical-io-encoder api-key cache))
-        xform (input-transform-fn split-sens n-repeats)]
-    ;; [sentence index, word index, repeat number]
-    (core/sensory-input [0 0 0] xform encoder)))
-
 (defn ^:export input-gen
-  [api-key text n-repeats]
+  [api-key text n-repeats decode-locally? spatial-scramble?]
   (let [cache (atom {})
-        inp (sensory-input-from-text api-key text n-repeats cache)
         split-sens (split-sentences text)
-        draw-inp (draw-sentence-fn split-sens n-predictions)]
+        encoder (enc/pre-transform
+                 (fn [[i j _]]
+                   (get-in split-sens [i j]))
+                 (cortical-io-encoder api-key cache
+                                      :decode-locally? decode-locally?
+                                      :spatial-scramble? spatial-scramble?))
+        xform (input-transform-fn split-sens n-repeats)
+        ;; [sentence index, word index, repeat number]
+        inp (core/sensory-input [0 0 0] xform encoder)]
     ;; kick off the process to load the fingerprints
     (go
      (doseq [term (->> (apply concat split-sens)
@@ -97,12 +94,12 @@
        ;; one request at a time (just has to keep ahead of sim)
        (<! (cache-fingerprint! api-key cache term))
        (<! (timeout 100))))
-    (assoc inp :comportexviz/draw-input draw-inp)))
+    (assoc inp :comportexviz/draw-input
+           (draw-sentence-fn split-sens n-predictions))))
 
 (defn ^:export n-region-model
-  [api-key text n-repeats n]
-  (core/regions-in-series core/sensory-region
-                          (input-gen api-key text n-repeats) n spec))
+  [input n]
+  (core/regions-in-series core/sensory-region input n spec))
 
 ;; handle UI for input stream
 
@@ -111,9 +108,12 @@
   (let [api-key (dom/val (->dom "#comportex-api-key"))
         n-reps (cljs.reader/read-string
                 (dom/val (->dom "#comportex-input-repeats")))
+        decode-locally? (dom/val (->dom "#comportex-decode-local"))
+        spatial-scramble? (dom/val (->dom "#comportex-scramble"))
         text (dom/val (->dom "#comportex-input-text"))]
     (go
-     (let [model (n-region-model api-key text n-reps 1)]
+     (let [input (input-gen api-key text n-reps decode-locally? spatial-scramble?)
+           model (n-region-model input 1)]
        ;; allow some time for the first fingerprint request to cortical.io
        (<! (timeout 3000))
        (comportexviz.main.set-model model)))))
