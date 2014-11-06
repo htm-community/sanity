@@ -119,7 +119,6 @@
 
 (defn- init-ui!
   [init-model]
-  (goog.ui.TabPane. (->dom "#comportex-tabs"))
   (init-plots! init-model (->dom "#comportex-plots"))
   (viz/init! init-model (tap-c steps-mult) selection sim-step!)
   (cui/handle-controls! model sim-go? main-options sim-step! draw!)
@@ -133,3 +132,6 @@
          (put! steps-c))
     (when init?
       (init-ui! x))))
+
+(try
+  (goog.ui.TabPane. (->dom "#comportex-tabs")))

@@ -7,6 +7,7 @@ body {
   float: left;
   clear: left;
   /* NB - set on load to 70% width in code */
+  width: 70%;
 }
 
 #comportex-sidebar {
