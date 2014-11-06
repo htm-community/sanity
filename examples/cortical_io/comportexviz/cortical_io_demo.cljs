@@ -1,8 +1,9 @@
 (ns comportexviz.cortical-io-demo
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as enc]
-            [org.nfrac.comportex.cortical-io :refer [cortical-io-encoder
-                                                     cache-fingerprint!]]
+            [org.nfrac.comportex.cortical-io :as cio
+             :refer [cortical-io-encoder
+                     cache-fingerprint!]]
             [comportexviz.sentence-drawing :refer [draw-sentence-fn]]
             ;; ui
             [comportexviz.main :as main]
@@ -12,18 +13,18 @@
             [cljs.reader]
             [cljs.core.async :refer [<! timeout]])
   (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :refer [with-ui-loading]]))
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def spec
+(def spec-global
   {:column-dimensions [40 40]
-   :ff-init-frac 0.15
+   :ff-init-frac 0.20
    :ff-potential-radius 1.0
    :ff-perm-inc 0.05
    :ff-perm-dec 0.005
    :ff-perm-connected 0.20
    :ff-stimulus-threshold 3
-   :global-inhibition true
-   :activation-level 0.015
+   :global-inhibition? true
+   :activation-level 0.02
    :duty-cycle-period 100000
    :max-boost 2.0
    ;; sequence memory:
@@ -39,9 +40,15 @@
    :distal-perm-init 0.16
    :distal-punish? true
    :distal-vs-proximal-weight 0
-   :inhibition-base-distance 2
-   :inhibition-speed 0.25
    })
+
+(def spec-local
+  (assoc spec-global
+    :ff-init-frac 0.30
+    :ff-potential-radius 0.20
+    :global-inhibition? false
+    :inhibition-base-distance 1
+    :inhibition-speed 2))
 
 (def n-predictions 5)
 
@@ -75,7 +82,7 @@
           ;; continuing this sentence
           [i (inc j) rep])))))
 
-(defn input-gen
+(defn cio-input-gen
   [api-key text n-repeats decode-locally? spatial-scramble?]
   (let [cache (atom {})
         split-sens (split-sentences text)
@@ -98,9 +105,18 @@
     (assoc inp :comportexviz/draw-input
            (draw-sentence-fn split-sens n-predictions))))
 
-(defn ^:export n-region-model
-  [input n]
-  (core/regions-in-series core/sensory-region input n spec))
+(defn rand-input-gen
+  [text n-repeats]
+  (let [split-sens (split-sentences text)
+        encoder (enc/pre-transform
+                 (fn [[i j _]]
+                   (get-in split-sens [i j]))
+                 (enc/unique-encoder cio/retina-dim
+                                     (apply * 0.02 cio/retina-dim)))
+        xform (input-transform-fn split-sens n-repeats)
+        inp (core/sensory-input nil xform encoder)]
+    (assoc inp :comportexviz/draw-input
+           (draw-sentence-fn split-sens n-predictions))))
 
 ;; handle UI for input stream
 
@@ -109,16 +125,24 @@
   (let [api-key (dom/val (->dom "#comportex-api-key"))
         n-reps (cljs.reader/read-string
                 (dom/val (->dom "#comportex-input-repeats")))
+        enc-choice (dom/val (->dom "#comportex-encoder"))
         decode-locally? (dom/val (->dom "#comportex-decode-local"))
         spatial-scramble? (dom/val (->dom "#comportex-scramble"))
-        text (dom/val (->dom "#comportex-input-text"))]
-    (go
-     (with-ui-loading
-       (let [input (input-gen api-key text n-reps decode-locally?
-                              spatial-scramble?)]
+        text (dom/val (->dom "#comportex-input-text"))
+        spec-choice (dom/val (->dom "#comportex-starting-parameters"))]
+    (with-ui-loading-message
+      (let [input (if (= enc-choice "random")
+                    (rand-input-gen text n-reps)
+                    (cio-input-gen api-key text n-reps decode-locally?
+                                   spatial-scramble?))
+            spec (if (= spec-choice "a")
+                   spec-global
+                   spec-local)
+            model (core/regions-in-series core/sensory-region input 1 spec)]
+        (go
          ;; allow some time for the first fingerprint request to cortical.io
          (<! (timeout 1000))
-         (main/set-model (n-region-model input 1)))))))
+         (main/set-model model))))))
 
 (defn ^:export handle-user-input-form
   []

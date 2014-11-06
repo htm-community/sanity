@@ -17,23 +17,35 @@
         pre-loaded text below is the
         famous <a href="https://github.com/numenta/nupic.nlp-examples/blob/master/resources/associations/foxeat.csv">"fox
         eats what?" example</a>, but you can enter whatever text you
-        like. Words that are not found in cortical.io associative_en
-        retina are assigned a random SDR.</p>
+        like. Words that are not found in
+        cortical.io <tt>associative_en</tt> retina are assigned a
+        random SDR.</p>
         <p>Note that even though only a single time step is shown, you
-        can still use the right/left arrow keys to look back through
-        the last 25 time steps.</p>
+        can still use the right/left arrow keys to step the simulation
+        and look back through the last 25 time steps.</p>
         <form id="comportex-input-text-form">
           Repeats (each sentence):
-          <input id="comportex-input-repeats" size="3" value="1" />
+          <input id="comportex-input-repeats" size="2" value="1" />
+          Encoder:
+          <select id="comportex-encoder">
+            <option value="cortical_io">cortical.io</option>
+            <option value="random">random</option>
+            </select>
+          <br/>
           API key:
           <input id="comportex-api-key" size="16" />
-          <br/>
           <label><input id="comportex-decode-local" type="checkbox" />
             decode locally
           </label>
           <label><input id="comportex-scramble" type="checkbox" />
             spatial scramble
           </label>
+          <br/>
+          Starting parameter set:
+          <select id="comportex-starting-parameters">
+            <option value="a">20% potential, no topology</option>
+            <option value="b">30% * local 16% area = 5% potential</option>
+          </select>
           <textarea id="comportex-input-text" style="width:90%; height:35em">
 frog 	eat 	flies.
 cow 	eat 	grain.
