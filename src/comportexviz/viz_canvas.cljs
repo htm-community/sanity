@@ -22,6 +22,7 @@
             [monet.core]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.synapses :as syn]
             [org.nfrac.comportex.util :as util]
             [clojure.set :as set]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -594,7 +595,8 @@
   [distal-sg depth col]
   (reduce (fn [n ci]
             (+ n (util/count-filter seq
-                                    (p/cell-segments distal-sg [col ci]))))
+                                    (syn/cell-segments-raw distal-sg [col ci]))))
+          0
           (range depth)))
 
 (defn n-segments-columns-image
@@ -605,12 +607,14 @@
         sg (:distal-sg layer)
         n-cols (p/size-of layer)
         depth (p/layer-depth layer)
-        col-m (->> (map #(count-segs-in-column sg depth %) (range n-cols))
-                   (zipmap (range n-cols))
-                   (util/remap #(min 1.0 (/ % 16))))]
+        n-start (top-id-onscreen lay)
+        cols (range n-start (+ n-start (n-onscreen lay)))
+        col-m (->> cols
+                   (map #(count-segs-in-column sg depth %))
+                   (map #(min 1.0 (/ % 16.0)))
+                   (zipmap cols))]
     (c/fill-style ctx "black")
     (fill-elements ctx lay col-m c/alpha)
-    (c/fill ctx)
     el))
 
 (defn scroll-status-str
