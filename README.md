@@ -11,13 +11,14 @@ post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-th
 
 Get [Leiningen](http://leiningen.org/) first.
 
-Clone [Comportex](http://github.com/nupic-community/comportex/), and then install it:
+Clone [Comportex](http://github.com/nupic-community/comportex/),
+and install it to your local Maven repository (~/.m2):
 
 ```
 lein do check, install
 ```
 
-Clone ComportexViz from this repository, and then build it:
+Clone ComportexViz, and then build it:
 
 ```
 lein do cljsbuild clean, cljsbuild once
