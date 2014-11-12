@@ -4,7 +4,7 @@
                      n-onscreen
                      top-id-onscreen
                      element-xy
-                     draw-element-group
+                     fill-element-group
                      fill-elements
                      circle
                      centred-rect
@@ -509,8 +509,7 @@
         ctx (c/get-context el "2d")
         j (top-id-onscreen lay)]
     (c/fill-style ctx (:background state-colors))
-    (draw-element-group ctx lay (range j (+ j (n-onscreen lay))))
-    (c/fill ctx)
+    (fill-element-group ctx lay (range j (+ j (n-onscreen lay))))
     el))
 
 (defn active-bits-image
@@ -519,8 +518,7 @@
         ctx (c/get-context el "2d")
         inbits (p/bits-value inp 0)]
     (c/fill-style ctx (:active state-colors))
-    (draw-element-group ctx lay inbits)
-    (c/fill ctx)
+    (fill-element-group ctx lay inbits)
     el))
 
 (defn pred-bits-image
@@ -542,8 +540,7 @@
         ctx (c/get-context el "2d")
         cols (p/active-columns (:layer-3 rgn))]
     (c/fill-style ctx (:active state-colors))
-    (draw-element-group ctx lay cols)
-    (c/fill ctx)
+    (fill-element-group ctx lay cols)
     el))
 
 (defn pred-columns-image
@@ -554,8 +551,7 @@
                   (map first)
                   (distinct))]
     (c/fill-style ctx (:predicted state-colors))
-    (draw-element-group ctx lay cols)
-    (c/fill ctx)
+    (fill-element-group ctx lay cols)
     el))
 
 (defn tp-columns-image
@@ -565,8 +561,7 @@
         cols (->> (p/temporal-pooling-cells (:layer-3 rgn))
                   (map first))]
     (c/fill-style ctx (:temporal-pooling state-colors))
-    (draw-element-group ctx lay cols)
-    (c/fill ctx)
+    (fill-element-group ctx lay cols)
     el))
 
 (defn alternative-columns-image
@@ -576,8 +571,7 @@
         cols (->> (:alternative-cells (:layer-3 rgn))
                   (map first))]
     (c/fill-style ctx (:alternative state-colors))
-    (draw-element-group ctx lay cols)
-    (c/fill ctx)
+    (fill-element-group ctx lay cols)
     el))
 
 (defn overlaps-columns-image
@@ -588,7 +582,6 @@
                    (util/remap #(min 1.0 (/ % 16))))]
     (c/fill-style ctx "black")
     (fill-elements ctx lay col-m c/alpha)
-    (c/fill ctx)
     el))
 
 (defn count-segs-in-column

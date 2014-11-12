@@ -41,10 +41,10 @@
     [(+ x lx (* w 0.5))
      (+ y ly (* h 0.5))]))
 
-(defn draw-element-group
-  "Draws all elements with the given ids in a single path, without
-   filling or stroking it. For efficiency, skips any ids which are
-   currently offscreen."
+(defn fill-element-group
+  "Fills all elements with the given ids (in a single path if
+   possible). For efficiency, skips any ids which are currently
+   offscreen."
   [ctx lay ids]
   (let [j0 (top-id-onscreen lay)
         j1 (+ j0 (n-onscreen lay) -1)
@@ -56,14 +56,19 @@
       (when-not one-d?
         (c/fill ctx)
         (c/begin-path ctx)))
+    (when one-d?
+      (c/fill ctx))
     ctx))
 
 (defn fill-elements
+  "Groups the map `id-styles` by key, each key being a style value.
+   For each such group, calls `set-style` with the value and then
+   fills the group of elements."
   [ctx lay id-styles set-style]
   (c/save ctx)
   (doseq [[style ids] (group-by id-styles (keys id-styles))]
-    (draw-element-group ctx lay ids)
     (set-style ctx style)
+    (fill-element-group ctx lay ids)
     (c/fill ctx))
   (c/restore ctx)
   ctx)
