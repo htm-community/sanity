@@ -1,0 +1,27 @@
+<html>
+<head>
+</head>
+<body>
+
+<button id="inh-step">Step (generate new input excitation)</button></br>
+
+<p id="inh-info">Target activation level
+  is <span id="inh-target-level"></span>. <br/>Actual activation level
+  is <span id="inh-actual-level"></span>,
+  too <b><span id="inh-high-or-low">(high/low)</span></b>, so adjusting
+  <tt>stimulus-threshold</tt> <b><span id="inh-up-or-down">(up/down)</span></b>:</p>
+
+<tt>stimulus-threshold: <span id="inh-stimulus"></span>
+(next step: <span id="inh-stimulus-next"></span>)</tt><br/>
+<tt>inhibition-base-distance: <span id="inh-base-dist"></span></tt><br/>
+<tt>inhibition-radius: <span id="inh-radius"></span></tt><br/>
+<canvas id="inh-viz"></canvas>
+<script type="text/javascript" src="out/goog/base.js"></script>
+<script type="text/javascript" src="comportexviz_inh.js"></script>
+<script type="text/javascript">goog.require("comportexviz.local_inhibition_1d");</script>
+<script type="text/javascript">
+  comportexviz.local_inhibition_1d.init();
+</script>
+
+</body>
+</html>
