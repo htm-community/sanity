@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>sequences in isolation - comportex viz</title>
-  <link href="main.css" rel="stylesheet" type="text/css" />
+  <title>2d sequences in isolation - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="comportex-viz"></canvas>
@@ -10,19 +10,12 @@
     <div id="comportex-controls"></div>
     <div id="comportex-tabs">
       <div><h2>intro</h2>
-        <h3>sequences in isolation</h3>
+        <h3>2d sequences in isolation</h3>
         <p>The following fixed sequences are presented one at a time
         with a gap of 5 time steps. Each new pattern is chosen
-        randomly. This example is designed for testing temporal
-        pooling, as each fixed sequence should give rise to a stable
-        representation.</p>
+        randomly.</p>
 <pre>
-:run-0-5   [0 1 2 3 4 5]
-:rev-5-1   [5 4 3 2 1]
-:run-6-10  [6 7 8 9 10]
-:jump-6-12 [6 7 8 11 12]
-:twos      [0 2 4 6 8 10 12 14]
-:saw-10-15 [10 12 11 13 12 14 13 15]
+
 </pre>
       </div>
       <div><h2>drawing</h2>
@@ -41,8 +34,9 @@
   <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="comportexviz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.demos.isolated_1d");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.isolated_2d");</script>
   <script type="text/javascript">
-    comportexviz.demos.isolated_1d.set_n_region_model(2);
+    comportexviz.demos.isolated_2d.init();
+    comportexviz.demos.isolated_2d.set_n_region_model(1);
   </script>
 </body>

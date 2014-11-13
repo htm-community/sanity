@@ -13,16 +13,22 @@
 
   :source-paths ["src"]
 
-  :cljsbuild {:builds [{:id "comportexviz"
-                        :source-paths ["src"]
+  :cljsbuild {:builds [{:id "demos"
+                        :source-paths ["src" "examples/demos"]
                         :compiler {:optimizations :advanced
-                                   :output-dir "public/out"
-                                   :source-map "public/comportexviz.js.map"
-                                   :output-to "public/comportexviz.js"}}
+                                   :output-dir "public/demos/out"
+                                   :source-map "public/demos/comportexviz.js.map"
+                                   :output-to "public/demos/comportexviz.js"}}
                        {:id "cortical-io"
                         :source-paths ["src" "examples/cortical_io"]
                         :compiler {:optimizations :advanced
                                    :output-dir "public/cortical_io/out"
-                                   :source-map "public/cortical_io/comportexviz.js.map"
-                                   :output-to "public/cortical_io/comportexviz.js"}}
+                                   :source-map "public/cortical_io/comportexviz_cio.js.map"
+                                   :output-to "public/cortical_io/comportexviz_cio.js"}}
+                       {:id "inh"
+                        :source-paths ["src" "examples/local_inhibition"]
+                        :compiler {:optimizations :advanced
+                                   :output-dir "public/local_inhibition/out"
+                                   :source-map "public/local_inhibition/comportexviz_inh.js.map"
+                                   :output-to "public/local_inhibition/comportexviz_inh.js"}}
                        ]})

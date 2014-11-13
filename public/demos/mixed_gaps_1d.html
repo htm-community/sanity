@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>direction signal with integer steps - comportex viz</title>
-  <link href="main.css" rel="stylesheet" type="text/css" />
+  <title>sequences mixed with variable gaps - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="comportex-viz"></canvas>
@@ -10,11 +10,19 @@
     <div id="comportex-controls"></div>
     <div id="comportex-tabs">
       <div><h2>intro</h2>
-        <h3>directional steps</h3>
-        <p>The input field is divided into equal sections. The input
-    stream steps through the sections either upwards or downwards,
-    chosen randomly. An indicator of the next direction taken is
-    included as part of the input (as the first 2 sections).</p>
+        <h3>sequences mixed with variable gaps</h3>
+        <p>The following fixed sequences are each repeated with
+        random-length gaps and mixed together. This example is
+        designed for testing temporal pooling, as each fixed sequence
+        should give rise to a stable representation.</p>
+<pre>
+:run-0-5   [0 1 2 3 4 5]
+:rev-5-1   [5 4 3 2 1]
+:run-6-10  [6 7 8 9 10]
+:jump-6-12 [6 7 8 11 12]
+:twos      [0 2 4 6 8 10 12 14]
+:saw-10-15 [10 12 11 13 12 14 13 15]
+</pre>
       </div>
       <div><h2>drawing</h2>
         <div id="comportex-drawing"></div>
@@ -32,8 +40,9 @@
   <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="comportexviz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.demos.directional_steps_1d");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.mixed_gaps_1d");</script>
   <script type="text/javascript">
-    comportexviz.demos.directional_steps_1d.set_n_region_model(2);
+    comportexviz.demos.mixed_gaps_1d.init();
+    comportexviz.demos.mixed_gaps_1d.set_n_region_model(2);
   </script>
 </body>

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <head>
   <meta charset="utf-8">
-  <title>2d sequences in isolation - comportex viz</title>
-  <link href="main.css" rel="stylesheet" type="text/css" />
+  <title>direction signal with integer steps - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
 </head>
 <body>
   <canvas id="comportex-viz"></canvas>
@@ -10,13 +10,11 @@
     <div id="comportex-controls"></div>
     <div id="comportex-tabs">
       <div><h2>intro</h2>
-        <h3>2d sequences in isolation</h3>
-        <p>The following fixed sequences are presented one at a time
-        with a gap of 5 time steps. Each new pattern is chosen
-        randomly.</p>
-<pre>
-
-</pre>
+        <h3>directional steps</h3>
+        <p>The input field is divided into equal sections. The input
+    stream steps through the sections either upwards or downwards,
+    chosen randomly. An indicator of the next direction taken is
+    included as part of the input (as the first 2 sections).</p>
       </div>
       <div><h2>drawing</h2>
         <div id="comportex-drawing"></div>
@@ -34,8 +32,9 @@
   <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
   <script type="text/javascript" src="comportexviz.js"></script>
-  <script type="text/javascript">goog.require("comportexviz.demos.isolated_2d");</script>
+  <script type="text/javascript">goog.require("comportexviz.demos.directional_steps_1d");</script>
   <script type="text/javascript">
-    comportexviz.demos.isolated_2d.set_n_region_model(1);
+    comportexviz.demos.directional_steps_1d.init();
+    comportexviz.demos.directional_steps_1d.set_n_region_model(2);
   </script>
 </body>

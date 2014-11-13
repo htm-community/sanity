@@ -5,8 +5,6 @@
             [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
-            [goog.ui.TabPane]
-            [goog.ui.TabPane.TabPage]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [c2.util :refer [bind!]]))
@@ -125,13 +123,10 @@
   (cui/handle-options! model viz/keep-steps viz/viz-options)
   (cui/handle-parameters! model selection))
 
-(defn ^:export set-model
+(defn set-model
   [x]
   (let [init? (nil? @model)]
     (->> (reset! model x)
          (put! steps-c))
     (when init?
       (init-ui! x))))
-
-(try
-  (goog.ui.TabPane. (->dom "#comportex-tabs")))

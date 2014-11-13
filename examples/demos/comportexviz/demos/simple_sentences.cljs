@@ -6,7 +6,8 @@
             [comportexviz.main :as main]
             [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
-            [cljs.reader])
+            [cljs.reader]
+            [goog.ui.TabPane])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def n-predictions 8)
@@ -36,8 +37,9 @@
         text (dom/val (->dom "#comportex-input-text"))]
     (set-n-region-model text n-reps 1)))
 
-(defn ^:export handle-user-input-form
+(defn ^:export init
   []
+  (goog.ui.TabPane. (->dom "#comportex-tabs"))
   (let [form-el (->dom "#comportex-input-text-form")]
     (event/on-raw form-el :submit
                   (fn [e]

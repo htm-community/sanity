@@ -11,7 +11,8 @@
             [c2.event :as event]
             [clojure.string :as str]
             [cljs.reader]
-            [cljs.core.async :refer [<! timeout]])
+            [cljs.core.async :refer [<! timeout]]
+            [goog.ui.TabPane])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
@@ -144,8 +145,9 @@
          (<! (timeout 1000))
          (main/set-model model))))))
 
-(defn ^:export handle-user-input-form
+(defn ^:export init
   []
+  (goog.ui.TabPane. (->dom "#comportex-tabs"))
   (let [form-el (->dom "#comportex-input-text-form")]
     (event/on-raw form-el :submit
                   (fn [e]
