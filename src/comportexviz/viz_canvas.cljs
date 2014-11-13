@@ -69,7 +69,6 @@
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.75 0.5)
    :temporal-pooling (hsl :green 1 0.5 0.4)
-   :alternative (hsl 40 1 0.5 0.75)
    })
 
 (def viz-options
@@ -80,7 +79,6 @@
                    :n-segments nil
                    :predictive true
                    :temporal-pooling true
-                   :alternative false
                    :scroll-counter 0}
          :ff-synapses {:active nil
                        :inactive nil
@@ -133,14 +131,13 @@
          #(if down? (inc %) (dec %))))
 
 (defn draw-ff-synapses
-  [ctx rgn prev-rgn r-lay src src-lay sel-col sel-dt opts]
+  [ctx lyr r-lay src src-lay sel-col sel-dt opts]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
-  (let [cf (:column-field rgn)
-        ff-sg (:ff-sg cf)
+  (let [sg (:proximal-sg lyr)
         cols (if sel-col [sel-col]
-                 (p/active-columns (:layer-3 rgn)))
+                 (p/active-columns lyr))
         src-bits (p/bits-value src 0)
         src-sbits (p/signal-bits-value src 0)
         do-inactive? (get-in opts [:ff-synapses :inactive])
@@ -150,8 +147,8 @@
             syn-state (concat (when do-disconn? [:disconnected])
                               (when do-inactive? [:inactive-syn])
                               [:active :active-predicted])
-            :let [all-syns (p/in-synapses ff-sg col)
-                  syns (select-keys all-syns (p/sources-connected-to ff-sg col))
+            :let [all-syns (p/in-synapses sg col)
+                  syns (select-keys all-syns (p/sources-connected-to sg col))
                   sub-syns (case syn-state
                              :active (select-keys syns src-bits)
                              :active-predicted (select-keys syns src-sbits)
@@ -249,20 +246,15 @@
             (c/stroke)))))))
 
 (defn draw-cell-segments
-  [ctx rgn prev-rgn lay col dt cells-left opts]
+  [ctx layer prev-layer lay col dt cells-left opts]
   (c/save ctx)
-  (let [spec (p/params prev-rgn)
+  (let [spec (p/params prev-layer)
         th (:seg-stimulus-threshold spec)
         pcon (:distal-perm-connected spec)
-        cf (:column-field rgn)
-        layer (:layer-3 rgn)
-        prev-cf (:column-field prev-rgn)
-        prev-layer (:layer-3 prev-rgn)
         ac (p/active-cells layer)
         prev-ac (p/active-cells prev-layer)
         prev-pc (p/predictive-cells prev-layer)
         learning (:learn-segments layer)
-        alt-learning (:alternative-segments layer)
         active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
         distal-sg (:distal-sg layer)
@@ -286,8 +278,7 @@
                   cell-id [col ci]
                   cell-active? (ac cell-id)
                   cell-predictive? (prev-pc cell-id)
-                  alt-learn-cell? (find alt-learning cell-id)
-                  learn-cell? (or (find learning cell-id) alt-learn-cell?)
+                  learn-cell? (find learning cell-id)
                   learn-seg-idx (when learn-cell? (val learn-cell?))
                   seg-sg (mapv #(group-synapses % prev-ac pcon) segs)
                   on? (fn [sg] (>= (count (sg [:connected :active])) th))
@@ -323,7 +314,6 @@
                                      (if learn-seg-idx
                                        (str "segment " learn-seg-idx)
                                        "new segment")
-                                     (if alt-learn-cell? " alternatively")
                                      ")")))
                    :x cell-x :y (- cell-y cell-r-px 5)})
       (doseq [[si sg] (map-indexed vector seg-sg)
@@ -398,7 +388,6 @@
   (let [state (nth @steps dt)
         rgns (p/region-seq state)
         rgn (nth rgns rid)
-        cf (:column-field rgn)
         layer (:layer-3 rgn)
         inp (first (p/input-seq state))
         in (p/domain-value inp)
@@ -427,12 +416,6 @@
       "__Signal cells__"
       (str (sort (p/signal-cells layer)))
       ""
-      "__Alternative cells / segs__"
-      (str (sort (:alternative-segments layer)))
-      ""
-      "__TP scores__"
-      (str (sort (:tp-scores cf)))
-      ""
       "__Predicted cells__"
       (str (sort (p/predictive-cells layer)))
       ""
@@ -440,9 +423,8 @@
         (let [dtp (inc dt)
               p-state (nth @steps dtp)
               p-rgn (nth (p/region-seq p-state) rid)
-              p-cf (:column-field p-rgn)
               p-layer (:layer-3 p-rgn)
-              p-ff-sg (:ff-sg p-cf)
+              p-prox-sg (:proximal-sg p-layer)
               p-distal-sg (:distal-sg p-layer)
               ac (p/active-cells p-layer)
               lc (or (p/learnable-cells p-layer) #{})
@@ -463,7 +445,7 @@
            ""
            "__Selected column__"
            "__Connected ff-synapses__"
-           (let [syns (p/in-synapses p-ff-sg col)]
+           (let [syns (p/in-synapses p-prox-sg col)]
              (for [[id p] (sort syns)]
                (str "  " id " :=> "
                     (gstring/format "%.2f" p)
@@ -564,21 +546,11 @@
     (fill-element-group ctx lay cols)
     el))
 
-(defn alternative-columns-image
-  [lay rgn]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        cols (->> (:alternative-cells (:layer-3 rgn))
-                  (map first))]
-    (c/fill-style ctx (:alternative state-colors))
-    (fill-element-group ctx lay cols)
-    el))
-
 (defn overlaps-columns-image
   [lay rgn]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        col-m (->> (p/column-overlaps (:column-field rgn))
+        col-m (->> (p/column-excitation (:layer-3 rgn))
                    (util/remap #(min 1.0 (/ % 16))))]
     (c/fill-style ctx "black")
     (fill-elements ctx lay col-m c/alpha)
@@ -715,10 +687,6 @@
         (when (get-in opts [:columns :temporal-pooling])
           (->> (tp-columns-image r-lay rgn)
                (with-cache cache [::tpcols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt)))
-        (when (get-in opts [:columns :alternative])
-          (->> (alternative-columns-image r-lay rgn)
-               (with-cache cache [::vcols rid] opts :columns)
                (draw-image-dt ctx r-lay dt))))
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))
@@ -743,7 +711,7 @@
                    (list* i-lay r-lays))]
         (when (or (not sel-col)
                   (= sel-rid rid))
-          (draw-ff-synapses ctx rgn prev-rgn r-lay src src-lay
+          (draw-ff-synapses ctx (:layer-3 rgn) r-lay src src-lay
                             sel-col sel-dt opts))))
     ;; draw selected cells and segments
     (when (and sel-col
@@ -754,8 +722,8 @@
                        (-> (p/region-seq sel-prev-state)
                            (nth sel-rid)))
             lay (nth r-lays sel-rid)]
-        (draw-cell-segments ctx rgn prev-rgn lay
-                            sel-col sel-dt cells-left opts))))
+        (draw-cell-segments ctx (:layer-3 rgn) (:layer-3 prev-rgn)
+                            lay sel-col sel-dt cells-left opts))))
   nil)
 
 ;; ## Event stream processing
