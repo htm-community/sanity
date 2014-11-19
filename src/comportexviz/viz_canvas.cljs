@@ -254,7 +254,7 @@
         ac (p/active-cells layer)
         prev-ac (p/active-cells prev-layer)
         prev-pc (p/predictive-cells prev-layer)
-        learning (:learn-segments layer)
+        learning (:learn-segments (:state layer))
         active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
         distal-sg (:distal-sg layer)
@@ -411,7 +411,7 @@
       (str (sort (p/learnable-cells layer)))
       ""
       "__Learning segments__"
-      (str (sort (:learn-segments layer)))
+      (str (sort (:learn-segments (:state layer))))
       ""
       "__Signal cells__"
       (str (sort (p/signal-cells layer)))
