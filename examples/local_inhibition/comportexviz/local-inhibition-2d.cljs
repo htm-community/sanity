@@ -34,6 +34,11 @@
                   :inhibition-base-distance 1
                   :ff-stimulus-threshold 5.0
                   }))
+
+(defn zapsmall
+  [x d]
+  (if (< x d) 0.0 x))
+
 (defn gen-exc
   [spec]
   (let [focus-r 20
@@ -51,7 +56,9 @@
                  ;; multiplicative noise on triangular peaks
                  (* (rand))
                  ;; additive noise - skewed distribution
-                 (+ (* 5.0 (Math/pow (rand) 3.0))))))
+                 (+ (* 5.0 (Math/pow (rand) 3.0)))
+                 ;; can't have fewer than 1 active synapse
+                 (zapsmall 1.0))))
          (zipmap (range size)))))
 
 (defn local-active-columns

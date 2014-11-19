@@ -29,6 +29,10 @@
                   :ff-stimulus-threshold 5.0
                   }))
 
+(defn zapsmall
+  [x d]
+  (if (< x d) 0.0 x))
+
 (defn gen-exc
   [spec]
   (let [focus-r (* inh-radius 2.0)
@@ -49,7 +53,9 @@
                               (max 0)
                               (* 4.0))))
                  ;; additive noise - skewed distribution
-                 (+ (* 5.0 (Math/pow (rand) 3.0))))))
+                 (+ (* 5.0 (Math/pow (rand) 3.0)))
+                 ;; can't have fewer than 1 active synapse
+                 (zapsmall 1.0))))
          (zipmap (range size)))))
 
 (defn local-active-columns
