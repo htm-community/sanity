@@ -17,11 +17,14 @@
 
 (defn draw-sentence-fn
   "For sensory input of a sequence of sentences, each of which is a
-   sequence of words. Returns a function used by viz-canvas to draw
-   the input."
+   sequence of words. Assumes input value has a key :index containing
+   [i j], indices for the current sentence and word. Returns a
+   function used by viz-canvas to draw the world (input)."
   [split-sentences n-predictions]
-  (fn [this ctx left-px top-px w-px h-px rgn]
-    (let [[curr-sen-i curr-word-j _] (p/domain-value this)
+  (fn [this ctx left-px top-px w-px h-px state]
+    (let [inp (first (p/input-seq state))
+          rgn (first (p/region-seq state))
+          [curr-sen-i curr-word-j] (:index this)
           curr-sen (get split-sentences curr-sen-i)
           pr-cols (->> (p/predictive-cells (:layer-3 rgn))
                        (map first))
@@ -71,7 +74,7 @@
       (c/restore ctx)
       ;; predictions for next word - asynchronously
       (go
-       (let [pr-words (p/decode (:encoder this) pr-votes n-predictions)
+       (let [pr-words (p/decode (:encoder inp) pr-votes n-predictions)
              ;; decode may return a channel for async calls
              pr-words (if-let [c (:channel pr-words)]
                         (<! c)

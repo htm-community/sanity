@@ -7,26 +7,27 @@
             [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
             [cljs.reader]
-            [goog.ui.TabPane])
+            [goog.ui.TabPane]
+            [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def n-predictions 8)
 
 (def spec demo/spec)
 
-(defn input-gen
+(defn ^:export reset-world
   [text n-repeats]
-  (let [inp (demo/sensory-input-from-text text n-repeats demo/bits-per-word)
-        split-sens (demo/split-sentences text)
-        draw-inp (draw-sentence-fn split-sens n-predictions)]
-    (assoc inp :comportexviz/draw-input draw-inp)))
+  (let [draw-fn (draw-sentence-fn (demo/split-sentences text) n-predictions)]
+    (main/set-world (->> (demo/world text n-repeats)
+                         (async/map< #(vary-meta % assoc
+                                                 :comportexviz/draw-world
+                                                 draw-fn))))))
 
 (defn ^:export set-n-region-model
-  [text n-repeats n]
+  [text n]
   (with-ui-loading-message
-    (let [inp (input-gen text n-repeats)]
-      (main/set-model
-       (core/regions-in-series core/sensory-region inp n spec)))))
+    (main/set-model
+     (demo/n-region-model text n spec))))
 
 ;; handle UI for input stream
 
@@ -35,7 +36,8 @@
   (let [n-reps (cljs.reader/read-string
                 (dom/val (->dom "#comportex-input-repeats")))
         text (dom/val (->dom "#comportex-input-text"))]
-    (set-n-region-model text n-reps 1)))
+    (reset-world text n-reps)
+    (set-n-region-model text 1)))
 
 (defn ^:export init
   []

@@ -19,14 +19,15 @@
   "Returns the simulation rate in timesteps per second for current
    run."
   [model]
-  (when (:time (:run-start model))
+  (if (:time (:run-start model))
     (let [m (:run-start model)
           dur-ms (- (now)
                     (:time m))
           steps (- (p/timestep model)
                    (:timestep m))]
       (-> (/ steps dur-ms)
-          (* 1000)))))
+          (* 1000)))
+    0))
 
 (defn slider
   [id min-val max-val step unit]

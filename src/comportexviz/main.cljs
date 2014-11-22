@@ -20,6 +20,7 @@
 ;;; ## Data
 
 (def model (atom nil))
+(def world (atom (chan)))
 
 (def selection (atom {:region 0 :dt 0 :col nil}))
 
@@ -36,9 +37,10 @@
 
 (defn sim-step!
   []
-  (->>
-   (swap! model p/htm-step)
-   (put! steps-c)))
+  (go
+   (when-let [in-value (<! @world)]
+     (->> (swap! model p/htm-step in-value)
+          (put! steps-c)))))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -50,7 +52,7 @@
   (go
    (while @sim-go?
      (let [tc (async/timeout (:sim-step-ms @main-options))]
-       (sim-step!)
+       (<! (sim-step!))
        (<! tc)))))
 
 (add-watch sim-go? :run-sim
@@ -126,7 +128,12 @@
 (defn set-model
   [x]
   (let [init? (nil? @model)]
-    (->> (reset! model x)
-         (put! steps-c))
+    (reset! model x)
     (when init?
       (init-ui! x))))
+
+(defn set-world
+  [c]
+  (when-let [old-c @world]
+    (async/close! old-c))
+  (reset! world c))

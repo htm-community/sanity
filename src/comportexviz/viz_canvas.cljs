@@ -90,7 +90,7 @@
                         :disconnected nil
                         :permanences nil}
          :drawing {:draw-steps 25
-                   :input-w-px 150
+                   :world-w-px 150
                    :bit-w-px 3
                    :bit-h-px 3
                    :bit-shrink 0.85
@@ -390,7 +390,7 @@
         rgn (nth rgns rid)
         layer (:layer-3 rgn)
         inp (first (p/input-seq state))
-        in (p/domain-value inp)
+        in (:value inp)
         bits (p/bits-value inp 0)]
     (->>
      ["__Selection__"
@@ -634,11 +634,10 @@
                                  "(click on a column)")
                              " Page up / page down to scroll columns.")
                        :x segs-left :y 0}))
-    (let [inp-w-px (get-in opts [:drawing :input-w-px])
-          inp (first (p/input-seq sel-state))
-          rgn (first (p/region-seq sel-state))]
-      (when-let [draw-input (:comportexviz/draw-input inp)]
-        (draw-input inp ctx 0 top-px inp-w-px (- height-px top-px) rgn)))
+    (let [world-w-px (get-in opts [:drawing :world-w-px])
+          in-value (:value (first (p/input-seq sel-state)))]
+      (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
+        (draw-world in-value ctx 0 top-px world-w-px (- height-px top-px) sel-state)))
     (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
@@ -803,12 +802,12 @@
         d-opts (:drawing @viz-options)
         ;; for now assume only one input
         inp (first (p/input-seq init-model))
-        inp-w-px (:input-w-px d-opts)
+        world-w-px (:world-w-px d-opts)
         ;; check dimensionality of input
         itopo (p/topology inp)
         enc-lay (if (== 1 (count (p/dimensions itopo)))
-                  (inbits-1d-layout itopo top-px (+ inp-w-px 10) height-px d-opts)
-                  (inbits-2d-layout itopo top-px (+ inp-w-px 10) height-px d-opts))
+                  (inbits-1d-layout itopo top-px (+ world-w-px 10) height-px d-opts)
+                  (inbits-2d-layout itopo top-px (+ world-w-px 10) height-px d-opts))
         ;; for now draw regions in a horizontal stack
         spacer (:h-space-px d-opts)
         r-lays (reduce (fn [lays rgn]

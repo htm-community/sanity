@@ -11,7 +11,7 @@
             [c2.event :as event]
             [clojure.string :as str]
             [cljs.reader]
-            [cljs.core.async :refer [<! timeout]]
+            [cljs.core.async :as async :refer [<! timeout]]
             [goog.ui.TabPane])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
@@ -47,9 +47,9 @@
   (assoc spec-global
     :ff-init-frac 0.30
     :ff-potential-radius 0.20
+    :ff-stimulus-threshold 15
     :global-inhibition? false
-    :inhibition-base-distance 1
-    :inhibition-speed 2))
+    :inhibition-base-distance 1))
 
 (def n-predictions 5)
 
@@ -59,65 +59,35 @@
        (mapv #(str/split % #"[^\w']+"))
        (mapv #(conj % "."))))
 
-(defn input-transform-fn
-  "Returns an input transform function of [[i j rep]]
-   [sentence index, word index, repeat number]"
-  [split-sentences n-repeats]
-  (fn [[i j rep]]
-    (if (nil? i)
-      [0 0 0]
-      (let [sen (get split-sentences i)
-            n-sen (count split-sentences)]
-        ;; check end of a sentence
-        (if (== j (dec (count sen)))
-          ;; reached the end of a sentence
-          (if (== rep (dec n-repeats))
-            ;; finished repeating this sentence, move on
-            [(mod (inc i) n-sen)
-             0
-             0]
-            ;; next repeat
-            [i
-             0
-             (inc rep)])
-          ;; continuing this sentence
-          [i (inc j) rep])))))
+(defn word-item-seq
+  "An input sequence consisting of words from the given text, with
+   periods separating sentences also included as distinct words. Each
+   sequence element has the form `{:word _, :index [i j]}`, where i is
+   the sentence index and j is the word index into sentence j."
+  [n-repeats text]
+  (for [[i sen] (map-indexed vector (split-sentences text))
+        rep (range n-repeats)
+        [j word] (map-indexed vector sen)]
+    {:word word :index [i j]}))
 
-(defn cio-input-gen
-  [api-key text n-repeats decode-locally? spatial-scramble?]
-  (let [cache (atom {})
-        split-sens (split-sentences text)
-        encoder (enc/pre-transform
-                 (fn [[i j _]]
-                   (get-in split-sens [i j]))
-                 (cortical-io-encoder api-key cache
-                                      :decode-locally? decode-locally?
-                                      :spatial-scramble? spatial-scramble?))
-        xform (input-transform-fn split-sens n-repeats)
-        inp (core/sensory-input nil xform encoder)]
-    ;; kick off the process to load the fingerprints
-    (go
-     (doseq [term (->> (apply concat split-sens)
-                       (distinct)
-                       (map str/lower-case))]
-       (println "requesting fingerprint for:" term)
-       ;; one request at a time (just has to keep ahead of sim)
-       (<! (cache-fingerprint! api-key cache term))))
-    (assoc inp :comportexviz/draw-input
-           (draw-sentence-fn split-sens n-predictions))))
+(defn cio-start-requests!
+  "Kicks off the process to load the fingerprints."
+  [api-key text cache]
+  (go
+   (doseq [term (distinct (apply concat (split-sentences (str/lower-case text))))]
+     (println "requesting fingerprint for:" term)
+     ;; one request at a time (just has to keep ahead of sim)
+     (<! (cache-fingerprint! api-key cache term)))))
 
-(defn rand-input-gen
-  [text n-repeats]
-  (let [split-sens (split-sentences text)
-        encoder (enc/pre-transform
-                 (fn [[i j _]]
-                   (get-in split-sens [i j]))
-                 (enc/unique-encoder cio/retina-dim
-                                     (apply * 0.02 cio/retina-dim)))
-        xform (input-transform-fn split-sens n-repeats)
-        inp (core/sensory-input nil xform encoder)]
-    (assoc inp :comportexviz/draw-input
-           (draw-sentence-fn split-sens n-predictions))))
+(defn ^:export reset-world
+  [text n-reps]
+  (let [draw-fn (draw-sentence-fn (split-sentences text) n-predictions)
+        world-seq (->> (word-item-seq n-reps text)
+                       (map #(vary-meta % assoc
+                                        :comportexviz/draw-world draw-fn)))
+        world (doto (async/chan)
+                (async/onto-chan world-seq))]
+    (main/set-world world)))
 
 ;; handle UI for input stream
 
@@ -130,20 +100,29 @@
         decode-locally? (dom/val (->dom "#comportex-decode-local"))
         spatial-scramble? (dom/val (->dom "#comportex-scramble"))
         text (dom/val (->dom "#comportex-input-text"))
-        spec-choice (dom/val (->dom "#comportex-starting-parameters"))]
-    (with-ui-loading-message
-      (let [input (if (= enc-choice "random")
-                    (rand-input-gen text n-reps)
-                    (cio-input-gen api-key text n-reps decode-locally?
-                                   spatial-scramble?))
-            spec (if (= spec-choice "a")
-                   spec-global
-                   spec-local)
-            model (core/regions-in-series core/sensory-region input 1 spec)]
-        (go
-         ;; allow some time for the first fingerprint request to cortical.io
-         (<! (timeout 1000))
-         (main/set-model model))))))
+        spec-choice (dom/val (->dom "#comportex-starting-parameters"))
+        spec (if (= spec-choice "a")
+               spec-global
+               spec-local)
+        cache (atom {})
+        inp (->>
+             (if (= enc-choice "cortical_io")
+               (cortical-io-encoder api-key cache
+                                    :decode-locally? decode-locally?
+                                    :spatial-scramble? spatial-scramble?)
+               (enc/unique-encoder cio/retina-dim
+                                   (apply * 0.02 cio/retina-dim)))
+             (enc/pre-transform :word)
+             (core/sensory-input))]
+    (go
+     (when (= enc-choice "cortical_io")
+       (cio-start-requests! api-key text cache)
+       ;; allow some time for the first fingerprint request to cortical.io
+       (<! (timeout 1000)))
+     (with-ui-loading-message
+       (reset-world text n-reps)
+       (main/set-model
+        (core/regions-in-series core/sensory-region inp 1 spec))))))
 
 (defn ^:export init
   []
