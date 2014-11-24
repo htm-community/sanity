@@ -99,7 +99,7 @@
             [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
             [:span [:a#sim-slower {:href "#"} "slower"]]
             [:span [:a#sim-faster {:href "#"} "faster"]]]
-           [:button#sim-reset "Reset"]]
+           [:button#sim-reset "Reset model"] " (not input)"]
 
           [:fieldset#anim-controls
            [:legend "Animation"]
@@ -161,8 +161,7 @@
               (checkbox viz [:columns :n-segments] "Num segments") [:br]
               (checkbox viz [:columns :active] "Active columns") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns") [:br]
-              (checkbox viz [:columns :temporal-pooling] "TP columns") [:br]
-              (checkbox viz [:columns :alternative] "Alternative")]
+              (checkbox viz [:columns :temporal-pooling] "TP columns")]
              [:fieldset
               [:legend "Feed-forward synapses"]
               (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]

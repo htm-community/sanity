@@ -119,7 +119,7 @@
          (fn [r-lays]
            (mapv (fn [lay]
                    (let [n (n-onscreen lay)
-                         ncol (p/size (:topo lay))]
+                         ncol (p/size-of lay)]
                      (update-in lay [:scroll-top]
                                (fn [x]
                                  (if down?
@@ -587,7 +587,7 @@
   (str "Showing " (top-id-onscreen lay)
        "--" (+ (top-id-onscreen lay)
                (n-onscreen lay) -1)
-       " of " (p/size (:topo lay))))
+       " of " (p/size-of lay)))
 
 (defn draw!
   [{sel-dt :dt
@@ -647,7 +647,7 @@
                   inp (first (p/input-seq state))
                   cache (::cache (meta state))]]
       ;; draw encoded inbits
-      (when (or (== 1 (count (p/dims-of inp)))
+      (when (or (== 1 (count (p/dims-of i-lay)))
                 (== dt sel-dt))
         (->> inbits-bg
              (draw-image-dt ctx i-lay dt))
@@ -663,7 +663,7 @@
       ;; draw regions
       (doseq [[rid r-lay rgn bg-i]
               (map vector (range) r-lays rgns columns-bgs)
-              :when (or (== 1 (count (p/dims-of rgn)))
+              :when (or (== 1 (count (p/dims-of r-lay)))
                         (== dt sel-dt))]
         (->> bg-i
              (draw-image-dt ctx r-lay dt))
@@ -750,14 +750,19 @@
              max-dt (max 0 (- (count @steps) 2))]
          (if-let [[dt _] (lay/clicked-id i-lay x y)]
            ;; in-bit clicked
-           (swap! selection assoc :dt (min dt max-dt))
+           (when (== 1 (count (p/dims-of i-lay)))
+             (swap! selection assoc :dt (min dt max-dt)))
            ;; otherwise, check regions
            (loop [rid 0]
              (if (< rid (count r-lays))
-               (if-let [[dt id] (lay/clicked-id (nth r-lays rid) x y)]
-                 (reset! selection {:region rid :col id
-                                    :dt (min dt max-dt)})
-                 (recur (inc rid)))
+               (let [r-lay (nth r-lays rid)
+                     [dt id] (lay/clicked-id r-lay x y)]
+                 (if id
+                   (swap! selection
+                          (if (== 1 (count (p/dims-of r-lay)))
+                            #(assoc % :region rid :col id :dt (min dt max-dt))
+                            #(assoc % :region rid :col id)))
+                   (recur (inc rid))))
                ;; checked all, nothing clicked
                (swap! selection assoc :col nil)))))))))
 
@@ -827,11 +832,10 @@
                      :regions r-lays}))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
-        (when-let [x (<! steps-c)]
-          (let [x* (vary-meta x assoc ::cache (atom {}))]
-            (swap! steps #(->> (cons x* %)
-                               (take @keep-steps)
-                               (vec))))
+        (when-let [x* (<! steps-c)]
+          (let [x (vary-meta x* assoc ::cache (atom {}))]
+            (swap! steps (fn [xs]
+                           (take @keep-steps (cons x xs)))))
           (recur))))
   (let [el (->dom "#comportex-viz")]
     (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))

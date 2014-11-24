@@ -129,8 +129,9 @@
   [x]
   (let [init? (nil? @model)]
     (reset! model x)
-    (when init?
-      (init-ui! x))))
+    (if init?
+      (init-ui! x)
+      (swap! selection assoc :dt 0 :region 0 :col nil))))
 
 (defn set-world
   [c]

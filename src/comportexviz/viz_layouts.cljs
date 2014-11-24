@@ -48,7 +48,7 @@
   [ctx lay ids]
   (let [j0 (top-id-onscreen lay)
         j1 (+ j0 (n-onscreen lay) -1)
-        one-d? (== 1 (count (p/dimensions (:topo lay))))]
+        one-d? (== 1 (count (p/dims-of lay)))]
     (c/begin-path ctx)
     (doseq [i ids
            :when (<= j0 i j1)]
@@ -113,6 +113,9 @@
      height-px
      circles?
      highlight-color]
+  p/PTopological
+  (topology [_]
+    topo)
   PArrayLayout
   (layout-bounds [_]
     {:x left-px :y top-px
@@ -227,6 +230,9 @@
      height-px
      circles?
      highlight-color]
+  p/PTopological
+  (topology [_]
+    topo)
   PArrayLayout
   (layout-bounds [_]
     (let [[w h] (p/dimensions topo)]
