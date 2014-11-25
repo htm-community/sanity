@@ -47,7 +47,6 @@
   (assoc spec-global
     :ff-init-frac 0.30
     :ff-potential-radius 0.20
-    :ff-stimulus-threshold 15
     :global-inhibition? false
     :inhibition-base-distance 1))
 

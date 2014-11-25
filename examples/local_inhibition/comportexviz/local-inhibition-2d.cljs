@@ -29,11 +29,11 @@
 (def !exc (atom {}))
 (def !act (atom ()))
 (def !global-act (atom #{}))
-(def !spec (atom {:activation-level 0.02
-                  :global-inhibition? false
-                  :inhibition-base-distance 1
-                  :ff-stimulus-threshold 5.0
-                  }))
+(def spec {:activation-level 0.02
+           :global-inhibition? false
+           :inhibition-base-distance 1
+           :ff-stimulus-threshold 2.0
+           })
 
 (defn zapsmall
   [x d]
@@ -67,30 +67,24 @@
         exc (into {} (filter #(>= (val %) threshold) exc-raw))]
    (set
     (inh/inhibit-locally exc topo inh-radius
-                         (:inhibition-base-distance spec)))))
+                         (:inhibition-base-distance spec)
+                         (* (p/size topo) (:activation-level spec))))))
 
 (defn global-active-columns
   [exc topo spec]
   (set
-   (inh/inhibit-globally exc (:activation-level spec) (p/size topo))))
+   (inh/inhibit-globally exc (* (p/size topo) (:activation-level spec)))))
 
 (defn set-ui!
-  [spec next-spec actual-level]
+  [spec actual-level]
   (dom/text (->dom "#inh2d-base-dist") (:inhibition-base-distance spec))
   (dom/text (->dom "#inh2d-radius")
             (util/round inh-radius 2))
   (dom/text (->dom "#inh2d-stimulus")
             (util/round (:ff-stimulus-threshold spec) 2))
-  (dom/text (->dom "#inh2d-stimulus-next")
-            (util/round (:ff-stimulus-threshold next-spec) 2))
   (dom/text (->dom "#inh2d-actual-level")
             (util/round actual-level 2))
-  (dom/text (->dom "#inh2d-target-level") (:activation-level spec))
-  (let [too-high? (> actual-level (:activation-level spec))]
-    (dom/text (->dom "#inh2d-high-or-low")
-              (if too-high? "high" "low"))
-    (dom/text (->dom "#inh2d-up-or-down")
-              (if too-high? "up" "down"))))
+  (dom/text (->dom "#inh2d-target-level") (:activation-level spec)))
 
 (defn excitation-image
   [lay exc]
@@ -136,15 +130,13 @@
 (defn do-step!
   []
   (let [prev-actual-level (/ (count @!act) size)
-        spec (swap! !spec cells/tune-spec prev-actual-level (count @!exc))
         exc (reset! !exc (gen-exc spec))
         act (reset! !act (local-active-columns exc topo inh-radius spec))
         actual-level (/ (count act) size)
         global-act (reset! !global-act
-                           (global-active-columns exc topo spec))
-        next-spec (cells/tune-spec spec actual-level (count exc))]
+                           (global-active-columns exc topo spec))]
     (draw! exc act global-act spec)
-    (set-ui! spec next-spec actual-level)))
+    (set-ui! spec actual-level)))
 
 (defn ^:export init
   []
