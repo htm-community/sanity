@@ -9,7 +9,9 @@
                  [rm-hull/monet "0.2.1"]
                  [com.keminglabs/c2 "0.2.4-SNAPSHOT"]]
   
-  :plugins [[lein-cljsbuild "1.0.3"]]
+  :plugins [[lein-cljsbuild "1.0.3"]
+            [com.cemerick/austin "0.1.5"]]
+  :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
 
   :source-paths ["src"]
 

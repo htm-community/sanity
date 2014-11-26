@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>coordinates 2D - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="comportex-viz"></canvas>
+  <div id="comportex-sidebar">
+    <div id="comportex-controls"></div>
+    <div id="comportex-tabs">
+      <div><h2>intro</h2>
+        <h3>coordinates 2D</h3>
+        <p>A simple example of the coordinate encoder in 2 dimensions.</p>
+      </div>
+      <div><h2>drawing</h2>
+        <div id="comportex-drawing"></div>
+      </div>
+      <div><h2>parameters</h2>
+        <div id="comportex-parameters"></div>
+      </div>
+      <div><h2>plots</h2>
+        <div id="comportex-plots"></div>
+      </div>
+      <div><h2>details</h2>
+        <textarea id="detail-text"></textarea>
+      </div>
+  </div>
+  <div id="comportex-loading">loading</div>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.demos.coordinates_2d");</script>
+  <script type="text/javascript">
+    comportexviz.demos.coordinates_2d.init();
+    comportexviz.demos.coordinates_2d.set_n_region_model(1);
+  </script>
+</body>

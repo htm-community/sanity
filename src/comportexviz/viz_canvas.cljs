@@ -401,6 +401,9 @@
       "__Input__"
       (str in " (" (count bits) " bits)")
       ""
+      "__Input bits__"
+      (str (sort bits))
+      ""
       "__Active columns__"
       (str (sort (p/active-columns layer)))
       ""

@@ -9,7 +9,7 @@ pom.xml
 .lein-failures
 .lein-plugins
 .lein-cljsbuild-compiler*
-/public/out
+/public/*/out
 comportexviz.js
-comportexviz.js.map
+*.js.map
 *~
