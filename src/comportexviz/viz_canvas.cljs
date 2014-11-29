@@ -138,8 +138,8 @@
   (let [sg (:proximal-sg lyr)
         cols (if sel-col [sel-col]
                  (p/active-columns lyr))
-        src-bits (p/bits-value src 0)
-        src-sbits (p/signal-bits-value src 0)
+        src-bits (p/bits-value src)
+        src-sbits (p/signal-bits-value src)
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-disconn? (get-in opts [:ff-synapses :disconnected])
         do-perm? (get-in opts [:ff-synapses :permanences])]
@@ -391,7 +391,7 @@
         layer (:layer-3 rgn)
         inp (first (p/input-seq state))
         in (:value inp)
-        bits (p/bits-value inp 0)]
+        bits (p/bits-value inp)]
     (->>
      ["__Selection__"
       (str "* timestep " (p/timestep rgn)
@@ -501,7 +501,7 @@
   [lay inp]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        inbits (p/bits-value inp 0)]
+        inbits (p/bits-value inp)]
     (c/fill-style ctx (:active state-colors))
     (fill-element-group ctx lay inbits)
     el))

@@ -23,7 +23,7 @@
    :ff-perm-inc 0.05
    :ff-perm-dec 0.005
    :ff-perm-connected 0.20
-   :ff-stimulus-threshold 3
+   :ff-stimulus-threshold 1
    :global-inhibition? true
    :activation-level 0.02
    :duty-cycle-period 100000
@@ -105,10 +105,12 @@
                spec-local)
         cache (atom {})
         inp (->>
-             (if (= enc-choice "cortical_io")
+             (case enc-choice
+               "cortical_io"
                (cortical-io-encoder api-key cache
                                     :decode-locally? decode-locally?
                                     :spatial-scramble? spatial-scramble?)
+               "random"
                (enc/unique-encoder cio/retina-dim
                                    (apply * 0.02 cio/retina-dim)))
              (enc/pre-transform :word)

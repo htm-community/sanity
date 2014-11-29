@@ -9,7 +9,7 @@
   <div id="comportex-sidebar">
     <div id="comportex-controls"></div>
     <div id="comportex-tabs">
-      <div><h2>intro</h2>
+      <div><h2>input</h2>
         <div><h3>sequences in isolation</h3>
         <p>The following fixed sequences are presented one at a time
         with a gap of 5 time steps. Each new pattern is chosen
@@ -23,8 +23,21 @@
 :jump-6-12 [6 7 8 11 12]
 :twos      [0 2 4 6 8 10 12 14]
 :saw-10-15 [10 12 11 13 12 14 13 15]
-</pre></div>
-      </div>
+</pre>
+        <form id="comportex-input-text-form">
+          Number of regions:
+          <input id="comportex-n-regions" size="2" value="1" />
+          <br/>
+          Encoder:
+          <select id="comportex-encoder">
+            <option value="block">blocks</option>
+            <option value="coord">coordinates</option>
+          </select>
+          <br/>
+          <input type="submit" value="Restart with this input" />
+          (this will also reset all parameter values)
+        </form>
+      </div></div>
       <div><h2>drawing</h2>
         <div id="comportex-drawing"></div>
       </div>
@@ -44,6 +57,5 @@
   <script type="text/javascript">goog.require("comportexviz.demos.isolated_1d");</script>
   <script type="text/javascript">
     comportexviz.demos.isolated_1d.init();
-    comportexviz.demos.isolated_1d.set_n_region_model(1);
   </script>
 </body>

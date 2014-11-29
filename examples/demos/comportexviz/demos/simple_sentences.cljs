@@ -17,11 +17,11 @@
 
 (defn ^:export reset-world
   [text n-repeats]
-  (let [draw-fn (draw-sentence-fn (demo/split-sentences text) n-predictions)]
+  (let [draw (draw-sentence-fn (demo/split-sentences text) n-predictions)]
     (main/set-world (->> (demo/world text n-repeats)
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
-                                                 draw-fn))))))
+                                                 draw))))))
 
 (defn ^:export set-n-region-model
   [text n]
