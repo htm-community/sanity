@@ -22,8 +22,8 @@
             [monet.core]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.synapses :as syn]
             [org.nfrac.comportex.util :as util]
+            [org.nfrac.comportex.cells :as cells]
             [clojure.set :as set]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
@@ -174,7 +174,7 @@
                    [(if (>= p pcon)
                       :connected :disconnected)
                     (if (ac id)
-                      :active :inactive-syn)])
+                      :active :inactive)])
                  syns))
 
 (defn natural-curve
@@ -246,14 +246,15 @@
             (c/stroke)))))))
 
 (defn draw-cell-segments
-  [ctx layer prev-layer lay col dt cells-left opts]
+  [ctx layer lay col dt cells-left opts]
   (c/save ctx)
-  (let [spec (p/params prev-layer)
-        th (:seg-stimulus-threshold spec)
+  (let [spec (p/params layer)
+        threshold (:seg-stimulus-threshold spec)
         pcon (:distal-perm-connected spec)
         ac (p/active-cells layer)
-        prev-ac (p/active-cells prev-layer)
-        prev-pc (p/predictive-cells prev-layer)
+        prev-ac (:active-cells (:prior-state layer))
+        prev-pc (:pred-cells (:prior-distal-state layer))
+        prev-aci (:distal-bits (:prior-distal-state layer))
         learning (:learn-segments (:state layer))
         active? (get (p/active-columns layer) col)
         bursting? (get (p/bursting-columns layer) col)
@@ -280,8 +281,6 @@
                   cell-predictive? (prev-pc cell-id)
                   learn-cell? (find learning cell-id)
                   learn-seg-idx (when learn-cell? (val learn-cell?))
-                  seg-sg (mapv #(group-synapses % prev-ac pcon) segs)
-                  on? (fn [sg] (>= (count (sg [:connected :active])) th))
                   cell-state (cond
                               (and cell-active? cell-predictive?) :active-predicted
                               cell-predictive? :predicted
@@ -316,13 +315,17 @@
                                        "new segment")
                                      ")")))
                    :x cell-x :y (- cell-y cell-r-px 5)})
-      (doseq [[si sg] (map-indexed vector seg-sg)
+      ;; draw each segment
+      (doseq [[si seg] (map-indexed vector segs)
               :let [[sx sy] (seg-xy cslay ci si)
-                    conn-act (count (sg [:connected :active]))
-                    conn-tot (+ conn-act (count (sg [:connected :inactive])))
-                    disc-act (count (sg [:disconnected :active]))
-                    disc-tot (+ disc-act (count (sg [:disconnected :inactive])))
-                    z (-> (/ conn-act th)
+                    grouped-syns (group-synapses seg prev-aci pcon)
+                    conn-act (count (grouped-syns [:connected :active]))
+                    conn-tot (+ (count (grouped-syns [:connected :inactive]))
+                                conn-act)
+                    disc-act (count (grouped-syns [:disconnected :active]))
+                    disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
+                                disc-act)
+                    z (-> (/ conn-act threshold)
                           (min 1.0))
                     learn-seg? (and learn-cell? (= si learn-seg-idx))]]
         ;; draw segment as a rectangle
@@ -343,7 +346,7 @@
             (c/fill-style (:active state-colors))
             (c/fill-rect s)
             (c/alpha 1.0)))
-        (when (on? sg)
+        (when (>= conn-act threshold)
           (doto ctx
             (c/stroke-style (:active state-colors))
             (c/stroke-width 2))
@@ -353,28 +356,39 @@
                                 " / " conn-tot " conn."
                                 " (" disc-act " / " disc-tot " disconn.)")
                      :x (+ sx 5 seg-r-px) :y sy})
-        ;; synapses
+        ;; draw distal synapses
         (c/stroke-width ctx 1)
         (let [do-perm? (get-in opts [:lat-synapses :permanences])
               do-act? (get-in opts [:lat-synapses :active])
               do-ina? (get-in opts [:lat-synapses :inactive])
               do-disc? (get-in opts [:lat-synapses :disconnected])
-              do-from (get-in opts [:lat-synapses :from])]
+              do-from (get-in opts [:lat-synapses :from])
+              grouped-sourced-syns (util/remap
+                                    (fn [syns]
+                                      (map (fn [[id p]]
+                                             [(cells/id->source spec id) p])
+                                           syns))
+                                    grouped-syns)]
           (when (or (= do-from :all)
                     (and (= do-from :learning) learn-seg?))
-            (doseq [syn-state (concat (when do-ina? [:inactive-syn])
+            (doseq [syn-state (concat (when do-ina? [:inactive])
                                       (when do-act? [:active]))
                     syn-conn (concat (when do-disc? [:disconnected])
                                      [:connected])
-                    :let [syns (sg [syn-conn syn-state])]]
+                    :let [sourced-syns (grouped-sourced-syns [syn-conn syn-state])]]
               (c/stroke-style ctx (state-colors syn-state))
-              (doseq [[[to-col _] perm] syns
-                      :let [[cx cy] (element-xy lay to-col (inc dt))]]
+              (doseq [[[source-k source-v] p] sourced-syns
+                      :let [[tx ty] (case source-k
+                                      :this (let [[to-col] source-v]
+                                              (element-xy lay to-col (inc dt)))
+                                      :ff [0 height-px]
+                                      :fb [1000 height-px])]]
+                (when do-perm? (c/alpha ctx p))
                 (doto ctx
-                  (c/alpha (if do-perm? perm 1))
+                  (c/alpha (if do-perm? p 1))
                   (c/begin-path)
                   (c/move-to sx sy)
-                  (c/line-to (+ cx 1) cy) ;; +1 avoid obscuring colour
+                  (c/line-to (+ tx 1) ty) ;; +1 avoid obscuring colour
                   (c/stroke)))
               (c/alpha ctx 1))))))
     (c/restore ctx))
@@ -389,6 +403,7 @@
         rgns (p/region-seq state)
         rgn (nth rgns rid)
         layer (:layer-3 rgn)
+        depth (p/layer-depth layer)
         inp (first (p/input-seq state))
         in (:value inp)
         bits (p/bits-value inp)]
@@ -432,16 +447,24 @@
               ac (p/active-cells p-layer)
               lc (or (p/learnable-cells p-layer) #{})
               pcon (:distal-perm-connected (p/params p-rgn))
-              ;; yuck:
-              ;rgn-tree (nth (core/region-tree-seq state) rid)
-              bits #{} ; TODO (core/incoming-bits-value rgn-tree p/bits-value)
-              sig-bits #{} ; TODO (core/incoming-bits-value rgn-tree p/signal-bits-value)
+              ;; TODO
+              bits #{}
+              sig-bits #{}
               ]
           ["__Active cells prev__"
            (str (sort ac))
            ""
            "__Learn cells prev__"
            (str (sort lc))
+           ""
+           "__Distal LC bits prev__"
+           (str (:distal-lc-bits (:prior-distal-state layer)))
+           ""
+           "__Distal LC bits__"
+           (str (:distal-lc-bits (:distal-state layer)))
+           ""
+           "__Distal bits__"
+           (str (:distal-bits (:distal-state layer)))
            ""
            "__Predicted cells prev__"
            (str (sort (p/predictive-cells p-layer)))
@@ -454,8 +477,7 @@
                     (gstring/format "%.2f" p)
                     (if (sig-bits id) " S")
                     (if (bits id) (str " A "
-                                       ;(p/source-of-incoming-bit
-                                       ;rgn-tree id)
+                                       ;(p/source-of-incoming-bit)
                                        )))))
            "__Cells and their Dendrite segments__"
            (for [ci (range (p/layer-depth layer))
@@ -463,7 +485,7 @@
              [(str "CELL " ci)
               (str (count segs) " = " (map count segs))
               (str "Lateral excitation from this cell: "
-                   (p/targets-connected-from p-distal-sg [col ci]))
+                   (p/targets-connected-from p-distal-sg (+ ci (* depth col)))) ;; TODO cell->id
               (for [[si syns] (map-indexed vector segs)]
                 [(str "  SEGMENT " si)
                  (for [[id p] (sort syns)]
@@ -476,7 +498,7 @@
            ]))
       ""
       "__spec__"
-      (sort (p/params rgn))]
+      (map str (sort (p/params rgn)))]
      (flatten)
      (interpose \newline)
      (apply str))))
@@ -563,7 +585,7 @@
   [distal-sg depth col]
   (reduce (fn [n ci]
             (+ n (util/count-filter seq
-                                    (syn/cell-segments-raw distal-sg [col ci]))))
+                                    (p/cell-segments distal-sg [col ci]))))
           0
           (range depth)))
 
@@ -702,11 +724,10 @@
     ;; draw feed-forward synapses
     ;; TODO mapping multiple input sources
     (when (get-in opts [:ff-synapses :active])
-      (doseq [[rid rgn prev-rgn src r-lay src-lay]
+      (doseq [[rid rgn src r-lay src-lay]
               (map vector
                    (range)
                    (p/region-seq sel-state)
-                   (if sel-prev-state (p/region-seq sel-prev-state))
                    (list* (first (p/input-seq sel-state))
                           (p/region-seq sel-state))
                    r-lays
@@ -720,12 +741,9 @@
                (< (inc sel-dt) (count @steps)))
       (let [rgn (-> (p/region-seq sel-state)
                     (nth sel-rid))
-            prev-rgn (if sel-prev-state
-                       (-> (p/region-seq sel-prev-state)
-                           (nth sel-rid)))
             lay (nth r-lays sel-rid)]
-        (draw-cell-segments ctx (:layer-3 rgn) (:layer-3 prev-rgn)
-                            lay sel-col sel-dt cells-left opts))))
+        (draw-cell-segments ctx (:layer-3 rgn) lay sel-col sel-dt cells-left
+                            opts))))
   nil)
 
 ;; ## Event stream processing
