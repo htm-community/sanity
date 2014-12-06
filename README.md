@@ -15,7 +15,7 @@ Clone [Comportex](http://github.com/nupic-community/comportex/),
 and install it to your local Maven repository (~/.m2):
 
 ```
-lein do check, install
+lein install
 ```
 
 Clone ComportexViz, and then build it:
