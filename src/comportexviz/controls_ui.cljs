@@ -48,7 +48,7 @@
 
 (defn keys->id
   [keys]
-  (->> (map (fn [x] (if (number? x) (str x) (name x))) keys)
+  (->> (map (fn [x] (if (keyword? x) (name x) (str x))) keys)
        (map #(str/replace % \? "_QMARK_"))
        (interpose "_")
        (apply str "comportex-")))
@@ -190,39 +190,44 @@
 (defn handle-parameters!
   [model selection]
   (bind! "#comportex-parameters"
-         (let [sel-rid (:region @selection)]
+         (let [sel-region (:region @selection)
+               ;sel-layer (:layer @selection)
+               ]
            [:div#comportex-parameters
-            (let [rgns (p/region-seq @model)]
-              (for [rid (range (count rgns))
-                    :let [rgn (nth rgns rid)
-                          spec (p/params rgn)]]
-                [:div {:style {:display (if (not= rid sel-rid) "none")}}
-                 [:form {:id (str "region-spec-form-" rid)}
-                  [:p (str "Region " rid) [:br]
-                   [:span.detail "(click on a region to select it)"]]
-                  [:fieldset.region-spec
-                   [:legend "Parameters"]
-                   (map (partial parameter-input rid) (sort spec))
-                   [:p.detail [:input {:type "submit" :value "Set!"}]
-                    (str " (will be set immediately, but then use Reset above for any"
-                         " parameters that apply only in initialisation)")]]]]))]
+            (for [[region-key rgn] (:regions @model)
+                  layer-id (core/layers rgn)
+                  :let [spec (p/params (get rgn layer-id))
+                        uniqix (str (name region-key) (name layer-id))]]
+              [:div {:style {:display (if (not= [region-key layer-id]
+                                                [sel-region layer-id])
+                                        "none")}}
+               [:form {:id (str "region-spec-form-" uniqix)}
+                [:p (str "Region " region-key " " layer-id) [:br]
+                 [:span.detail "(click on a region to select it)"]]
+                [:fieldset.region-spec
+                 [:legend "Parameters"]
+                 (map (partial parameter-input uniqix)
+                      (sort spec))
+                 [:p.detail [:input {:type "submit" :value "Set!"}]
+                  (str " (will be set immediately, but then use Reset above for any"
+                       " parameters that apply only in initialisation)")]]]])]
            ))
-
-  (doseq [rid (range (count (p/region-seq @model)))
-          :let [form-el (->dom (str "#region-spec-form-" rid))]]
+  ;; once only
+  (doseq [[region-key init-rgn] (:regions @model)
+          layer-id (core/layers init-rgn)
+          :let [uniqix (str (name region-key) (name layer-id))
+                form-el (->dom (str "#region-spec-form-" uniqix))]]
     (event/on-raw form-el :submit
                   (fn [e]
-                    (let [rgn (nth (p/region-seq @model) rid)
-                          ospec (p/params rgn)
+                    (let [rgn (get-in @model [:region region-key])
+                          ospec (p/params (get rgn layer-id))
                           s (reduce (fn [s k]
-                                      (let [id (keys->id [rid k])
+                                      (let [id (keys->id [uniqix k])
                                             el (->dom (str "#" id))
                                             v (cljs.reader/read-string (dom/val el))]
                                         (assoc s k v)))
                                     {} (keys ospec))]
                       (swap! model p/update-by-uuid (:uuid rgn)
-                             #(-> %
-                                  (assoc-in [:column-field :spec] s)
-                                  (assoc-in [:layer-3 :spec] s)))
+                             #(assoc-in % [layer-id :spec] s))
                       (.preventDefault e)
                       false)))))

@@ -9,9 +9,9 @@
 
 (def item-colors
   (zipmap demo/items
-          (map #(str "hsl(" % ",100%," %2 "%)")
-               (range 0 360 30)
-               (apply concat (repeat [65 35])))))
+          (for [hue (range 0 360 70)
+                lig [70 30]]
+            (str "hsl(" hue ",100%," lig "%)"))))
 
 (defn draw-eye
   [ctx {:keys [x y angle radius]}]
@@ -58,7 +58,8 @@
           (c/font-style "14px monospace")
           (c/text {:x plot-x :y (quot plot-y 2)
                    :text (str "pos=" position
-                              ", next " next-saccade)}))
+                              ", next" (if (neg? next-saccade) "" "+")
+                              next-saccade)}))
         ;; draw the plot
         (c/translate ctx plot-x plot-y)
         (plt/frame! plot)

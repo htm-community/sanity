@@ -22,7 +22,7 @@
 (def model (atom nil))
 (def world (atom (chan)))
 
-(def selection (atom {:region 0 :dt 0 :col nil}))
+(def selection (atom {:region nil, :layer nil, :dt 0, :col nil}))
 
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
@@ -69,25 +69,28 @@
 
 (defn init-plots!
   [init-model el]
-  (let [rgns (p/region-seq init-model)]
-    (bind! el
-           [:div
-            (for [rid (range (count rgns))
-                  :let [id (str "comportex-plot-" rid)]]
-              [:fieldset
-               [:legend (str "Region " rid)]
-               [:div {:id id}]])])
-    (doseq [rid (range (count rgns))
-            :let [id (str "comportex-plot-" rid)]]
-      (let [this-el (->dom (str "#" id))
-            freqs-c (async/map< (comp core/column-state-freqs
-                                      #(nth % rid)
-                                      p/region-seq)
-                                (tap-c steps-mult))
-            agg-freqs-ts (plots/aggregated-ts-ref freqs-c 200)]
-        (add-watch agg-freqs-ts :ts-plot
-                   (fn [_ _ _ v]
-                     (update-ts-plot this-el v)))))))
+  (bind! el
+         [:div
+          (for [[region-key rgn] (:regions init-model)
+                layer-id (core/layers rgn)
+                :let [uniqix (str (name region-key) (name layer-id))
+                      el-id (str "comportex-plot-" uniqix)]]
+            [:fieldset
+             [:legend (str "Region " region-key " " layer-id)]
+             [:div {:id el-id}]])])
+  (doseq [[region-key rgn] (:regions init-model)
+          layer-id (core/layers rgn)
+          :let [uniqix (str (name region-key) (name layer-id))
+                el-id (str "comportex-plot-" uniqix)]]
+    (let [this-el (->dom (str "#" el-id))
+          freqs-c (async/map< (comp #(core/column-state-freqs % layer-id)
+                                    region-key
+                                    :regions)
+                              (tap-c steps-mult))
+          agg-freqs-ts (plots/aggregated-ts-ref freqs-c 200)]
+      (add-watch agg-freqs-ts :ts-plot
+                 (fn [_ _ _ v]
+                   (update-ts-plot this-el v))))))
 
 ;;; ## Visualisation
 
@@ -130,8 +133,11 @@
   (let [init? (nil? @model)]
     (reset! model x)
     (if init?
-      (init-ui! x)
-      (swap! selection assoc :dt 0 :region 0 :col nil))))
+      (init-ui! x))
+    (let [region-key (first (p/region-keys x))
+          layer-id (first (core/layers (get-in x [:regions region-key])))]
+      (swap! selection assoc :region region-key :layer layer-id
+             :dt 0 :col nil))))
 
 (defn set-world
   [c]

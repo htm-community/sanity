@@ -333,3 +333,14 @@
       :height-px height
       :circles? true
       :highlight-color highlight-color})))
+
+(defn make-layout
+  [topo top left height opts inbits? & {:keys [force-d]}]
+  (let [ndim (or force-d (count (p/dimensions topo)))]
+    (if inbits?
+      (case ndim
+        1 (inbits-1d-layout topo top left height opts)
+        2 (inbits-2d-layout topo top left height opts))
+      (case ndim
+        1 (columns-1d-layout topo top left height opts)
+        2 (columns-2d-layout topo top left height opts)))))

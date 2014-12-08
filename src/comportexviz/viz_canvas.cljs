@@ -8,10 +8,7 @@
                      fill-elements
                      circle
                      centred-rect
-                     inbits-1d-layout
-                     columns-1d-layout
-                     inbits-2d-layout
-                     columns-2d-layout]]
+                     make-layout]]
             [c2.dom :as dom :refer [->dom]]
             [c2.event]
             [goog.events.EventType]
@@ -73,7 +70,8 @@
 
 (def viz-options
   (atom {:input {:active true
-                 :predicted true}
+                 :predicted true
+                 :scroll-counter 0}
          :columns {:active true
                    :overlaps nil
                    :n-segments nil
@@ -106,59 +104,85 @@
 
 (def keep-steps (atom 25))
 (def steps (atom []))
-(def layouts (atom nil))
+(def layouts (atom {:inputs {}
+                    :regions {}}))
 
 (defn draw-image-dt
   [ctx lay dt img]
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
-(defn scroll-columns!
+(defn scroll-layout
+  [lay down?]
+  (let [n (n-onscreen lay)
+        ncol (p/size-of lay)]
+    (update-in lay [:scroll-top]
+               (fn [x]
+                 (if down?
+                   (-> (+ x n) (min (- ncol n)))
+                   (-> (- x n) (max 0)))))))
+
+(defn scroll!
   [down?]
-  (swap! layouts update-in [:regions]
-         (fn [r-lays]
-           (mapv (fn [lay]
-                   (let [n (n-onscreen lay)
-                         ncol (p/size-of lay)]
-                     (update-in lay [:scroll-top]
-                               (fn [x]
-                                 (if down?
-                                   (-> (+ x n) (min (- ncol n)))
-                                   (-> (- x n) (max 0)))))))
-                 r-lays)))
+  (swap! layouts
+         (fn [m]
+           (-> m
+               (update-in [:regions]
+                          (fn [lays]
+                            (util/remap #(scroll-layout % down?) lays)))
+               (update-in [:inputs]
+                          (fn [lays]
+                            (util/remap #(scroll-layout % down?) lays))))))
   ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :scroll-counter]
-         #(if down? (inc %) (dec %))))
+  (swap! viz-options
+         (fn [m]
+           (-> m
+               (update-in [:columns :scroll-counter]
+                          #(if down? (inc %) (dec %)))
+               (update-in [:input :scroll-counter]
+                          #(if down? (inc %) (dec %)))))))
 
 (defn draw-ff-synapses
-  [ctx lyr r-lay src src-lay sel-col sel-dt opts]
+  [ctx region-key state r-lays i-lays sel-col sel-dt opts]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
-  (let [sg (:proximal-sg lyr)
-        cols (if sel-col [sel-col]
-                 (p/active-columns lyr))
-        src-bits (p/bits-value src)
-        src-sbits (p/signal-bits-value src)
+  (let [rgn (get-in state [:regions region-key])
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-disconn? (get-in opts [:ff-synapses :disconnected])
-        do-perm? (get-in opts [:ff-synapses :permanences])]
-    (doseq [col cols
+        do-perm? (get-in opts [:ff-synapses :permanences])
+        this-lay (r-lays region-key)
+        layer-ids (core/layers rgn)]
+    (doseq [[layer-idx layer-id] (map-indexed vector layer-ids)
+            :let [lyr (get rgn layer-id)]
+            col (if sel-col [sel-col]
+                    (p/active-columns lyr))
             syn-state (concat (when do-disconn? [:disconnected])
                               (when do-inactive? [:inactive-syn])
                               [:active :active-predicted])
-            :let [all-syns (p/in-synapses sg col)
+            :let [in-bits (:in-ff-bits (:state lyr))
+                  in-sbits (:in-signal-ff-bits (:state lyr))
+                  sg (:proximal-sg lyr)
+                  all-syns (p/in-synapses sg col)
                   syns (select-keys all-syns (p/sources-connected-to sg col))
                   sub-syns (case syn-state
-                             :active (select-keys syns src-bits)
-                             :active-predicted (select-keys syns src-sbits)
-                             :inactive-syn (apply dissoc syns src-bits)
+                             :active (select-keys syns in-bits)
+                             :active-predicted (select-keys syns in-sbits)
+                             :inactive-syn (apply dissoc syns in-bits)
                              :disconnected (apply dissoc all-syns (keys syns)))
-                  [this-x this-y] (element-xy r-lay col sel-dt)]]
+                  [this-x this-y] (element-xy this-lay col sel-dt)]]
       (c/stroke-style ctx (state-colors syn-state))
-      (doseq [[in-id perm] sub-syns
-              :let [[src-id _] (p/source-of-bit src in-id)
-                    [src-x src-y] (element-xy src-lay src-id sel-dt)]]
+      (doseq [[i perm] sub-syns
+              :let [[src-key src-i]
+                    (if (zero? layer-idx)
+                      ;; input from another region
+                      (core/source-of-incoming-bit state region-key i)
+                      ;; input from another layer in same region
+                      ;; TODO layer layouts (nth layer-ids (dec layer-idx))
+                      [region-key i])
+                    src-lay (or (r-lays src-key)
+                                (i-lays src-key))
+                    [src-x src-y] (element-xy src-lay src-i sel-dt)]]
         (doto ctx
           (c/alpha (if do-perm? perm 1))
           (c/begin-path)
@@ -396,15 +420,14 @@
 
 (defn detail-text
   [{dt :dt
-    rid :region
+    region-key :region
     col :col
     :as selection}]
   (let [state (nth @steps dt)
-        rgns (p/region-seq state)
-        rgn (nth rgns rid)
+        rgn (get-in state [:regions region-key])
         layer (:layer-3 rgn)
         depth (p/layer-depth layer)
-        inp (first (p/input-seq state))
+        inp (first (core/input-seq state))
         in (:value inp)
         bits (p/bits-value inp)]
     (->>
@@ -440,7 +463,7 @@
       (if col
         (let [dtp (inc dt)
               p-state (nth @steps dtp)
-              p-rgn (nth (p/region-seq p-state) rid)
+              p-rgn (get-in p-state [:regions region-key])
               p-layer (:layer-3 p-rgn)
               p-prox-sg (:proximal-sg p-layer)
               p-distal-sg (:distal-sg p-layer)
@@ -523,7 +546,9 @@
   [lay inp]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        inbits (p/bits-value inp)]
+        inbits (if (:encoder inp)
+                 (p/bits-value inp)
+                 (p/motor-bits-value inp))]
     (c/fill-style ctx (:active state-colors))
     (fill-element-group ctx lay inbits)
     el))
@@ -614,25 +639,25 @@
                (n-onscreen lay) -1)
        " of " (p/size-of lay)))
 
-(defn draw!
+(defn do-draw!
   [{sel-dt :dt
-    sel-rid :region
+    sel-region :region
     sel-col :col
     :as selection}]
   (dom/val "#detail-text"
            (if sel-col (detail-text selection)
                "Select a column (by clicking on it) to see details."))
   (let [opts @viz-options
-        i-lay (:input @layouts)
+        i-lays (:inputs @layouts)
         r-lays (:regions @layouts)
         draw-steps (get-in opts [:drawing :draw-steps])
         sel-state (nth @steps sel-dt)
         sel-prev-state (nth @steps (inc sel-dt) nil)
         canvas-el (->dom "#comportex-viz")
         ctx (c/get-context canvas-el "2d")
-        inbits-bg (bg-image i-lay)
-        columns-bgs (map bg-image r-lays)
-        cells-left (+ (lay/right-px (last r-lays))
+        i-bgs (util/remap bg-image i-lays)
+        r-bgs (util/remap bg-image r-lays)
+        cells-left (+ (apply max (map lay/right-px (vals r-lays)))
                       (get-in opts [:drawing :h-space-px]))
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
@@ -640,18 +665,19 @@
     (c/text ctx {:text "Input on selected timestep."
                  :x 2
                  :y 0})
-    (c/text ctx {:text "Encoded bits."
-                 :x (:x (layout-bounds i-lay))
-                 :y 0})
-    (c/text ctx {:text (scroll-status-str i-lay)
-                 :x (:x (layout-bounds i-lay))
-                 :y 10})
-    (doseq [[rid r-lay] (map-indexed vector r-lays)]
-      (c/text ctx {:text (str "Region " rid " columns.")
-                   :x (:x (layout-bounds r-lay))
+    (doseq [[k lay] i-lays]
+      (c/text ctx {:text (str (name k) " encoded bits.")
+                   :x (:x (layout-bounds lay))
                    :y 0})
-      (c/text ctx {:text (scroll-status-str r-lay)
-                   :x (:x (layout-bounds r-lay))
+      (c/text ctx {:text (scroll-status-str lay)
+                   :x (:x (layout-bounds lay))
+                   :y 10}))
+    (doseq [[k lay] r-lays]
+      (c/text ctx {:text (str "Region " (name k) " columns.")
+                   :x (:x (layout-bounds lay))
+                   :y 0})
+      (c/text ctx {:text (scroll-status-str lay)
+                   :x (:x (layout-bounds lay))
                    :y 10}))
     (let [segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))]
           (c/text ctx {:text (str "Segments. "
@@ -660,91 +686,88 @@
                              " Page up / page down to scroll columns.")
                        :x segs-left :y 0}))
     (let [world-w-px (get-in opts [:drawing :world-w-px])
-          in-value (:value (first (p/input-seq sel-state)))]
+          in-value (:value (first (core/input-seq sel-state)))]
       (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
         (draw-world in-value ctx 0 top-px world-w-px (- height-px top-px) sel-state)))
     (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
-                  prev-first-region (if prev-state
-                                      (first (p/region-seq prev-state)))
-                  rgns (p/region-seq state)
-                  inp (first (p/input-seq state))
                   cache (::cache (meta state))]]
       ;; draw encoded inbits
-      (when (or (== 1 (count (p/dims-of i-lay)))
-                (== dt sel-dt))
-        (->> inbits-bg
-             (draw-image-dt ctx i-lay dt))
+      (doseq [[k lay] i-lays
+              :when (or (== 1 (count (p/dims-of lay)))
+                        (== dt sel-dt))
+              :let [inp (get-in state [:inputs k])
+                    ;; region this input feeds to, for predictions
+                    ff-rgn-k (first (get-in state [:fb-deps k]))
+                    prev-ff-rgn (get-in prev-state [:regions k])]]
+        (->> (i-bgs k)
+             (draw-image-dt ctx lay dt))
         (when (get-in opts [:input :active])
-          (->> (active-bits-image i-lay inp)
-               (with-cache cache ::abits opts :input)
-               (draw-image-dt ctx i-lay dt)))
+          (->> (active-bits-image lay inp)
+               (with-cache cache [::abits k] opts :input)
+               (draw-image-dt ctx lay dt)))
         (when (and (get-in opts [:input :predicted])
-                   prev-first-region)
-          (->> (pred-bits-image i-lay prev-first-region)
-               (with-cache cache ::pbits opts :input)
-               (draw-image-dt ctx i-lay dt))))
+                   prev-ff-rgn)
+          (->> (pred-bits-image lay prev-ff-rgn)
+               (with-cache cache [::pbits k] opts :input)
+               (draw-image-dt ctx lay dt))))
       ;; draw regions
-      (doseq [[rid r-lay rgn bg-i]
-              (map vector (range) r-lays rgns columns-bgs)
-              :when (or (== 1 (count (p/dims-of r-lay)))
-                        (== dt sel-dt))]
-        (->> bg-i
-             (draw-image-dt ctx r-lay dt))
+      (doseq [[k lay] r-lays
+              :when (or (== 1 (count (p/dims-of lay)))
+                        (== dt sel-dt))
+              :let [rgn (get-in state [:regions k])]]
+        (->> (r-bgs k)
+             (draw-image-dt ctx lay dt))
         (when (get-in opts [:columns :overlaps])
-          (->> (overlaps-columns-image r-lay rgn)
-               (with-cache cache [::ocols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt)))
+          (->> (overlaps-columns-image lay rgn)
+               (with-cache cache [::ocols k] opts :columns)
+               (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :n-segments])
-          (->> (n-segments-columns-image r-lay rgn)
-               (with-cache cache [::nsegcols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt)))
+          (->> (n-segments-columns-image lay rgn)
+               (with-cache cache [::nsegcols k] opts :columns)
+               (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :active])
-          (->> (active-columns-image r-lay rgn)
-               (with-cache cache [::acols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt)))
+          (->> (active-columns-image lay rgn)
+               (with-cache cache [::acols k] opts :columns)
+               (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :predictive])
-          (->> (pred-columns-image r-lay rgn)
-               (with-cache cache [::pcols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt)))
+          (->> (pred-columns-image lay rgn)
+               (with-cache cache [::pcols k] opts :columns)
+               (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :temporal-pooling])
-          (->> (tp-columns-image r-lay rgn)
-               (with-cache cache [::tpcols rid] opts :columns)
-               (draw-image-dt ctx r-lay dt))))
+          (->> (tp-columns-image lay rgn)
+               (with-cache cache [::tpcols k] opts :columns)
+               (draw-image-dt ctx lay dt))))
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))
     ;; highlight selection
-    (lay/highlight-dt i-lay ctx sel-dt)
-    (doseq [r-lay r-lays]
-      (lay/highlight-dt r-lay ctx sel-dt))
+    (doseq [lay (vals i-lays)]
+      (lay/highlight-dt lay ctx sel-dt))
+    (doseq [lay (vals r-lays)]
+      (lay/highlight-dt lay ctx sel-dt))
     (when sel-col
-      (let [r-lay (nth r-lays sel-rid)]
-        (lay/highlight-element r-lay ctx sel-dt sel-col)))
-    ;; draw feed-forward synapses
-    ;; TODO mapping multiple input sources
+      (let [lay (r-lays sel-region)]
+        (lay/highlight-element lay ctx sel-dt sel-col)))
+    ;; draw ff synapses
     (when (get-in opts [:ff-synapses :active])
-      (doseq [[rid rgn src r-lay src-lay]
-              (map vector
-                   (range)
-                   (p/region-seq sel-state)
-                   (list* (first (p/input-seq sel-state))
-                          (p/region-seq sel-state))
-                   r-lays
-                   (list* i-lay r-lays))]
-        (when (or (not sel-col)
-                  (= sel-rid rid))
-          (draw-ff-synapses ctx (:layer-3 rgn) r-lay src src-lay
-                            sel-col sel-dt opts))))
+      (doseq [k (keys r-lays)
+              :when (or (not sel-col)
+                        (= sel-region k))]
+        (draw-ff-synapses ctx k sel-state r-lays i-lays sel-col sel-dt opts)))
     ;; draw selected cells and segments
     (when (and sel-col
                (< (inc sel-dt) (count @steps)))
-      (let [rgn (-> (p/region-seq sel-state)
-                    (nth sel-rid))
-            lay (nth r-lays sel-rid)]
+      (let [rgn (get-in sel-state [:regions sel-region])
+            lay (r-lays sel-region)]
         (draw-cell-segments ctx (:layer-3 rgn) lay sel-col sel-dt cells-left
                             opts))))
   nil)
+
+(defn draw!
+  [selection]
+  (when (seq @steps)
+    (do-draw! selection)))
 
 ;; ## Event stream processing
 
@@ -765,27 +788,29 @@
        (let [e (<! clicks)
              x (.-offsetX e)
              y (.-offsetY e)
-             i-lay (:input @layouts)
+             i-lays (:inputs @layouts)
              r-lays (:regions @layouts)
              ;; we need to assume there is a previous step, so:
-             max-dt (max 0 (- (count @steps) 2))]
-         (if-let [[dt _] (lay/clicked-id i-lay x y)]
-           ;; in-bit clicked
-           (when (== 1 (count (p/dims-of i-lay)))
-             (swap! selection assoc :dt (min dt max-dt)))
-           ;; otherwise, check regions
-           (loop [rid 0]
-             (if (< rid (count r-lays))
-               (let [r-lay (nth r-lays rid)
-                     [dt id] (lay/clicked-id r-lay x y)]
-                 (if id
-                   (swap! selection
-                          (if (== 1 (count (p/dims-of r-lay)))
-                            #(assoc % :region rid :col id :dt (min dt max-dt))
-                            #(assoc % :region rid :col id)))
-                   (recur (inc rid))))
-               ;; checked all, nothing clicked
-               (swap! selection assoc :col nil)))))))))
+             max-dt (max 0 (- (count @steps) 2))
+             hit? (atom false)]
+         ;; check inputs
+         (doseq [[k lay] i-lays
+                 :let [[dt id] (lay/clicked-id lay x y)]
+                 :when dt]
+           (reset! hit? true)
+           (when (== 1 (count (p/dims-of lay)))
+             (swap! selection assoc :dt (min dt max-dt))))
+         ;; check regions
+         (doseq [[k lay] r-lays
+                 :let [[dt id] (lay/clicked-id lay x y)]
+                 :when dt]
+           (reset! hit? true)
+           (if (== 1 (count (p/dims-of lay)))
+             (swap! selection assoc :region k :col id :dt (min dt max-dt))
+             (swap! selection assoc :region k :col id)))
+         (when-not @hit?
+           ;; checked all, nothing clicked
+           (swap! selection assoc :col nil)))))))
 
 (def code-key
   {33 :page-up
@@ -818,38 +843,41 @@
                         (fn [x] (when x (dec x))))
              :down (swap! selection update-in [:col]
                           (fn [x] (when x (inc x))))
-             :page-up (scroll-columns! false)
-             :page-down (scroll-columns! true)
+             :page-up (scroll! false)
+             :page-down (scroll! true)
              )))))))
 
 (defn init!
   [init-model steps-c selection sim-step!]
-  (let [rgns (p/region-seq init-model)
+  (let [inp-keys (p/input-keys init-model)
+        rgn-keys (p/region-keys init-model)
+        inputs (:inputs init-model)
+        regions (:regions init-model)
         d-opts (:drawing @viz-options)
-        ;; for now assume only one input
-        inp (first (p/input-seq init-model))
-        world-w-px (:world-w-px d-opts)
-        ;; check dimensionality of input
-        itopo (p/topology inp)
-        enc-lay (if (== 1 (count (p/dimensions itopo)))
-                  (inbits-1d-layout itopo top-px (+ world-w-px 10) height-px d-opts)
-                  (inbits-2d-layout itopo top-px (+ world-w-px 10) height-px d-opts))
-        ;; for now draw regions in a horizontal stack
+        force-d (:force-d d-opts)
         spacer (:h-space-px d-opts)
-        r-lays (reduce (fn [lays rgn]
-                         (let [topo (p/topology rgn)
-                               left (-> (or (peek lays) enc-lay)
-                                        (lay/right-px)
-                                        (+ spacer))
-                               r-lay (if (== 1 (count (p/dimensions topo)))
-                                       (columns-1d-layout
-                                        topo top-px left height-px d-opts)
-                                       (columns-2d-layout
-                                        topo top-px left height-px d-opts))]
-                           (conj lays r-lay)))
-                       []
-                       rgns)]
-    (reset! layouts {:input enc-lay
+        world-w-px (:world-w-px d-opts)
+        ;; for now draw inputs in a horizontal stack
+        [i-lays i-right]
+        (reduce (fn [[lays left] k]
+                  (let [topo (p/topology (inputs k))
+                        lay (make-layout topo top-px left height-px d-opts
+                                         true :force-d force-d)]
+                    [(assoc lays k lay)
+                     (+ (lay/right-px lay) spacer)]))
+                [{} (+ world-w-px 10)]
+                inp-keys)
+        [r-lays r-right]
+        (reduce (fn [[lays left] k]
+                  ;; TODO layers!
+                  (let [topo (p/topology (regions k))
+                        lay (make-layout topo top-px left height-px d-opts
+                                         false :force-d force-d)]
+                    [(assoc lays k lay)
+                     (+ (lay/right-px lay) spacer)]))
+                [{} i-right]
+                rgn-keys)]
+    (reset! layouts {:inputs i-lays
                      :regions r-lays}))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []

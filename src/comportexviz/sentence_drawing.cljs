@@ -22,8 +22,8 @@
    function used by viz-canvas to draw the world (input)."
   [split-sentences n-predictions]
   (fn [this ctx left-px top-px w-px h-px state]
-    (let [inp (first (p/input-seq state))
-          rgn (first (p/region-seq state))
+    (let [inp (first (core/input-seq state))
+          rgn (first (core/region-seq state))
           [curr-sen-i curr-word-j] (:index this)
           curr-sen (get split-sentences curr-sen-i)
           pr-cols (->> (p/predictive-cells (:layer-3 rgn))
