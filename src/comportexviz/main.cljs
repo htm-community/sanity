@@ -76,7 +76,7 @@
                 :let [uniqix (str (name region-key) (name layer-id))
                       el-id (str "comportex-plot-" uniqix)]]
             [:fieldset
-             [:legend (str "Region " region-key " " layer-id)]
+             [:legend (str (name region-key) " " (name layer-id))]
              [:div {:id el-id}]])])
   (doseq [[region-key rgn] (:regions init-model)
           layer-id (core/layers rgn)

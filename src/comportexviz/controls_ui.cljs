@@ -169,13 +169,13 @@
               (checkbox viz [:ff-synapses :disconnected] "Disconnected ff-synapses") [:br]
               (checkbox viz [:ff-synapses :permanences] "Permanences")]
              [:fieldset
-              [:legend "Lateral dendrite segments"]
-              (combobox viz [:lat-synapses :from] [:learning :all :none]
+              [:legend "Distal dendrite segments"]
+              (combobox viz [:distal-synapses :from] [:learning :all :none]
                         "Synapses from ") [:br]
-              (checkbox viz [:lat-synapses :active] "Active synapses") [:br]
-              (checkbox viz [:lat-synapses :inactive] "Inactive synapses") [:br]
-              (checkbox viz [:lat-synapses :disconnected] "Disconnected synapses") [:br]
-              (checkbox viz [:lat-synapses :permanences] "Permanences")]])
+              (checkbox viz [:distal-synapses :active] "Active synapses") [:br]
+              (checkbox viz [:distal-synapses :inactive] "Inactive synapses") [:br]
+              (checkbox viz [:distal-synapses :disconnected] "Disconnected synapses") [:br]
+              (checkbox viz [:distal-synapses :permanences] "Permanences")]])
           ])
   (doseq [[k km] @viz-options
           [subk v] km
@@ -191,19 +191,19 @@
   [model selection]
   (bind! "#comportex-parameters"
          (let [sel-region (:region @selection)
-               ;sel-layer (:layer @selection)
-               ]
+               sel-layer (:layer @selection)]
            [:div#comportex-parameters
             (for [[region-key rgn] (:regions @model)
                   layer-id (core/layers rgn)
                   :let [spec (p/params (get rgn layer-id))
                         uniqix (str (name region-key) (name layer-id))]]
               [:div {:style {:display (if (not= [region-key layer-id]
-                                                [sel-region layer-id])
+                                                [sel-region sel-layer])
                                         "none")}}
                [:form {:id (str "region-spec-form-" uniqix)}
-                [:p (str "Region " region-key " " layer-id) [:br]
-                 [:span.detail "(click on a region to select it)"]]
+                [:p (str "Currently selected: " (name region-key) " "
+                         (name layer-id)) [:br]
+                 [:span.detail "(click on a region layer to select it)"]]
                 [:fieldset.region-spec
                  [:legend "Parameters"]
                  (map (partial parameter-input uniqix)

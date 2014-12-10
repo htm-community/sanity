@@ -26,9 +26,7 @@
           rgn (first (core/region-seq state))
           [curr-sen-i curr-word-j] (:index this)
           curr-sen (get split-sentences curr-sen-i)
-          pr-cols (->> (p/predictive-cells (:layer-3 rgn))
-                       (map first))
-          pr-votes (core/predicted-bit-votes rgn pr-cols)
+          pr-votes (core/predicted-bit-votes rgn)
           left-x 5
           vf-x (- w-px 30)
           vpb-x (- w-px 5)
