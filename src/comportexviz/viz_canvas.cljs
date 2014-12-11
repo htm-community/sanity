@@ -6,7 +6,6 @@
                      element-xy
                      fill-element-group
                      fill-elements
-                     circle
                      centred-rect
                      make-layout]]
             [c2.dom :as dom :refer [->dom]]
@@ -29,7 +28,9 @@
 ;; TODO 'state -> 'htm
 
 (def height-px 900)
-(def top-px 30)
+(def ts-height-px 30)
+(def label-top-px (+ ts-height-px 10))
+(def display-top-px (+ label-top-px 30))
 
 ;;; ## Colours
 
@@ -90,6 +91,7 @@
                            :disconnected nil
                            :permanences nil}
          :drawing {:draw-steps 25
+                   :force-d nil
                    :world-w-px 150
                    :bit-w-px 3
                    :bit-h-px 3
@@ -113,6 +115,44 @@
   [ctx lay dt img]
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
+
+(defn rebuild-layouts
+  [model opts]
+  (let [inputs (:inputs model)
+        regions (:regions model)
+        layerseq (mapcat (fn [rgn-id]
+                           (map vector (repeat rgn-id)
+                                (core/layers (regions rgn-id))))
+                         (p/region-keys model))
+        d-opts (:drawing opts)
+        force-d (:force-d d-opts)
+        spacer (:h-space-px d-opts)
+        world-w-px (:world-w-px d-opts)
+        ;; for now draw inputs and layers in a horizontal stack
+        [i-lays i-right]
+        (reduce (fn [[lays left] inp-id]
+                  (let [topo (p/topology (inputs inp-id))
+                        lay (make-layout topo display-top-px left height-px d-opts
+                                         true :force-d force-d)]
+                    [(assoc lays inp-id lay)
+                     (+ (lay/right-px lay) spacer)]))
+                [{} (+ world-w-px 10)]
+                (p/input-keys model))
+        [r-lays r-right]
+        (reduce (fn [[lays left] [rgn-id lyr-id]]
+                  (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
+                        lay (make-layout topo display-top-px left height-px d-opts
+                                         false :force-d force-d)]
+                    [(assoc-in lays [rgn-id lyr-id] lay)
+                     (+ (lay/right-px lay) spacer)]))
+                [{} i-right]
+                layerseq)]
+    {:inputs i-lays
+     :regions r-lays}))
+
+(add-watch viz-options :rebuild-layouts
+           (fn [_ _ _ opts]
+             (reset! layouts (rebuild-layouts (first @steps) opts))))
 
 (defn scroll-layout
   [lay down?]
@@ -209,9 +249,9 @@
                          src-lay (or (get i-lays src-id)
                                      (get-in r-lays [src-id src-lyr]))
                          src-col (if src-lyr
-                                   ;; TODO yuck
-                                   (let [depth (get-in regions [src-id src-lyr :spec :depth])]
-                                     (first (cells/id->cell depth src-i)))
+                                   (first (p/source-of-bit
+                                           (get-in regions [src-id src-lyr])
+                                           src-i))
                                    src-i)
                          [src-x src-y] (element-xy src-lay src-col dt)]
                      (doto ctx
@@ -276,7 +316,7 @@
         seg-w-px (get-in opts [:drawing :seg-w-px])
         seg-r-px (* seg-w-px 0.5)
         our-height (* 0.95 (.-innerHeight js/window))
-        our-top (+ (.-pageYOffset js/window) (* 2 cell-r-px))
+        our-top (+ display-top-px (.-pageYOffset js/window) cell-r-px)
         [col-x col-y] (element-xy cols-lay col dt)]
     (reify PCellsSegmentsLayout
       (seg-xy
@@ -284,7 +324,7 @@
         (let [i-all (apply + si (take ci nsegbycell-pad))
               frac (/ i-all nseg-pad)]
           [(+ segs-left seg-r-px)
-           (+ our-top top-px (* frac our-height))]))
+           (+ our-top (* frac our-height))]))
       (cell-xy
         [this ci]
         (let [[_ sy] (seg-xy this ci 0)]
@@ -361,15 +401,13 @@
       (when learn-cell?
         (doto ctx
           (c/fill-style (:highlight state-colors))
-          (c/begin-path)
-          (circle cell-x cell-y (+ cell-r-px 8))
+          (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
           (c/fill)))
       (doto ctx
         (c/fill-style (state-colors cell-state))
         (c/stroke-style "black")
         (c/stroke-width 1)
-        (c/begin-path)
-        (circle cell-x cell-y cell-r-px)
+        (c/circle {:x cell-x :y cell-y :r cell-r-px})
         (c/stroke)
         (c/fill))
       (c/fill-style ctx "black")
@@ -448,9 +486,9 @@
                       :let [src-lay (or (get i-lays src-id)
                                         (get-in r-lays [src-id src-lyr]))
                             src-col (if src-lyr
-                                      ;; TODO yuck
-                                      (let [depth (get-in regions [src-id src-lyr :spec :depth])]
-                                        (first (cells/id->cell depth src-i)))
+                                      (first (p/source-of-bit
+                                              (get-in regions [src-id src-lyr])
+                                              src-i))
                                       src-i)
                             [src-x src-y] (element-xy src-lay src-col (inc dt))]]
                 (when do-perm? (c/alpha ctx p))
@@ -705,35 +743,65 @@
                         (+ (get-in opts [:drawing :h-space-px])))
         width-px (.-width canvas-el)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    ;; draw timeline
+    (let [current-t (p/timestep (first @steps))
+          right-px (- width-px 250)
+          label-left (+ right-px 25)
+          t-width (/ right-px @keep-steps)
+          y-px (/ ts-height-px 2)
+          r-px (min y-px (* t-width 0.5))]
+      (c/text-baseline ctx :top)
+      (c/text ctx {:text "Right / left arrows move forward / back in time."
+                   :x label-left :y 0})
+      (c/text ctx {:text (if sel-col "Up / down arrows select columns."
+                             "Click a column to show its cells.")
+                   :x label-left :y 10})
+      (c/text ctx {:text "Page up / page down to scroll display."
+                   :x label-left :y 20})
+      (c/text-align ctx :center)
+      (c/text-baseline ctx :middle)
+      (c/font-style ctx "bold 10px sans-serif")
+      (doseq [dt (reverse (range @keep-steps))
+              :let [t (- current-t dt)
+                    x-px (- right-px r-px (* dt t-width))]]
+        (c/fill-style ctx "black")
+        (c/alpha ctx (cond (== dt sel-dt) 1.0 (pos? t) 0.5 :else 0.1))
+        (c/circle ctx {:x x-px :y y-px :r r-px})
+        (c/fill ctx)
+        (when (pos? t)
+          (c/fill-style ctx "white")
+          (c/text ctx {:x x-px :y y-px :text (str t)})))
+      (c/alpha ctx 1.0))
+    ;; draw labels
+    (c/text-align ctx :start)
     (c/text-baseline ctx :top)
+    (c/font-style ctx "10px sans-serif")
+    (c/fill-style ctx "black")
     (c/text ctx {:text "Input on selected timestep."
                  :x 2
-                 :y 0})
+                 :y label-top-px})
     (doseq [[inp-id lay] i-lays]
       (c/text ctx {:text (str (name inp-id) " encoded bits.")
                    :x (:x (layout-bounds lay))
-                   :y 0})
+                   :y label-top-px})
       (c/text ctx {:text (scroll-status-str lay)
                    :x (:x (layout-bounds lay))
-                   :y 10}))
+                   :y (+ label-top-px 10)}))
     (doseq [[rgn-id lyr-lays] r-lays
             [lyr-id lay] lyr-lays]
       (c/text ctx {:text (str (name rgn-id) " " (name lyr-id) " columns.")
                    :x (:x (layout-bounds lay))
-                   :y 0})
+                   :y label-top-px})
       (c/text ctx {:text (scroll-status-str lay)
                    :x (:x (layout-bounds lay))
-                   :y 10}))
-    (let [segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))]
-          (c/text ctx {:text (str "Segments. "
-                             (if sel-col "(arrows keys to move)"
-                                 "(click on a column)")
-                             " Page up / page down to scroll columns.")
-                       :x segs-left :y 0}))
+                   :y (+ label-top-px 10)}))
+    (c/text ctx {:text "Cells and distal dendrite segments."
+                 :x cells-left :y label-top-px})
+    ;; draw world
     (let [world-w-px (get-in opts [:drawing :world-w-px])
           in-value (:value (first (core/input-seq sel-state)))]
       (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
-        (draw-world in-value ctx 0 top-px world-w-px (- height-px top-px) sel-state)))
+        (draw-world in-value ctx 0 display-top-px world-w-px (- height-px display-top-px) sel-state)))
     (doseq [dt (range (min draw-steps (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
@@ -752,12 +820,12 @@
              (draw-image-dt ctx lay dt))
         (when (get-in opts [:input :active])
           (->> (active-bits-image lay inp)
-               (with-cache cache [::abits inp-id] opts :input)
+               (with-cache cache [::abits inp-id] opts [:input :drawing])
                (draw-image-dt ctx lay dt)))
         (when (and (get-in opts [:input :predicted])
                    prev-ff-rgn)
           (->> (pred-bits-image lay prev-ff-rgn)
-               (with-cache cache [::pbits inp-id] opts :input)
+               (with-cache cache [::pbits inp-id] opts [:input :drawing])
                (draw-image-dt ctx lay dt))))
       ;; draw regions / layers
       (doseq [[rgn-id lyr-lays] r-lays
@@ -770,23 +838,23 @@
              (draw-image-dt ctx lay dt))
         (when (get-in opts [:columns :overlaps])
           (->> (overlaps-columns-image lay lyr)
-               (with-cache cache [::ocols uniqix] opts :columns)
+               (with-cache cache [::ocols uniqix] opts [:columns :drawing])
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :n-segments])
           (->> (n-segments-columns-image lay lyr)
-               (with-cache cache [::nsegcols uniqix] opts :columns)
+               (with-cache cache [::nsegcols uniqix] opts [:columns :drawing])
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :active])
           (->> (active-columns-image lay lyr)
-               (with-cache cache [::acols uniqix] opts :columns)
+               (with-cache cache [::acols uniqix] opts [:columns :drawing])
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :predictive])
           (->> (pred-columns-image lay lyr)
-               (with-cache cache [::pcols uniqix] opts :columns)
+               (with-cache cache [::pcols uniqix] opts [:columns :drawing])
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :temporal-pooling])
           (->> (tp-columns-image lay lyr)
-               (with-cache cache [::tpcols uniqix] opts :columns)
+               (with-cache cache [::tpcols uniqix] opts [:columns :drawing])
                (draw-image-dt ctx lay dt))))
       (when (not= opts (:opts @cache))
         (swap! cache assoc :opts opts)))
@@ -894,37 +962,8 @@
 
 (defn init!
   [init-model steps-c selection sim-step!]
-  (let [inputs (:inputs init-model)
-        regions (:regions init-model)
-        layerseq (mapcat (fn [rgn-id]
-                           (map vector (repeat rgn-id)
-                                (core/layers (regions rgn-id))))
-                         (p/region-keys init-model))
-        d-opts (:drawing @viz-options)
-        force-d (:force-d d-opts)
-        spacer (:h-space-px d-opts)
-        world-w-px (:world-w-px d-opts)
-        ;; for now draw inputs and layers in a horizontal stack
-        [i-lays i-right]
-        (reduce (fn [[lays left] inp-id]
-                  (let [topo (p/topology (inputs inp-id))
-                        lay (make-layout topo top-px left height-px d-opts
-                                         true :force-d force-d)]
-                    [(assoc lays inp-id lay)
-                     (+ (lay/right-px lay) spacer)]))
-                [{} (+ world-w-px 10)]
-                (p/input-keys init-model))
-        [r-lays r-right]
-        (reduce (fn [[lays left] [rgn-id lyr-id]]
-                  (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
-                        lay (make-layout topo top-px left height-px d-opts
-                                         false :force-d force-d)]
-                    [(assoc-in lays [rgn-id lyr-id] lay)
-                     (+ (lay/right-px lay) spacer)]))
-                [{} i-right]
-                layerseq)]
-    (reset! layouts {:inputs i-lays
-                     :regions r-lays}))
+  (reset! layouts
+          (rebuild-layouts init-model @viz-options))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]

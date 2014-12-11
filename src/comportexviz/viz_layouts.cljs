@@ -1,6 +1,7 @@
 (ns comportexviz.viz-layouts
   (:require [monet.canvas :as c]
-            [org.nfrac.comportex.protocols :as p]))
+            [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.topology :as topology]))
 
 ;;; ## Layouts
 
@@ -136,7 +137,7 @@
   
   (n-onscreen [_]
     (min (p/size topo)
-         (/ (- height-px top-px) element-h)))
+         (quot (- height-px top-px) element-h)))
   
   (top-id-onscreen [_]
     scroll-top)
@@ -254,7 +255,7 @@
   (n-onscreen [_]
     (let [[w h] (p/dimensions topo)]
       (* w (min h
-                (/ (- height-px top-px) element-h)))))
+                (quot (- height-px top-px) element-h)))))
   
   (top-id-onscreen [_]
     scroll-top)
@@ -336,11 +337,18 @@
 
 (defn make-layout
   [topo top left height opts inbits? & {:keys [force-d]}]
-  (let [ndim (or force-d (count (p/dimensions topo)))]
+  (let [ndim (count (p/dimensions topo))
+        use-ndim (or force-d ndim)
+        use-topo (case force-d
+                   1 (topology/one-d-topology (p/size topo))
+                   2 (if (== 2 ndim)
+                       topo ;; keep actual topology if possible
+                       (topology/two-d-topology 20 (quot (p/size topo) 20)))
+                   topo)]
     (if inbits?
-      (case ndim
-        1 (inbits-1d-layout topo top left height opts)
-        2 (inbits-2d-layout topo top left height opts))
-      (case ndim
-        1 (columns-1d-layout topo top left height opts)
-        2 (columns-2d-layout topo top left height opts)))))
+      (case use-ndim
+        1 (inbits-1d-layout use-topo top left height opts)
+        2 (inbits-2d-layout use-topo top left height opts))
+      (case use-ndim
+        1 (columns-1d-layout use-topo top left height opts)
+        2 (columns-2d-layout use-topo top left height opts)))))

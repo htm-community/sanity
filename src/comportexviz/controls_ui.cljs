@@ -64,10 +64,19 @@
   [m keys optvals txt]
   [:label txt
    [:select {:id (keys->id keys)}
-    (for [optval optvals]
-      [:option {:value (name optval)
+    (for [optval optvals
+          :let [optstr (if (keyword? optval) (name optval) (str optval))]]
+      [:option {:value optstr
                 :selected (when (= (get-in m keys) optval) "selected")}
-       (name optval)])]])
+       optstr])]])
+
+(defn radio
+  [m keys value]
+  [:input {:name (keys->id keys)
+           :id (keys->id (conj keys value))
+           :type "radio"
+           :value value
+           :checked (when (= value (get-in m keys)) "checked")}])
 
 (defn parameter-input
   [prefix [k v]]
@@ -151,6 +160,17 @@
           (let [viz @viz-options]
             [:fieldset#viz-options
              [:legend "Visualisation"]
+             [:p
+              [:label
+               (radio viz [:drawing :force-d] 1)
+               "Draw "
+               (combobox viz [:drawing :draw-steps] [1 5 10 15 20 25 30 40 50]
+                         "")
+               "steps in 1D"]
+              [:br]
+              [:label
+               (radio viz [:drawing :force-d] 2)
+               "Draw one step in 2D."]]
              [:fieldset
               [:legend "Input"]
               (checkbox viz [:input :active] "Active bits") [:br]
@@ -184,8 +204,20 @@
           :when el]
     (event/on-raw el :change
                   (fn [_]
-                    (let [v (when-let [s (dom/val el)] (keyword s))]
-                      (swap! viz-options assoc-in [k subk] v))))))
+                    (let [v (when-let [s (dom/val el)]
+                              (if (#{:force-d :draw-steps} subk)
+                                (cljs.reader/read-string s)
+                                (keyword s)))]
+                      (swap! viz-options assoc-in [k subk] v)))))
+  ;; radio buttons are annoyingly different
+  (let [[k subk] [:drawing :force-d]]
+    (doseq [value [1 2]
+            :let [id (keys->id [k subk value])
+                  el (->dom (str "#" id))]]
+      (event/on-raw el :change
+                    (fn [_]
+                      (when (dom/val el)
+                        (swap! viz-options assoc-in [k subk] value)))))))
 
 (defn handle-parameters!
   [model selection]
