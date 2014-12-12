@@ -107,6 +107,10 @@
            (fn [_ _ _ _]
              (draw!)))
 
+(add-watch viz/keep-steps :redraw
+           (fn [_ _ _ _]
+             (draw!)))
+
 ;;; # Animation loop
 
 (go (loop [c (tap-c steps-mult)]

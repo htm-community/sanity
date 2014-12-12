@@ -19,6 +19,7 @@
                        :h 200}
             plot (plt/xy-plot ctx plot-size x-lim y-lim)]
         (c/save ctx)
+        (c/translate ctx left-px top-px)
         ;; draw pattern names and current values
         (doto ctx
           (c/fill-style "black")

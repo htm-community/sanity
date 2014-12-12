@@ -162,15 +162,22 @@
              [:legend "Visualisation"]
              [:p
               [:label
+               "Keep "
+               (combobox {:keep-steps @keep-steps}
+                         [:keep-steps] [2 5 10 20 30 40 50 100 200]
+                         "")
+               " steps of history"]]
+             [:p
+              [:label
                (radio viz [:drawing :force-d] 1)
                "Draw "
                (combobox viz [:drawing :draw-steps] [1 5 10 15 20 25 30 40 50]
                          "")
-               "steps in 1D"]
+               " steps in 1D"]
               [:br]
               [:label
                (radio viz [:drawing :force-d] 2)
-               "Draw one step in 2D."]]
+               "Draw one step in 2D"]]
              [:fieldset
               [:legend "Input"]
               (checkbox viz [:input :active] "Active bits") [:br]
@@ -217,7 +224,15 @@
       (event/on-raw el :change
                     (fn [_]
                       (when (dom/val el)
-                        (swap! viz-options assoc-in [k subk] value)))))))
+                        (swap! viz-options assoc-in [k subk] value))))))
+  ;; keep-steps is in a separate atom
+  (let [id (keys->id [:keep-steps])
+        el (->dom (str "#" id))]
+    (event/on-raw el :change
+                  (fn [_]
+                    (let [s (dom/val el)
+                          v (cljs.reader/read-string s)]
+                      (reset! keep-steps v))))))
 
 (defn handle-parameters!
   [model selection]

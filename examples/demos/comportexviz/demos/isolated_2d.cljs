@@ -20,6 +20,7 @@
             plot (plt/xy-plot ctx plot-size x-lim y-lim)
             {:keys [id index]} this]
         (c/save ctx)
+        (c/translate ctx left-px top-px)
         ;; draw pattern name and current value
         (doto ctx
           (c/fill-style "black")

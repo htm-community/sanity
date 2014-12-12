@@ -105,6 +105,7 @@
 (defrecord Grid1dLayout
     [topo
      scroll-top
+     dt-offset
      draw-steps
      element-w
      element-h
@@ -125,7 +126,7 @@
   
   (origin-px-topleft [_ dt]
     (let [right (+ left-px (* draw-steps element-w))
-          off-x-px (* (+ dt 1) element-w)
+          off-x-px (* (- (inc dt) dt-offset) element-w)
           x-px (- right off-x-px)]
       [x-px top-px]))
   
@@ -144,10 +145,11 @@
   
   (clicked-id [this x y]
     (let [right (+ left-px (* draw-steps element-w))
-          dt (Math/floor (/ (- right x) element-w))
+          dt* (Math/floor (/ (- right x) element-w))
           id* (Math/floor (/ (- y top-px) element-h))
-          id (+ id* scroll-top)]
-      (when (and (<= 0 dt draw-steps)
+          id (+ id* scroll-top)
+          dt (+ dt* dt-offset)]
+      (when (and (<= 0 dt* draw-steps)
                  (<= 0 id* (n-onscreen this)))
         [dt id])))
   
@@ -191,6 +193,7 @@
     (map->Grid1dLayout
      {:topo topo
       :scroll-top 0
+      :dt-offset 0
       :draw-steps draw-steps
       :element-w bit-w-px
       :element-h bit-h-px
@@ -210,6 +213,7 @@
     (map->Grid1dLayout
      {:topo topo
       :scroll-top 0
+      :dt-offset 0
       :draw-steps draw-steps
       :element-w col-d-px
       :element-h col-d-px

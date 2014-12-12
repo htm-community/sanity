@@ -52,6 +52,7 @@
             y-scale (plt/scale-fn y-lim (:h plot-size))
             {:keys [field position next-saccade]} this]
         (c/save ctx)
+        (c/translate ctx left-px top-px)
         ;; draw coordinates text
         (doto ctx
           (c/fill-style "black")

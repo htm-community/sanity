@@ -90,7 +90,7 @@
                            :inactive nil
                            :disconnected nil
                            :permanences nil}
-         :drawing {:draw-steps 25
+         :drawing {:draw-steps 15
                    :force-d nil
                    :world-w-px 150
                    :bit-w-px 3
@@ -106,7 +106,7 @@
                    :highlight-color (:highlight state-colors)}
          }))
 
-(def keep-steps (atom 25))
+(def keep-steps (atom 30))
 (def steps (atom []))
 (def layouts (atom {:inputs {}
                     :regions {}}))
@@ -153,6 +153,25 @@
 (add-watch viz-options :rebuild-layouts
            (fn [_ _ _ opts]
              (reset! layouts (rebuild-layouts (first @steps) opts))))
+
+(defn update-dt-offsets!
+  [selection]
+  (swap! layouts
+         (fn [m]
+           (let [sel-dt (:dt selection)
+                 draw-steps (get-in @viz-options [:drawing :draw-steps])
+                 dt0 (max 0 (- sel-dt (quot draw-steps 2)))
+                 paths (apply concat
+                              (map #(vector :inputs %)
+                                   (keys (:inputs m)))
+                              (map (fn [[rgn-id mm]]
+                                     (map #(vector :regions rgn-id %)
+                                          (keys mm)))
+                                   (:regions m)))]
+             (reduce (fn [m path]
+                       (update-in m path
+                                  (fn [lay] (assoc-in lay [:dt-offset] dt0))))
+                     m paths)))))
 
 (defn scroll-layout
   [lay down?]
@@ -713,7 +732,7 @@
 
 (defn scroll-status-str
   [lay]
-  (str "Showing " (top-id-onscreen lay)
+  (str (top-id-onscreen lay)
        "--" (+ (top-id-onscreen lay)
                (n-onscreen lay) -1)
        " of " (p/size-of lay)))
@@ -731,6 +750,8 @@
         i-lays (:inputs @layouts)
         r-lays (:regions @layouts)
         draw-steps (get-in opts [:drawing :draw-steps])
+        ;; in case scrolled back in history
+        dt0 (max 0 (- sel-dt (quot draw-steps 2)))
         sel-state (nth @steps sel-dt)
         sel-prev-state (nth @steps (inc sel-dt) nil)
         canvas-el (->dom "#comportex-viz")
@@ -749,7 +770,8 @@
           label-left (+ right-px 25)
           t-width (/ right-px @keep-steps)
           y-px (/ ts-height-px 2)
-          r-px (min y-px (* t-width 0.5))]
+          r-px (min y-px (* t-width 0.5))
+          sel-r-px y-px]
       (c/text-baseline ctx :top)
       (c/text ctx {:text "Right / left arrows move forward / back in time."
                    :x label-left :y 0})
@@ -763,12 +785,14 @@
       (c/font-style ctx "bold 10px sans-serif")
       (doseq [dt (reverse (range @keep-steps))
               :let [t (- current-t dt)
+                    kept? (< dt (count @steps))
                     x-px (- right-px r-px (* dt t-width))]]
         (c/fill-style ctx "black")
-        (c/alpha ctx (cond (== dt sel-dt) 1.0 (pos? t) 0.5 :else 0.1))
-        (c/circle ctx {:x x-px :y y-px :r r-px})
+        (c/alpha ctx (cond (== dt sel-dt) 1.0 kept? 0.3 :else 0.1))
+        (c/circle ctx {:x x-px :y y-px :r (if (== dt sel-dt) sel-r-px r-px)})
         (c/fill ctx)
-        (when (pos? t)
+        (when (or (== dt sel-dt)
+                  (and kept? (< @keep-steps 100)))
           (c/fill-style ctx "white")
           (c/text ctx {:x x-px :y y-px :text (str t)})))
       (c/alpha ctx 1.0))
@@ -802,7 +826,8 @@
           in-value (:value (first (core/input-seq sel-state)))]
       (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
         (draw-world in-value ctx 0 display-top-px world-w-px (- height-px display-top-px) sel-state)))
-    (doseq [dt (range (min draw-steps (count @steps)))
+    (doseq [dt (range dt0 (min (+ dt0 draw-steps)
+                               (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
                   cache (::cache (meta state))]]
@@ -870,8 +895,7 @@
     (when (get-in opts [:ff-synapses :active])
       (draw-ff-synapses ctx sel-state r-lays i-lays selection opts))
     ;; draw selected cells and segments
-    (when (and sel-col
-               (< (inc sel-dt) (count @steps)))
+    (when sel-col
       (draw-cell-segments ctx sel-state r-lays i-lays selection opts cells-left)))
   nil)
 
@@ -964,6 +988,9 @@
   [init-model steps-c selection sim-step!]
   (reset! layouts
           (rebuild-layouts init-model @viz-options))
+  (add-watch selection :update-dt-offsets
+             (fn [_ _ _ v]
+               (update-dt-offsets! v)))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]

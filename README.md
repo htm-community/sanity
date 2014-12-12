@@ -21,12 +21,12 @@ lein install
 Clone ComportexViz, and then build it:
 
 ```
-lein do cljsbuild clean, cljsbuild once
+lein do cljsbuild clean, cljsbuild once demos
 ```
 
-Now open `public/*.html` in a web browser, preferably Google
+Now open `public/demos/*.html` in a web browser, preferably Google
 Chrome. Each HTML page loads the corresponding model defined
-in `src/comportexviz/demos/`.
+in `examples/demos/comportexviz/demos/`.
 
 
 ## License

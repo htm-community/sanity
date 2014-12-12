@@ -42,6 +42,7 @@
             {:keys [x y vx vy]} this
             r-px (- (x-scale demo/radius) (x-scale 0))]
         (c/save ctx)
+        (c/translate ctx left-px top-px)
         ;; draw coordinates text
         (doto ctx
           (c/fill-style "black")
