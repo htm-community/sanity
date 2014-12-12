@@ -12,6 +12,17 @@
       <div><h2>input</h2>
         <h3>sensorimotor 1D</h3>
         <p>A simple example of sensorimotor input in 1D.</p>
+        <form id="comportex-input-form">
+          <select id="comportex-input-field" size="8"
+                  style="float:left; margin-right: 1em;">
+          </select>
+          Select a field of values (a world) and send
+          <input id="comportex-input-n-steps" size="3" value="100" />
+          time steps of sensorimotor input to the model:
+          <br/>
+          <input type="submit" value=" Go! " />
+          <br style="clear:left" />
+        </form>
       </div>
       <div><h2>drawing</h2>
         <div id="comportex-drawing"></div>
@@ -32,6 +43,5 @@
   <script type="text/javascript">goog.require("comportexviz.demos.sensorimotor_1d");</script>
   <script type="text/javascript">
     comportexviz.demos.sensorimotor_1d.init();
-    comportexviz.demos.sensorimotor_1d.set_n_region_model(1);
   </script>
 </body>

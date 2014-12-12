@@ -46,9 +46,10 @@
 
 (defn run-sim
   []
-  (swap! model assoc
-         :run-start {:time (now)
-                     :timestep (p/timestep @model)})
+  (when @model
+    (swap! model assoc
+           :run-start {:time (now)
+                       :timestep (p/timestep @model)}))
   (go
    (while @sim-go?
      (let [tc (async/timeout (:sim-step-ms @main-options))]
