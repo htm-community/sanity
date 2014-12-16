@@ -116,6 +116,25 @@
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
+(defn all-layout-paths
+  [m]
+  (for [k [:inputs :regions]
+        subk (if (= k :regions)
+               (keys (k m))
+               [nil])
+        :let [path0 (if subk [k subk] [k])]
+        id (keys (get-in m path0))]
+    (conj path0 id)))
+
+(defn reset-layout-caches
+  [m]
+  (reduce (fn [m path]
+            (update-in m path vary-meta
+                       (fn [mm]
+                         (assoc mm ::cache (atom {})))))
+          m
+          (all-layout-paths m)))
+
 (defn rebuild-layouts
   [model opts]
   (let [inputs (:inputs model)
@@ -147,8 +166,9 @@
                      (+ (lay/right-px lay) spacer)]))
                 [{} i-right]
                 layerseq)]
-    {:inputs i-lays
-     :regions r-lays}))
+    (reset-layout-caches
+     {:inputs i-lays
+      :regions r-lays})))
 
 (add-watch viz-options :rebuild-layouts
            (fn [_ _ _ opts]
@@ -160,18 +180,13 @@
          (fn [m]
            (let [sel-dt (:dt selection)
                  draw-steps (get-in @viz-options [:drawing :draw-steps])
-                 dt0 (max 0 (- sel-dt (quot draw-steps 2)))
-                 paths (apply concat
-                              (map #(vector :inputs %)
-                                   (keys (:inputs m)))
-                              (map (fn [[rgn-id mm]]
-                                     (map #(vector :regions rgn-id %)
-                                          (keys mm)))
-                                   (:regions m)))]
-             (reduce (fn [m path]
-                       (update-in m path
-                                  (fn [lay] (assoc-in lay [:dt-offset] dt0))))
-                     m paths)))))
+                 dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
+             (-> (reduce (fn [m path]
+                           (update-in m path
+                                      (fn [lay] (assoc-in lay [:dt-offset] dt0))))
+                         m
+                         (all-layout-paths m))
+                 (reset-layout-caches))))))
 
 (defn scroll-layout
   [lay down?]
@@ -187,16 +202,11 @@
   [down?]
   (swap! layouts
          (fn [m]
-           (let [paths (apply concat
-                              (map #(vector :inputs %)
-                                   (keys (:inputs m)))
-                              (map (fn [[rgn-id mm]]
-                                     (map #(vector :regions rgn-id %)
-                                          (keys mm)))
-                                   (:regions m)))]
-             (reduce (fn [m path]
-                       (update-in m path scroll-layout down?))
-                     m paths))))
+           (-> (reduce (fn [m path]
+                         (update-in m path scroll-layout down?))
+                       m
+                       (all-layout-paths m))
+               (reset-layout-caches))))
   ;; need this to invalidate the drawing cache
   (swap! viz-options
          (fn [m]
@@ -756,8 +766,6 @@
         sel-prev-state (nth @steps (inc sel-dt) nil)
         canvas-el (->dom "#comportex-viz")
         ctx (c/get-context canvas-el "2d")
-        i-bgs (util/remap bg-image i-lays)
-        r-bgs (util/remap #(util/remap bg-image %) r-lays)
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
                         (apply max)
@@ -830,7 +838,7 @@
                                (count @steps)))
             :let [state (nth @steps dt)
                   prev-state (nth @steps (inc dt) nil)
-                  cache (::cache (meta state))]]
+                  dt-cache (::cache (meta state))]]
       ;; draw encoded inbits
       (doseq [[inp-id lay] i-lays
               :when (or (== 1 (count (p/dims-of lay)))
@@ -840,17 +848,19 @@
                     ff-rgn-id (first (get-in state [:fb-deps inp-id]))
                     ;; TODO offset if multiple inputs feeding to region
                     prev-ff-rgn (when (pos? (p/size (p/ff-topology inp)))
-                                  (get-in prev-state [:regions ff-rgn-id]))]]
-        (->> (i-bgs inp-id)
+                                  (get-in prev-state [:regions ff-rgn-id]))
+                    lay-cache (::cache (meta lay))]]
+        (->> (bg-image lay)
+             (with-cache lay-cache [::bg inp-id] opts #{:drawing})
              (draw-image-dt ctx lay dt))
         (when (get-in opts [:input :active])
           (->> (active-bits-image lay inp)
-               (with-cache cache [::abits inp-id] opts [:input :drawing])
+               (with-cache dt-cache [::abits inp-id] opts #{:input :drawing})
                (draw-image-dt ctx lay dt)))
         (when (and (get-in opts [:input :predicted])
                    prev-ff-rgn)
           (->> (pred-bits-image lay prev-ff-rgn)
-               (with-cache cache [::pbits inp-id] opts [:input :drawing])
+               (with-cache dt-cache [::pbits inp-id] opts #{:input :drawing})
                (draw-image-dt ctx lay dt))))
       ;; draw regions / layers
       (doseq [[rgn-id lyr-lays] r-lays
@@ -858,31 +868,31 @@
               :when (or (== 1 (count (p/dims-of lay)))
                         (== dt sel-dt))
               :let [lyr (get-in state [:regions rgn-id lyr-id])
-                    uniqix (str (name rgn-id) (name lyr-id))]]
-        (->> (get-in r-bgs [rgn-id lyr-id])
+                    uniqix (str (name rgn-id) (name lyr-id))
+                    lay-cache (::cache (meta lay))]]
+        (->> (bg-image lay)
+             (with-cache lay-cache [::bg uniqix] opts #{:drawing})
              (draw-image-dt ctx lay dt))
         (when (get-in opts [:columns :overlaps])
           (->> (overlaps-columns-image lay lyr)
-               (with-cache cache [::ocols uniqix] opts [:columns :drawing])
+               (with-cache dt-cache [::ocols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :n-segments])
           (->> (n-segments-columns-image lay lyr)
-               (with-cache cache [::nsegcols uniqix] opts [:columns :drawing])
+               (with-cache dt-cache [::nsegcols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :active])
           (->> (active-columns-image lay lyr)
-               (with-cache cache [::acols uniqix] opts [:columns :drawing])
+               (with-cache dt-cache [::acols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :predictive])
           (->> (pred-columns-image lay lyr)
-               (with-cache cache [::pcols uniqix] opts [:columns :drawing])
+               (with-cache dt-cache [::pcols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :temporal-pooling])
           (->> (tp-columns-image lay lyr)
-               (with-cache cache [::tpcols uniqix] opts [:columns :drawing])
-               (draw-image-dt ctx lay dt))))
-      (when (not= opts (:opts @cache))
-        (swap! cache assoc :opts opts)))
+               (with-cache dt-cache [::tpcols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))))
     ;; highlight selection
     (doseq [lay (vals i-lays)]
       (lay/highlight-dt lay ctx sel-dt))

@@ -123,7 +123,7 @@
                                              :next-saccade 1}))
                      false)))
 
-(defn ^:export reset-world
+(defn set-world
   []
   (main/set-world (->> world-c
                        (async/map< #(vary-meta % assoc
@@ -153,6 +153,6 @@
                       (put-input-steps field-key n-steps))
                     (.preventDefault e)
                     false)))
-  (reset-world)
+  (set-world)
   (set-n-region-model 1)
   (reset! main/sim-go? true))
