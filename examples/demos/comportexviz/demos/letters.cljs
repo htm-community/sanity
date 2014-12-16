@@ -1,7 +1,8 @@
 (ns comportexviz.demos.letters
   (:require [org.nfrac.comportex.demos.letters :as demo]
             [org.nfrac.comportex.core :as core]
-            ;; ui
+            [org.nfrac.comportex.util :as util]
+            [comportexviz.sentence-drawing :refer [draw-text-fn]]
             [comportexviz.main :as main]
             [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
@@ -15,10 +16,12 @@
 
 (defn set-world
   []
-  (main/set-world (->> demo/world-c
-                       #_(async/map< #(vary-meta % assoc
-                                               :comportexviz/draw-world
-                                               draw-world)))))
+  (let [draw (draw-text-fn n-predictions)]
+    (main/set-world (->> demo/world-c
+                         (async/map< (util/keep-history-middleware 400 :value :history))
+                         (async/map< #(vary-meta % assoc
+                                                 :comportexviz/draw-world
+                                                 draw))))))
 
 (defn ^:export set-model-from-ui
   []
@@ -43,22 +46,21 @@
                     (.preventDefault e)
                     false)))
   (let [el (->dom "#comportex-input-immediate")]
-    (event/on-raw el :keypress ;goog.events.EventType.KEYUP
+    (event/on-raw el :keypress
                   (fn [e]
                     (when-let [[x] (->> (or (.-keyCode e) (.-charCode e))
                                         (.fromCharCode js/String)
                                         (demo/clean-text)
                                         (seq))]
                       (dom/val el "")
-                      (async/put! demo/world-c (str x))
-                      (println (str x)))
+                      (async/put! demo/world-c {:value (str x)}))
                     false)))
   (let [text-el (->dom "#comportex-input-text")
         but-el (->dom "#comportex-text-send")]
       (event/on-raw but-el :click
                     (fn [e]
                       (when-let [xs (seq (demo/clean-text (dom/val text-el)))]
-                        (async/onto-chan demo/world-c (map str xs)
+                        (async/onto-chan demo/world-c (for [x xs] {:value (str x)})
                                          false))
                       (.preventDefault e)
                       false)))
