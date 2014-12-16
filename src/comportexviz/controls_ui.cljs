@@ -274,7 +274,7 @@
                                             v (cljs.reader/read-string (dom/val el))]
                                         (assoc s k v)))
                                     {} (keys ospec))]
-                      (swap! model p/update-by-uuid (:uuid rgn)
-                             #(assoc-in % [layer-id :spec] s))
+                      (swap! model assoc-in [:regions region-key layer-id :spec]
+                             s)
                       (.preventDefault e)
                       false)))))

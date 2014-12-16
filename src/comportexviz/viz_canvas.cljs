@@ -142,7 +142,7 @@
         layerseq (mapcat (fn [rgn-id]
                            (map vector (repeat rgn-id)
                                 (core/layers (regions rgn-id))))
-                         (p/region-keys model))
+                         (core/region-keys model))
         d-opts (:drawing opts)
         force-d (:force-d d-opts)
         spacer (:h-space-px d-opts)
@@ -156,7 +156,7 @@
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} (+ world-w-px 10)]
-                (p/input-keys model))
+                (core/input-keys model))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
@@ -171,8 +171,10 @@
       :regions r-lays})))
 
 (add-watch viz-options :rebuild-layouts
-           (fn [_ _ _ opts]
-             (reset! layouts (rebuild-layouts (first @steps) opts))))
+           (fn [_ _ old-opts opts]
+             (when (not= (:drawing opts)
+                         (:drawing old-opts))
+               (reset! layouts (rebuild-layouts (first @steps) opts)))))
 
 (defn update-dt-offsets!
   [selection]
@@ -202,11 +204,10 @@
   [down?]
   (swap! layouts
          (fn [m]
-           (-> (reduce (fn [m path]
-                         (update-in m path scroll-layout down?))
-                       m
-                       (all-layout-paths m))
-               (reset-layout-caches))))
+           (reduce (fn [m path]
+                     (update-in m path scroll-layout down?))
+                   m
+                   (all-layout-paths m))))
   ;; need this to invalidate the drawing cache
   (swap! viz-options
          (fn [m]

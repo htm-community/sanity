@@ -139,7 +139,7 @@
     (reset! model x)
     (if init?
       (init-ui! x))
-    (let [region-key (first (p/region-keys x))
+    (let [region-key (first (core/region-keys x))
           layer-id (first (core/layers (get-in x [:regions region-key])))]
       (swap! selection assoc :region region-key :layer layer-id
              :dt 0 :col nil))))
