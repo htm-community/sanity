@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>Letters - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="comportex-viz"></canvas>
+  <div id="comportex-sidebar">
+    <div id="comportex-controls"></div>
+    <div id="comportex-tabs">
+      <div><h2>input</h2>
+        <h3>Letters</h3>
+        <p>Text input is presented as a sequence of letters. Allowed
+        characters are
+        <tt>.? abcdefghijklmnopqrstuvwxyz01234567890</tt>.</p>
+        <form id="comportex-model-form">
+        <fieldset>
+          <legend>HTM model</legend>
+          Number of regions:
+          <input id="comportex-n-regions" size="2" value="1" />
+          <br/>
+          Letter encoder:
+          <select id="comportex-encoder">
+            <option value="block">blocks</option>
+            <option value="random">random</option>
+          </select>
+          <br/>
+          <input type="submit" value="Restart with this model" />
+          (this will also reset all parameter values)
+        </fieldset>
+        </form>
+        <hr/>
+        <form id="comportex-input-form">
+          Immediate input as you type:
+          <input id="comportex-input-immediate" size="1" maxlength="1" value="" />
+          <br/>
+          <textarea id="comportex-input-text" style="width:90%; height:10em">
+Jane has eyes.
+Jane has a head.
+Jane has a mouth.
+Jane has a brain.
+Jane has a book.
+Jane has no friend.
+
+Chifung has eyes.
+Chifung has a head.
+Chifung has a mouth.
+Chifung has a brain.
+Chifung has no book.
+Chifung has a friend.
+          </textarea>
+          <br/>
+          <input type="submit" id="comportex-text-send" value="Send text block input" />
+        </form>
+      </div>
+      <div><h2>drawing</h2>
+        <div id="comportex-drawing"></div>
+      </div>
+      <div><h2>parameters</h2>
+        <div id="comportex-parameters"></div>
+      </div>
+      <div><h2>plots</h2>
+        <div id="comportex-plots"></div>
+      </div>
+      <div><h2>details</h2>
+        <textarea id="detail-text"></textarea>
+      </div>
+  </div>
+  <div id="comportex-loading">loading</div>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.demos.letters");</script>
+  <script type="text/javascript">
+    comportexviz.demos.letters.init();
+  </script>
+</body>
