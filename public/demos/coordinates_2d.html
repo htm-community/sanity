@@ -11,7 +11,32 @@
     <div id="comportex-tabs">
       <div><h2>input</h2>
         <h3>coordinates 2D</h3>
-        <p>A simple example of the coordinate encoder in 2 dimensions.</p>
+        <p>A simple example of the coordinate encoder in 2
+        dimensions.</p>
+
+        <p>The coordinate is on a 90x90 integer grid and has a
+        locality radius of 15 units. It maintains position, velocity
+        and acceleration. Velocity is limited to 5 units per timestep.
+        When the point crosses the horizontal axis, its vertical
+        acceleration is reversed; when it crosses the vertical axis,
+        its horizontal acceleration is reversed.</p>
+
+        <form id="comportex-model-form">
+        <fieldset>
+          <legend>HTM model</legend>
+          Number of regions:
+          <input id="comportex-n-regions" size="2" value="1" />
+          <br/>
+          <input type="submit" value="Restart with this model" />
+          (this will also reset all parameter values)
+        </fieldset>
+        </form>
+        <hr/>
+        <form id="comportex-input-form">
+          <p>Interference:</p>
+          <button id="comportex-input-nudge-up">Turn up</button><br/>
+          <button id="comportex-input-nudge-down">Turn down</button>
+        </form>
       </div>
       <div><h2>drawing</h2>
         <div id="comportex-drawing"></div>
@@ -32,6 +57,5 @@
   <script type="text/javascript">goog.require("comportexviz.demos.coordinates_2d");</script>
   <script type="text/javascript">
     comportexviz.demos.coordinates_2d.init();
-    comportexviz.demos.coordinates_2d.set_n_region_model(1);
   </script>
 </body>
