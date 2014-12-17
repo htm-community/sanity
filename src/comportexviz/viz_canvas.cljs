@@ -995,6 +995,10 @@
              :page-down (scroll! true)
              )))))))
 
+(defn re-init!
+  [model]
+  (reset! layouts (rebuild-layouts model @viz-options)))
+
 (defn init!
   [init-model steps-c selection sim-step!]
   (reset! layouts

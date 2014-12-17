@@ -133,12 +133,17 @@
   (cui/handle-options! model viz/keep-steps viz/viz-options)
   (cui/handle-parameters! model selection))
 
+(defn- re-init-ui!
+  [model]
+  (viz/re-init! model))
+
 (defn set-model
   [x]
   (let [init? (nil? @model)]
     (reset! model x)
     (if init?
-      (init-ui! x))
+      (init-ui! x)
+      (re-init-ui! x))
     (let [region-key (first (core/region-keys x))
           layer-id (first (core/layers (get-in x [:regions region-key])))]
       (swap! selection assoc :region region-key :layer layer-id
