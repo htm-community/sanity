@@ -130,7 +130,7 @@
                                                :comportexviz/draw-world
                                                draw-world)))))
 
-(defn ^:export set-n-region-model
+(defn set-n-region-model
   [n]
   (with-ui-loading-message
     (main/set-model (demo/n-region-model n))))

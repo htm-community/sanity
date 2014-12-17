@@ -31,7 +31,9 @@
         ;; draw the plot
         (c/translate ctx plot-x plot-y)
         (plt/frame! plot)
+        (c/stroke-style ctx "lightgray")
         (plt/grid! plot {})
+        (c/stroke-style ctx "black")
         (doseq [[id index] this]
           (plt/line! plot (plt/indexed (patterns id)))
           (doseq [[i y] (plt/indexed (patterns id))]
@@ -39,15 +41,18 @@
             (plt/point! plot i y 4)))
         (c/restore ctx)))))
 
-(defn ^:export reset-world
+(def world-c (async/chan))
+
+(defn set-world
   []
   (let [draw (draw-patterns-fn demo/patterns)]
-    (main/set-world (->> (demo/world)
+    (main/set-world (->> world-c
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
-                                                 draw))))))
+                                                 draw))))
+    (async/onto-chan world-c (demo/world-seq) false)))
 
-(defn ^:export set-n-region-model
+(defn set-n-region-model
   [n]
   (with-ui-loading-message
     (main/set-model (demo/n-region-model n))))
@@ -55,4 +60,5 @@
 (defn ^:export init
   []
   (goog.ui.TabPane. (.getElementById js/document "comportex-tabs"))
-  (reset-world))
+  (set-world)
+  (set-n-region-model 2))

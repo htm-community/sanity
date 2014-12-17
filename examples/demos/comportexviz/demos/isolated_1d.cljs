@@ -36,7 +36,9 @@
         ;; draw the plot
         (c/translate ctx plot-x plot-y)
         (plt/frame! plot)
+        (c/stroke-style ctx "lightgray")
         (plt/grid! plot {})
+        (c/stroke-style ctx "black")
         (when id
           (plt/line! plot (plt/indexed (patterns id)))
           (doseq [[i y] (plt/indexed (patterns id))]
@@ -44,15 +46,18 @@
             (plt/point! plot i y 4)))
         (c/restore ctx)))))
 
-(defn ^:export reset-world
+(def world-c (async/chan))
+
+(defn set-world
   []
   (let [draw (draw-pattern-fn demo/patterns)]
-    (main/set-world (->> (demo/world)
+    (main/set-world (->> world-c
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
-                                                 draw))))))
+                                                 draw))))
+    (async/onto-chan world-c (demo/world-seq) false)))
 
-(defn ^:export restart-from-ui
+(defn restart-from-ui
   []
   (let [enc-choice (dom/val (->dom "#comportex-encoder"))
         n-regions (cljs.reader/read-string
@@ -60,7 +65,6 @@
         encoder (case enc-choice
                   "block" demo/block-encoder
                   "coord" demo/coord-encoder)]
-    (reset-world)
     (with-ui-loading-message
       (main/set-model
        (core/regions-in-series core/sensory-region (core/sensory-input encoder)
@@ -74,4 +78,5 @@
                   (fn [e]
                     (restart-from-ui)
                     (.preventDefault e)
-                    false))))
+                    false)))
+  (set-world))

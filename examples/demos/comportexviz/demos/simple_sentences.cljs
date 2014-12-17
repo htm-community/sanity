@@ -2,7 +2,6 @@
   (:require [org.nfrac.comportex.demos.simple-sentences :as demo]
             [org.nfrac.comportex.core :as core]
             [comportexviz.sentence-drawing :refer [draw-sentence-fn]]
-            ;; ui
             [comportexviz.main :as main]
             [c2.dom :as dom :refer [->dom]]
             [c2.event :as event]
@@ -13,30 +12,29 @@
 
 (def n-predictions 8)
 
-(def spec demo/spec)
+(def world-c (async/chan))
 
-(defn ^:export reset-world
+(defn set-world
   [text n-repeats]
   (let [draw (draw-sentence-fn (demo/split-sentences text) n-predictions)]
-    (main/set-world (->> (demo/world text n-repeats)
+    (main/set-world (->> world-c
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
-                                                 draw))))))
+                                                 draw))))
+    (async/onto-chan world-c (demo/word-item-seq n-repeats text) false)))
 
-(defn ^:export set-n-region-model
+(defn set-n-region-model
   [text n]
   (with-ui-loading-message
     (main/set-model
-     (demo/n-region-model text n spec))))
+     (demo/n-region-model text n demo/spec))))
 
-;; handle UI for input stream
-
-(defn ^:export restart-from-ui
+(defn restart-from-ui
   []
   (let [n-reps (cljs.reader/read-string
                 (dom/val (->dom "#comportex-input-repeats")))
         text (dom/val (->dom "#comportex-input-text"))]
-    (reset-world text n-reps)
+    (set-world text n-reps)
     (set-n-region-model text 1)))
 
 (defn ^:export init

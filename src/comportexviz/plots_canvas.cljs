@@ -13,7 +13,6 @@
 
 (defn draw-grid
   [ctx [x-lo x-hi] [y-lo y-hi] xs ys]
-  (c/stroke-style ctx "lightgray")
   (c/begin-path ctx)
   (doseq [x xs]
     (c/move-to ctx x y-lo)
