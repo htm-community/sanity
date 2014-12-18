@@ -3,7 +3,7 @@
 
 (defn indexed
   [ys]
-  (map-indexed vector ys))
+  (vec (map-indexed vector ys)))
 
 (defprotocol PPlot
   (frame! [this])
