@@ -44,7 +44,8 @@
             plot (plt/xy-plot ctx plot-size x-lim y-lim)
             x-scale (plt/scale-fn x-lim (:w plot-size))
             y-scale (plt/scale-fn y-lim (:h plot-size))
-            {:keys [x y vx vy history]} this
+            {:keys [x y vx vy]} this
+            history (:history (meta this))
             r-px (- (x-scale demo/radius) (x-scale 0))]
         (c/save ctx)
         (c/translate ctx left-px top-px)

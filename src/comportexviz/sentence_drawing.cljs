@@ -96,10 +96,9 @@
          (c/restore ctx))))))
 
 (defn draw-text-fn
-  "For sensory input of a sequence of letters. Assumes input value is
-   a map with the current string in key :value and a sequence of
-   previous letters in key :history. Returns a function used by
-   viz-canvas to draw the world (input)."
+  "For sensory input of a sequence of letters. Assumes input value has
+   metadata key :history with a queue of recent and current letters.
+   Returns a function used by viz-canvas to draw the world (input)."
   [n-predictions]
   (fn [this ctx left-px top-px w-px h-px state]
     (let [t (p/timestep state)
@@ -115,7 +114,8 @@
           n-lines (quot (quot h-px 3) line-px)
           max-n (* per-line n-lines)
           this-n (- max-n (mod (- max-n t) per-line)) ;; accumulate last line
-          history (take-last this-n (:history this))
+          history (->> (:history (meta this))
+                       (take-last this-n))
           left-x 5
           vf-x (- w-px 30)
           vpb-x (- w-px 5)

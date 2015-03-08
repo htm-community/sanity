@@ -93,6 +93,7 @@
   []
   (let [inp-choice (dom/val (->dom "#comportex-input-source"))
         enc-choice (dom/val (->dom "#comportex-encoder"))
+        ;; TODO
         n-regions (cljs.reader/read-string
                    (dom/val (->dom "#comportex-n-regions")))
         [model-fn world-fn patterns mixed? xy?]
