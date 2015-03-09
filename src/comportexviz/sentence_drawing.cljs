@@ -16,22 +16,26 @@
   (c/restore ctx))
 
 (defn draw-sentence-fn
-  "For sensory input of a sequence of sentences, each of which is a
-   sequence of words. Assumes input value has a key :index containing
-   [i j], indices for the current sentence and word. Returns a
-   function used by viz-canvas to draw the world (input)."
-  [split-sentences n-predictions]
+  "For sensory input of a sequence of words. Assumes input value has
+   metadata key :history with a queue of recent and current words.
+   Returns a function used by viz-canvas to draw the world (input)."
+  [n-predictions]
   (fn [this ctx left-px top-px w-px h-px state]
-    (let [inp (first (core/input-seq state))
+    (let [t (p/timestep state)
+          inp (first (core/input-seq state))
           rgn (first (core/region-seq state))
-          [curr-sen-i curr-word-j] (:index this)
-          curr-sen (get split-sentences curr-sen-i)
           pr-votes (core/predicted-bit-votes rgn)
+          line-px 20
+          n-lines (quot (quot h-px 3) line-px)
+          per-line 4
+          max-n (* n-lines per-line)
+          this-n (- max-n (mod (- max-n t) per-line)) ;; accumulate last line
+          history (->> (:history (meta this))
+                       (take-last this-n))
           left-x 5
           vf-x (- w-px 30)
           vpb-x (- w-px 5)
-          sents-top 5
-          curr-top (quot h-px 3)
+          input-top 5
           pr-top (* 2 (quot h-px 3))
           spacing 24]
       (c/save ctx)
@@ -43,32 +47,21 @@
       (c/font-style ctx "small-caps bold 14px sans-serif")
       (c/text-baseline ctx :top)
       (c/text-align ctx :left)
-      (c/text ctx {:text "Sentences" :x left-x :y sents-top})
-      (c/text ctx {:text "Current sentence" :x left-x :y curr-top})
       (c/text ctx {:text "Predictions" :x left-x :y pr-top})
       (c/font-style ctx "12px sans-serif")
-      ;; previous and next sentences
-      (doseq [[k [i sen]] (->> split-sentences
-                               (map-indexed vector)
-                               (drop (- curr-sen-i 4))
-                               (take 9)
-                               (map-indexed vector))
-              :let [y (+ sents-top (* spacing (inc k)))]]
-        (when (== i curr-sen-i)
-          (c/fill-style ctx "#eee")
-          (c/fill-rect ctx {:x 0 :y (- y (quot spacing 4))
-                            :w w-px :h spacing})
-          (c/fill-style ctx "#000"))
-        (c/text ctx {:text (str/join " " sen) :x left-x :y y}))
-      ;; current sentence words
-      (doseq [[j word] (map-indexed vector curr-sen)
-              :let [y (+ curr-top (* spacing (inc j)))]]
-        (when (== j curr-word-j)
-          (c/fill-style ctx "#eee")
-          (c/fill-rect ctx {:x 0 :y (- y (quot spacing 4))
-                            :w w-px :h spacing})
-          (c/fill-style ctx "#000"))
-        (c/text ctx {:text word :x left-x :y y}))
+      (->> history
+           (reduce (fn [[i x y] word]
+                     (let [y-px (+ input-top y)
+                           x-px (+ left-x x)
+                           width-px (.-width (.measureText ctx (str word " ")))
+                           curr? (== i (dec (count history)))]
+                       (when curr?
+                         (c/fill-style ctx "darkgreen"))
+                       (c/text ctx {:text word :x x-px :y y-px})
+                       (if (zero? (mod (inc i) per-line))
+                         [(inc i) 0 (+ y line-px)]
+                         [(inc i) (+ x width-px) y])))
+                   [0 0 0]))
       (c/restore ctx)
       ;; predictions for next word - asynchronously
       (go

@@ -14,7 +14,7 @@
 
 (def n-predictions 8)
 
-(def world-c (async/chan 10))
+(def world-c (async/chan 1000))
 
 (defn set-world
   []

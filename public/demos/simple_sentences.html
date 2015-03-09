@@ -11,19 +11,33 @@
     <div id="comportex-tabs">
       <div><h2>input</h2>
         <h3>Simple sentences</h3>
-        <p>A testbed for looking at generalisation in sequence
+        <p>For looking at generalisation in sequence
         learning. The text is split into sentences at each period (.)
         and each sentence into words. The words are presented through
         a category encoder, i.e. with non-overlapping input bits.</p>
-        <form id="comportex-input-text-form">
-          Repeats (each sentence):
-          <input id="comportex-input-repeats" size="3" value="3" />
+        <form id="comportex-model-form">
+        <fieldset>
+          <legend>HTM model</legend>
+          Number of regions:
+          <input id="comportex-n-regions" size="2" value="1" />
+          <br/>
           Word encoder:
           <select id="comportex-encoder">
-            <option value="categorical">categorical</option>
+            <option value="block">blocks</option>
+            <option value="random">random</option>
           </select>
+          (block encoder uses distinct words from text below).
           <br/>
-          <textarea id="comportex-input-text" style="width:90%; height:35em">
+          <input type="submit" value="Restart with this model" />
+          (this will also reset all parameter values)
+        </fieldset>
+        </form>
+        <hr/>
+        <form id="comportex-input-form">
+          Repeats (each sentence):
+          <input id="comportex-input-repeats" size="3" value="3" />
+          <br/>
+          <textarea id="comportex-input-text" style="width:90%; height:20em">
 Jane.
 Chifung.
 
@@ -95,8 +109,7 @@ Jane has no tail.
 Chifung has no tail.
           </textarea>
           <br/>
-          <input type="submit" value="Restart with this input" />
-          (this will also reset all parameter values)
+          <input type="submit" id="comportex-text-send" value="Send text block input" />
         </form>
       </div>
       <div><h2>drawing</h2>
