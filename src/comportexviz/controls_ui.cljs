@@ -185,6 +185,8 @@
              [:fieldset
               [:legend "Columns"]
               (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
+              (checkbox viz [:columns :active-freq] "Activation freq") [:br]
+              (checkbox viz [:columns :boosts] "Boost factors") [:br]
               (checkbox viz [:columns :n-segments] "Num segments") [:br]
               (checkbox viz [:columns :active] "Active columns") [:br]
               (checkbox viz [:columns :predictive] "Predictive columns") [:br]
@@ -266,7 +268,8 @@
                 form-el (->dom (str "#region-spec-form-" uniqix))]]
     (event/on-raw form-el :submit
                   (fn [e]
-                    (let [rgn (get-in @model [:region region-key])
+                    (.preventDefault e)
+                    (let [rgn (get-in @model [:regions region-key])
                           ospec (p/params (get rgn layer-id))
                           s (reduce (fn [s k]
                                       (let [id (keys->id [uniqix k])
@@ -276,5 +279,4 @@
                                     {} (keys ospec))]
                       (swap! model assoc-in [:regions region-key layer-id :spec]
                              s)
-                      (.preventDefault e)
                       false)))))

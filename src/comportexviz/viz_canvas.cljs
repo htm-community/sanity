@@ -77,6 +77,8 @@
                  :scroll-counter 0}
          :columns {:active true
                    :overlaps nil
+                   :boosts nil
+                   :active-freq nil
                    :n-segments nil
                    :predictive true
                    :temporal-pooling true
@@ -573,7 +575,7 @@
       "__Predicted cells__"
       (str (sort (p/predictive-cells lyr)))
       ""
-      (if col
+      (if (and col (> (count @steps 1)))
         (let [dtp (inc dt)
               p-state (nth @steps dtp)
               p-rgn (get-in p-state [:regions rgn-id])
@@ -712,6 +714,31 @@
         ctx (c/get-context el "2d")
         col-m (->> (p/column-excitation lyr)
                    (util/remap #(min 1.0 (/ % 16))))]
+    (c/fill-style ctx "black")
+    (fill-elements ctx lay col-m c/alpha)
+    el))
+
+(defn boost-columns-image
+  [lay lyr]
+  (let [el (image-buffer (layout-bounds lay))
+        ctx (c/get-context el "2d")
+        spec (p/params lyr)
+        maxb (:max-boost spec)
+        col-m (->> (:boosts lyr)
+                   (map #(/ (dec %) (dec maxb)))
+                   (zipmap (range)))]
+    (c/fill-style ctx "black")
+    (fill-elements ctx lay col-m c/alpha)
+    el))
+
+(defn active-freq-columns-image
+  [lay lyr]
+  (let [el (image-buffer (layout-bounds lay))
+        ctx (c/get-context el "2d")
+        spec (p/params lyr)
+        col-m (->> (:active-duty-cycles lyr)
+                   (map #(min 1.0 (* 2 %)))
+                   (zipmap (range)))]
     (c/fill-style ctx "black")
     (fill-elements ctx lay col-m c/alpha)
     el))
@@ -877,6 +904,14 @@
         (when (get-in opts [:columns :overlaps])
           (->> (overlaps-columns-image lay lyr)
                (with-cache dt-cache [::ocols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when (get-in opts [:columns :boosts])
+          (->> (boost-columns-image lay lyr)
+               (with-cache dt-cache [::boosts uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when (get-in opts [:columns :active-freq])
+          (->> (active-freq-columns-image lay lyr)
+               (with-cache dt-cache [::afreq uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (get-in opts [:columns :n-segments])
           (->> (n-segments-columns-image lay lyr)
