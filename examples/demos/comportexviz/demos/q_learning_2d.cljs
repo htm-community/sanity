@@ -1,5 +1,5 @@
-(ns comportexviz.demos.hill-climb
-  (:require [org.nfrac.comportex.demos.hill-climb :as demo]
+(ns comportexviz.demos.q-learning-2d
+  (:require [org.nfrac.comportex.demos.q-learning-2d :as demo]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.main :as main]
             [comportexviz.plots-canvas :as plt]
@@ -14,28 +14,15 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(defn aggregation-middleware
-  "Returns a function that adds a metadata key `agg-key` to its
-   argument, being a map of the frequencies of values extracted
-   using `value-fn`."
-  [value-fn agg-key]
-  (let [freqs (atom {})]
-    (fn [x]
-      (->> (fn [m]
-             (update-in m [(value-fn x)] (fnil inc 0)))
-           (swap! freqs)
-           (vary-meta x assoc agg-key)))))
-
 (defn draw-surface-fn
   [surface]
   (let [x-max (count surface)
-        y-max (reduce max surface)
-        x-lim [(- 0 1) (+ x-max 1)]
-        y-lim [(+ y-max 1) 0]
-        surface-xy (mapv vector (range) surface)]
+        y-max (count (first surface))
+        x-lim [0 x-max]
+        y-lim [0 y-max]]
     (fn [this ctx left-px top-px w-px h-px state]
       (let [[plot-x plot-y] [10 160]
-            plot-size {:w (- w-px 20)
+            plot-size {:w 120
                        :h 120}
             plot (plt/xy-plot ctx plot-size x-lim y-lim)
             label-y 10
@@ -58,8 +45,8 @@
           (c/text {:x plot-x :y (+ label-y 40)
                    :text (str "prior: reward " (gstr/format "%.2f" (:reward qinfo 0)))})
           (c/text {:x plot-x :y (+ label-y 60)
-                   :text (str "Q=" (gstr/format "%.2f" (:Qt qinfo 0))
-                              " Qn=" (gstr/format "%.2f" (:Q-val (:prior-state alyr) 0))
+                   :text (str "Q=" (gstr/format "%.3f" (:Qt qinfo 0))
+                              " Qn=" (gstr/format "%.3f" (:Q-val (:prior-state alyr) 0))
                               )})
           (c/text {:x plot-x :y (+ label-y 80)
                    :text "adjustment:"})
@@ -68,29 +55,33 @@
                               "(R + " (gstr/format "%.2f" q-discount)
                               "[Qn] - Q)")})
           (c/text {:x plot-x :y (+ label-y 120)
-                   :text (str " = " (gstr/format "%.2f" (:adj qinfo 0)))}))
+                   :text (str " = " (gstr/format "%.3f" (:adj qinfo 0)))}))
         ;; draw the plot
         (c/translate ctx plot-x plot-y)
         (plt/frame! plot)
-        (c/stroke-style ctx "lightgray")
-        (plt/grid! plot {})
-        (c/stroke-style ctx "black")
-        (plt/line! plot surface-xy)
-        (c/fill-style ctx "red")
-        (plt/point! plot (:x this) (:y this) 4)
-        ;; histogram
         (let [freqs (:freqs (meta this))
-              hist-lim [0 (inc (apply max (vals freqs)))]
-              hist-size {:w (- w-px 20)
-                         :h 100}
-              histogram (plt/xy-plot ctx hist-size x-lim hist-lim)
-              ]
-          ;; draw the plot
-          (c/translate ctx 0 140)
-          (plt/frame! histogram)
-          (c/stroke-style ctx "black")
-          (doseq [[x f] freqs]
-            (plt/line! histogram [[x 0] [x f]])))
+              maxfreq (inc (apply max (vals freqs)))]
+         (doseq [y (range (count surface))
+                 x (range (count (first surface)))
+                 :let [v (get-in surface [x y])]]
+           (cond
+            (>= v 10)
+            (do (c/fill-style ctx "#66ff66")
+                (c/alpha ctx 1))
+            (<= v -10)
+            (do (c/fill-style ctx "red")
+                (c/alpha ctx 1))
+            :else
+            (do (c/fill-style ctx "black")
+                (c/alpha ctx (/ (get freqs [x y]) maxfreq))))
+           (plt/rect! plot x y 1 1)
+           ))
+        (c/alpha ctx 1)
+        (c/stroke-style ctx "yellow")
+        (c/fill-style ctx "#6666ff")
+        (plt/point! plot (+ 0.5 (:x this)) (+ 0.5 (:y this)) 4)
+        (c/stroke-style ctx "black")
+        (plt/grid! plot {})
         (c/restore ctx)
         ))))
 
@@ -100,7 +91,7 @@
   []
   (let [draw (draw-surface-fn demo/surface)]
     (main/set-world (->> world-c
-                         (async/map< (aggregation-middleware :x :freqs))
+                         (async/map< (util/frequencies-middleware (juxt :x :y) :freqs))
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
                                                  draw))))

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<head>
+  <meta charset="utf-8">
+  <title>Q learning 2D - comportex viz</title>
+  <link href="../main.css" rel="stylesheet" type="text/css" />
+</head>
+<body>
+  <canvas id="comportex-viz"></canvas>
+  <div id="comportex-sidebar">
+    <div id="comportex-controls"></div>
+    <div id="comportex-tabs">
+      <div><h2>input</h2>
+        <h3>Q learning 2D</h3>
+        <p>Highly experimental attempt at integrating reinforcement learning.</p>
+
+        <form id="comportex-model-form">
+        <fieldset>
+          <legend>HTM model</legend>
+          Number of regions:
+          <input id="comportex-n-regions" size="2" value="1" />
+          <br/>
+          <input type="submit" value="Restart with this model" />
+          (this will also reset all parameter values)
+        </fieldset>
+        </form>
+      </div>
+      <div><h2>drawing</h2>
+        <div id="comportex-drawing"></div>
+      </div>
+      <div><h2>parameters</h2>
+        <div id="comportex-parameters"></div>
+      </div>
+      <div><h2>plots</h2>
+        <div id="comportex-plots"></div>
+      </div>
+      <div><h2>details</h2>
+        <textarea id="detail-text"></textarea>
+      </div>
+  </div>
+  <div id="comportex-loading">loading</div>
+  <script type="text/javascript" src="out/goog/base.js"></script>
+  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript">goog.require("comportexviz.demos.q_learning_2d");</script>
+  <script type="text/javascript">
+    comportexviz.demos.q_learning_2d.init();
+  </script>
+</body>

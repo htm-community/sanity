@@ -9,6 +9,7 @@
   (frame! [this])
   (grid! [this opts])
   (point! [this x y radius-px])
+  (rect! [this x y w h])
   (line! [this xys]))
 
 (defn draw-grid
@@ -57,6 +58,16 @@
                  :r radius-px})
       (c/fill)
       (c/stroke)))
+
+  (rect! [_ x y w h]
+    (let [xpx (x-scale x)
+          ypx (y-scale y)]
+      (doto ctx
+        (c/fill-rect {:x xpx
+                      :y ypx
+                      :w (- (x-scale (+ x w)) xpx)
+                      :h (- (y-scale (+ y h)) ypx)})
+        (c/stroke))))
       
   (line! [_ xys]
     (c/begin-path ctx)
