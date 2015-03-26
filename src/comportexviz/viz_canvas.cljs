@@ -1018,8 +1018,7 @@
              :left (swap! selection update-in [:dt]
                           (fn [x] (min (inc x) max-dt)))
              :right (if (zero? (:dt @selection))
-                      (do (sim-step!)
-                          (swap! selection identity)) ;; redraw
+                      (sim-step!)
                       (swap! selection update-in [:dt]
                              (fn [x] (max (dec x) 0))))
              :up (swap! selection update-in [:col]
