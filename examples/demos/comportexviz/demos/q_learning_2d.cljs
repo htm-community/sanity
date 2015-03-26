@@ -1,6 +1,6 @@
 (ns comportexviz.demos.q-learning-2d
   (:require [org.nfrac.comportex.demos.q-learning-2d :as demo]
-            [org.nfrac.comportex.util :as util :refer [round]]
+            [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
@@ -59,22 +59,34 @@
         ;; draw the plot
         (c/translate ctx plot-x plot-y)
         (plt/frame! plot)
-        (let [freqs (:freqs (meta this))
-              maxfreq (inc (apply max (vals freqs)))]
-         (doseq [y (range (count surface))
-                 x (range (count (first surface)))
-                 :let [v (get-in surface [x y])]]
-           (cond
-            (>= v 10)
-            (do (c/fill-style ctx "#66ff66")
-                (c/alpha ctx 1))
-            (<= v -10)
-            (do (c/fill-style ctx "red")
-                (c/alpha ctx 1))
-            :else
-            (do (c/fill-style ctx "black")
-                (c/alpha ctx (/ (get freqs [x y]) maxfreq))))
-           (plt/rect! plot x y 1 1)
+        (doseq [y (range (count surface))
+                x (range (count (first surface)))
+                :let [v (get-in surface [x y])]]
+          (cond
+           (>= v 10)
+           (do (c/fill-style ctx "#66ff66")
+               (plt/rect! plot x y 1 1))
+           (<= v -10)
+           (do (c/fill-style ctx "red")
+               (plt/rect! plot x y 1 1))
+           ))
+        (doseq [[state-action q] (:Q-map this)
+                :let [{:keys [x y dx dy]} state-action]]
+          (c/fill-style ctx (if (pos? q) "green" "red"))
+          (c/alpha ctx (abs q))
+          (cond
+           ;; from left
+           (pos? dx)
+           (plt/rect! plot (- x 0.25) y 0.25 1)
+           ;; from right
+           (neg? dx)
+           (plt/rect! plot (+ x 1) y 0.25 1)
+           ;; from above
+           (pos? dy)
+           (plt/rect! plot x (- y 0.25) 1 0.25)
+           ;; from below
+           (neg? dy)
+           (plt/rect! plot x (+ y 1) 1 0.25)
            ))
         (c/alpha ctx 1)
         (c/stroke-style ctx "yellow")
@@ -91,7 +103,6 @@
   []
   (let [draw (draw-surface-fn demo/surface)]
     (main/set-world (->> world-c
-                         (async/map< (util/frequencies-middleware (juxt :x :y) :freqs))
                          (async/map< #(vary-meta % assoc
                                                  :comportexviz/draw-world
                                                  draw))))
