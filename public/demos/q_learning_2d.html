@@ -11,8 +11,28 @@
     <div id="comportex-tabs">
       <div><h2>input</h2>
         <h3>Q learning 2D</h3>
-        <p>Highly experimental attempt at integrating reinforcement learning.</p>
-
+        <p>Highly experimental attempt at integrating reinforcement
+        learning: Q learning. The Q value of an action from some state
+        is the average permanence of synapses activating the action
+        from that state, minus the initial permanence value.</p>
+	<p>The action layer columns are interpreted to produce an
+	action: 100 columns are allocated to each of the four
+	directions of movement, and the direction with most active
+	columns is used to move the agent.</p>
+	<p>Adjustments to the Q value, based on reward and expected
+	future reward, are applied to the permanence of synapses which
+	directly activated the action (columns). This adjustment
+	applies in the action layer only, and it does this instead of
+	the usual spatial pooling.</p>
+	<p>Exploration arises from boosting neglected columns,
+	primarily in the action layer.</p>
+	<p>The reward is -3 on normal squares, -200 on hazard squares
+	and +200 on the goal square. These are divided by 100 for
+	comparison to Q values on the synaptic permanence scale.</p>
+	<p>This example is episodic: when the agent reaches either the
+	goal or a hazard it is returned to the starting point.</p>
+	<p>The input is the location of the agent via coordinate
+	encoder, plus the last movement as distal input.</p>
         <form id="comportex-model-form">
         <fieldset>
           <legend>HTM model</legend>

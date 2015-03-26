@@ -1,6 +1,6 @@
 (ns comportexviz.demos.q-learning-1d
   (:require [org.nfrac.comportex.demos.q-learning-1d :as demo]
-            [org.nfrac.comportex.util :as util :refer [round]]
+            [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
@@ -22,10 +22,9 @@
         y-lim [(+ y-max 1) 0]
         surface-xy (mapv vector (range) surface)]
     (fn [this ctx left-px top-px w-px h-px state]
-      (let [[plot-x plot-y] [10 160]
-            plot-size {:w (- w-px 20)
-                       :h 120}
-            plot (plt/xy-plot ctx plot-size x-lim y-lim)
+      (let [[plot-x plot-y] [0 160]
+            plot-size {:w (- w-px 0)
+                       :h 100}
             label-y 10
             alyr (get-in state [:regions :action :layer-3])
             qinfo (get-in alyr [:prior-state :Q-info])
@@ -57,25 +56,50 @@
                               "[Qn] - Q)")})
           (c/text {:x plot-x :y (+ label-y 120)
                    :text (str " = " (gstr/format "%.3f" (:adj qinfo 0)))}))
-        ;; draw the plot
+        ;; draw the plots
         (c/translate ctx plot-x plot-y)
-        (plt/frame! plot)
-        (c/stroke-style ctx "lightgray")
-        (plt/grid! plot {})
-        (c/stroke-style ctx "black")
-        (plt/line! plot surface-xy)
-        (c/fill-style ctx "red")
-        (plt/point! plot (:x this) (:y this) 4)
+        ;; draw Q values for right/left at each position
+        (let [qplot-size {:w (:w plot-size) :h 40}
+              qplot-lim [0 2]
+              qplot (plt/xy-plot ctx qplot-size x-lim qplot-lim)]
+          (plt/frame! qplot)
+          (doseq [[state-action q] (:Q-map this)
+                  :let [{:keys [x dx]} state-action]]
+            (c/fill-style ctx (if (pos? q) "green" "red"))
+            (c/alpha ctx (abs q))
+            (cond
+             ;; from left
+             (pos? dx)
+             (plt/rect! qplot (- x 0.6) 0 0.6 1)
+             ;; from right
+             (neg? dx)
+             (plt/rect! qplot x 1 0.6 1))
+            )
+          ;; draw ticks to separate left/right indicators
+          (c/alpha ctx 0.25)
+          (c/fill-style ctx "black")
+          (doseq [x (range (inc (count surface)))]
+            (plt/line! qplot [[x 0] [x 2]]))
+          )
+        (c/alpha ctx 1)
+        ;; draw surface and current position
+        (c/translate ctx 0 40)
+        (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
+          (plt/frame! plot)
+          (c/stroke-style ctx "lightgray")
+          (plt/grid! plot {})
+          (c/stroke-style ctx "black")
+          (plt/line! plot surface-xy)
+          (c/stroke-style ctx "yellow")
+          (c/fill-style ctx "#6666ff")
+          (plt/point! plot (:x this) (:y this) 4))
         ;; histogram
+        (c/translate ctx 0 (:h plot-size))
         (let [freqs (:freqs (meta this))
               hist-lim [0 (inc (apply max (vals freqs)))]
-              hist-size {:w (- w-px 20)
-                         :h 100}
-              histogram (plt/xy-plot ctx hist-size x-lim hist-lim)
-              ]
+              histogram (plt/xy-plot ctx plot-size x-lim hist-lim)]
           ;; draw the plot
-          (c/translate ctx 0 140)
-          (plt/frame! histogram)
+          ;(plt/frame! histogram)
           (c/stroke-style ctx "black")
           (doseq [[x f] freqs]
             (plt/line! histogram [[x 0] [x f]])))
