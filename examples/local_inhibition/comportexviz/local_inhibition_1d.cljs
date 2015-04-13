@@ -5,8 +5,8 @@
             [org.nfrac.comportex.cells :as cells]
             [org.nfrac.comportex.util :as util :refer [abs]]
             [monet.canvas :as c]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]))
+            [goog.dom :as dom]
+            [reagent.core :as reagent :refer [atom]]))
 
 (def width-px 600)
 (def height-px 300)
@@ -72,17 +72,6 @@
   (set
    (inh/inhibit-globally exc (* (p/size topo) (:activation-level spec)))))
 
-(defn set-ui!
-  [spec actual-level]
-  (dom/text (->dom "#inh-base-dist") (:inhibition-base-distance spec))
-  (dom/text (->dom "#inh-radius")
-            (util/round inh-radius 2))
-  (dom/text (->dom "#inh-stimulus")
-            (util/round (:ff-stimulus-threshold spec) 2))
-  (dom/text (->dom "#inh-actual-level")
-            (util/round actual-level 2))
-  (dom/text (->dom "#inh-target-level") (:activation-level spec)))
-
 (defn draw-exc-bars
   [ctx exc act ->x ->y ->h]
   (doseq [[col o] exc]
@@ -107,7 +96,8 @@
 
 (defn draw!
   [exc act global-act spec]
-  (let [ctx (c/get-context (->dom "#inh-viz") "2d")
+  (let [el (dom/getElement "inh-viz")
+        ctx (c/get-context el "2d")
         this-max-o (apply max (vals exc))
         max-o (swap! !max-exc #(max % this-max-o))
         ->x (fn [col] (* (/ col nx) width-px))
@@ -156,20 +146,27 @@
         actual-level (/ (count act) size)
         global-act (reset! !global-act
                            (global-active-columns exc topo spec))]
-    (draw! exc act global-act spec)
-    (set-ui! spec actual-level)))
+    (draw! exc act global-act spec)))
+
+(defn app-ui
+  []
+  (let [actual-level (/ (count @!act) size)]
+    [:div
+     [:button#inh-step {:on-click #(do-step!)}
+      "Step (generate new input excitation)"]
+     [:br]
+     [:p#inh-info
+      "Target activation level is " (:activation-level spec) ". "
+      [:br]
+      "Actual activation level is " (util/round actual-level 2) ":"]
+     [:code "stimulus-threshold: "] (util/round (:ff-stimulus-threshold spec) 2) [:br]
+     [:code "inhibition-base-distance: "] (:inhibition-base-distance spec) [:br]
+     [:code "inhibition-radius: "] (util/round inh-radius 2)]))
 
 (defn ^:export init
   []
-  (let [viz-el (->dom "#inh-viz")]
+  (let [viz-el (dom/getElement "inh-viz")]
     (set! (.-height viz-el) height-px)
     (set! (.-width viz-el) width-px)
     (do-step!)
-    (let [step-el (->dom "#inh-step")]
-      (event/on-raw step-el :click
-                    (fn [e]
-                      (try
-                        (do-step!)
-                        (catch js/Error e
-                          (println e)))
-                      false)))))
+    (reagent/render [app-ui] (dom/getElement "app-ui"))))

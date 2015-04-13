@@ -5,14 +5,13 @@
             [org.nfrac.comportex.cells :as cells]
             [org.nfrac.comportex.util :as util :refer [abs]]
             [monet.canvas :as c]
-            [comportexviz.viz-canvas :as viz :refer [image-buffer]]
+            [goog.dom :as dom]
             [comportexviz.viz-layouts :as lay
              :refer [layout-bounds
                      fill-element-group
                      fill-elements
                      columns-2d-layout]]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]))
+            [reagent.core :as reagent :refer [atom]]))
 
 (def width-px 500)
 (def height-px 380)
@@ -34,6 +33,17 @@
            :inhibition-base-distance 1
            :ff-stimulus-threshold 2.0
            })
+
+(def drawing-opts
+  {:col-d-px 5
+   :col-shrink 0.85})
+
+(defn image-buffer
+  [{:keys [w h]}]
+  (let [el (dom/createElement "canvas")]
+    (set! (.-width el) w)
+    (set! (.-height el) h)
+    el))
 
 (defn zapsmall
   [x d]
@@ -75,17 +85,6 @@
   (set
    (inh/inhibit-globally exc (* (p/size topo) (:activation-level spec)))))
 
-(defn set-ui!
-  [spec actual-level]
-  (dom/text (->dom "#inh2d-base-dist") (:inhibition-base-distance spec))
-  (dom/text (->dom "#inh2d-radius")
-            (util/round inh-radius 2))
-  (dom/text (->dom "#inh2d-stimulus")
-            (util/round (:ff-stimulus-threshold spec) 2))
-  (dom/text (->dom "#inh2d-actual-level")
-            (util/round actual-level 2))
-  (dom/text (->dom "#inh2d-target-level") (:activation-level spec)))
-
 (defn excitation-image
   [lay exc]
   (let [el (image-buffer (layout-bounds lay))
@@ -109,9 +108,9 @@
 
 (defn draw!
   [exc act global-act spec]
-  (let [ctx (c/get-context (->dom "#inh2d-viz") "2d")
-        d-opts (:drawing @viz/viz-options)
-        lay (columns-2d-layout topo 0 0 plot-height-px d-opts)
+  (let [el (dom/getElement "inh2d-viz")
+        ctx (c/get-context el "2d")
+        lay (columns-2d-layout topo 0 0 plot-height-px drawing-opts)
         exc-img (excitation-image lay exc)
         act-img (activation-image lay act)
         global-act-img (activation-image lay global-act)]
@@ -135,21 +134,27 @@
         actual-level (/ (count act) size)
         global-act (reset! !global-act
                            (global-active-columns exc topo spec))]
-    (draw! exc act global-act spec)
-    (set-ui! spec actual-level)))
+    (draw! exc act global-act spec)))
+
+(defn app-ui
+  []
+  (let [actual-level (/ (count @!act) size)]
+    [:div
+     [:button#inh-step {:on-click #(do-step!)}
+      "Step (generate new input excitation)"]
+     [:br]
+     [:p#inh-info
+      "Target activation level is " (:activation-level spec) ". "
+      [:br]
+      "Actual activation level is " (util/round actual-level 2) ":"]
+     [:code "stimulus-threshold: "] (util/round (:ff-stimulus-threshold spec) 2) [:br]
+     [:code "inhibition-base-distance: "] (:inhibition-base-distance spec) [:br]
+     [:code "inhibition-radius: "] (util/round inh-radius 2)]))
 
 (defn ^:export init
   []
-  (let [viz-el (->dom "#inh2d-viz")]
+  (let [viz-el (dom/getElement "inh2d-viz")]
     (set! (.-height viz-el) height-px)
     (set! (.-width viz-el) width-px)
     (do-step!)
-    (let [step-el (->dom "#inh2d-step")
-          glob-el (->dom "#inh2d-global")]
-      (event/on-raw step-el :click
-                    (fn [e]
-                      (try
-                        (do-step!)
-                        (catch js/Error e
-                          (println e)))
-                      false)))))
+    (reagent/render [app-ui] (dom/getElement "app-ui"))))

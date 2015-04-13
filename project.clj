@@ -2,18 +2,24 @@
   :description "Web visualisation of HTM algorithm as implemented in comportex"
   :url "http://github.com/nupic-community/comportexviz/"
 
-  :dependencies [[org.clojure/clojure "1.6.0"]
-                 [org.clojure/clojurescript "0.0-2371"]
+  :dependencies [[org.clojure/clojure "1.7.0-beta1"]
+                 [org.clojure/clojurescript "0.0-3196"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.nfrac/comportex "0.0.8-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
+                 [reagent "0.5.0"]
+
                  [com.keminglabs/c2 "0.2.4-SNAPSHOT"]]
-  
-  :plugins [[lein-cljsbuild "1.0.3"]
-            [com.cemerick/austin "0.1.5"]]
+
+  :plugins [[lein-cljsbuild "1.0.5"]
+            [com.cemerick/austin "0.1.6"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
 
   :source-paths ["src"]
+
+  :clean-targets ["public/demos/out"
+                  "public/cortical_io/out"
+                  "public/local_inhibition/out"]
 
   :cljsbuild {:builds [{:id "demos"
                         :source-paths ["src" "examples/demos"]

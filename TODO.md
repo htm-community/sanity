@@ -1,5 +1,7 @@
 # TODO
 
+* gh-pages branch with compiled demos
+
 * plot most recent sliding window
 
 * summary of % predicted etc in recent time
