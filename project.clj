@@ -8,6 +8,7 @@
                  [org.nfrac/comportex "0.0.8-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
+                 [reagent-forms "0.5.0"]
 
                  [com.keminglabs/c2 "0.2.4-SNAPSHOT"]]
 
@@ -17,26 +18,26 @@
 
   :source-paths ["src"]
 
-  :clean-targets ["public/demos/out"
-                  "public/cortical_io/out"
-                  "public/local_inhibition/out"]
+  :clean-targets ["public/demos/target"
+                  "public/cortical_io/target"
+                  "public/local_inhibition/target"]
 
   :cljsbuild {:builds [{:id "demos"
                         :source-paths ["src" "examples/demos"]
-                        :compiler {:optimizations :advanced
-                                   :output-dir "public/demos/out"
+                        :compiler {:optimizations :whitespace
+                                   :output-dir "public/demos/target"
                                    :source-map "public/demos/comportexviz.js.map"
                                    :output-to "public/demos/comportexviz.js"}}
                        {:id "cortical-io"
                         :source-paths ["src" "examples/cortical_io"]
-                        :compiler {:optimizations :advanced
-                                   :output-dir "public/cortical_io/out"
+                        :compiler {:optimizations :whitespace
+                                   :output-dir "public/cortical_io/target"
                                    :source-map "public/cortical_io/comportexviz_cio.js.map"
                                    :output-to "public/cortical_io/comportexviz_cio.js"}}
                        {:id "inh"
                         :source-paths ["src" "examples/local_inhibition"]
-                        :compiler {:optimizations :advanced
-                                   :output-dir "public/local_inhibition/out"
+                        :compiler {:optimizations :whitespace
+                                   :output-dir "public/local_inhibition/target"
                                    :source-map "public/local_inhibition/comportexviz_inh.js.map"
                                    :output-to "public/local_inhibition/comportexviz_inh.js"}}
                        ]})
