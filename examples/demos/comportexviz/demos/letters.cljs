@@ -71,6 +71,25 @@ Chifung has a friend."))
     (async/onto-chan world-c (for [x xs] {:value (str x)})
                      false)))
 
+(def config-template
+  [:div
+   [:div
+    [:label "Number of regions:"]
+    [:input {:field :text
+             :id :n-regions
+            :size 2}]]
+   [:div
+    [:label "Letter encoder:"]
+    [:select {:field :list
+              :id :encoder}
+     [:option {:key :block} "block"]
+     [:option {:key :random} "random"]]]
+   [:button {:on-click #(reset-model-from-ui)}
+    "Restart with this model"]
+   "(this will also reset all parameter values)"
+   ]
+  )
+
 (defn setup-tab
   []
   [:div
@@ -78,39 +97,24 @@ Chifung has a friend."))
    [:p "Text input is presented as a sequence of letters. Allowed
         characters are letters, numbers, space, period and question
         mark."]
-   [:fieldset
-    [:legend "HTM model"]
 
-    ;; TODO - use reagent.forms
+   [:h4 "HTM model"]
+   [bind-fields config-template config]
 
-    "Number of regions:"
-    [:input {:size 2 :value (:n-regions @config)}]
-    [:br]
-    "Letter encoder:"
-    [:select
-     [:option {:value "block"} "block"]
-     [:option {:value "random"} "random"]]
-    [:br]
-    [:button {:on-click #(reset-model-from-ui)}
-     "Restart with this model"]
-    "(this will also reset all parameter values)"
-    ]
-   [:hr]
-   [:fieldset
-    [:legend "Input"]
+   [:h4 "Input"]
+   [:div
     "Immediate input as you type:"
     [:input {:size 1 :maxLength 1
-             :on-key-down immediate-key-down}]
-    [:br]
+             :on-key-down immediate-key-down}]]
+   [:hr]
+   [:div
     [:textarea {:style {:width "90%" :height "10em"}
                 :value @text-to-send
                 :on-change #(reset! text-to-send
-                                   (-> % .-target forms/getValue))}]
-    [:br]
+                                    (-> % .-target forms/getValue))}]
     [:button {:on-click do-send-text}
-     "Send text block input"]
-    ]
-  ]
+     "Send text block input"]]
+   ]
   )
 
 (defn drawing-tab []
@@ -152,13 +156,12 @@ Chifung has a friend."))
         [:div#comportex-sidebar
          [comportex-controls]
          [tab-bar current-tab]
-         (into [:div#comportex-tabs]
+         (into [:div.tabs]
                (for [[k cmp] tab-cmps]
                  [:div {:style (if (not= k @current-tab) {:display "none"})}
-                  [:h2 (name k)]
                   [cmp]]))
          ]]
-       [:div#comportex-loading]])))
+       [:div#comportex-loading "loading"]])))
 
 (defn ^:export init
   []

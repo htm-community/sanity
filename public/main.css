@@ -15,6 +15,14 @@ body {
   width: 29%;
 }
 
+fieldset {
+  border: none;
+}
+
+fieldset legend {
+  font-weight: bold;
+}
+
 #viz-options fieldset {
   float: left;
   width: 40%;
@@ -47,9 +55,8 @@ body {
   opacity: 0.8;
 }
 
-#comportex-controls a {
-  font-size: 80%;
-  text-decoration: none;
+#comportex-controls {
+  border: 1px inset;
 }
 
 #detail-text {
@@ -76,6 +83,25 @@ body {
    font-size: 48px;
    font-weight: bold;
    font-family: monospace;
+}
+
+
+.tabs {
+  border: 1px inset;
+  margin-top: 0px;
+  padding-left: 0.5em;
+}
+
+.btn {
+  background: buttonface;
+  margin-top: 1em;
+  margin-bottom: -2px;
+  border-bottom: none;
+}
+
+.active {
+  font-weight: bold;
+  background: #fff;
 }
 
 /* GOOGLE CLOSURE UI */
