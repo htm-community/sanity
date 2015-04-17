@@ -53,7 +53,14 @@ Chifung has a brain.
 Chifung has no book.
 Chifung has a friend."))
 
-(def world-c (async/chan 1000))
+(def world-buffer (async/buffer 1000))
+(def world-c (async/chan world-buffer))
+
+(defn touch!
+  "Alters the atom (metadata) just to trigger Regent to re-render dependent components."
+  ;; (here `model`, to display world-buffer size)
+  [atom]
+  (swap! atom vary-meta update ::touch-flag not))
 
 (defn set-world
   []
@@ -82,13 +89,15 @@ Chifung has a friend."))
                       (demo/clean-text)
                       (seq))]
     (async/put! world-c {:value (str x)}))
+  (touch! model)
   (.preventDefault e))
 
 (defn do-send-text
   [e]
   (when-let [xs (seq (demo/clean-text @text-to-send))]
     (async/onto-chan world-c (for [x xs] {:value (str x)})
-                     false)))
+                     false)
+    (touch! model)))
 
 (def config-template
   [:div
@@ -111,7 +120,7 @@ Chifung has a friend."))
     [:div.col-sm-6
      [:button.btn.btn-default
       {:on-click #(reset-model-from-ui)}
-      "Restart with this model"]]]
+      "Restart with new model"]]]
    [:p.text-danger "This will reset all parameter values."]
    ])
 
@@ -126,6 +135,10 @@ Chifung has a friend."))
    [bind-fields config-template config]
 
    [:h3 "Input " [:small "Letter sequences"]]
+   [:p.text-info
+    ;; force re-render when model atom changes:
+    {:to-force-reagent-refresh (count @model)}
+    (str (count world-buffer) " queued input values.")]
    [:div.well
     "Immediate input as you type: "
     [:input {:size 2 :maxLength 1
@@ -174,7 +187,7 @@ Chifung has a friend."))
    [:details details-tab]])
 
 (defn navbar
-  [main-options model]
+  [main-options model show-help]
   [:nav.navbar.navbar-default
    [:div.container-fluid
     [:div.navbar-header
@@ -254,20 +267,32 @@ Chifung has a friend."))
         ;; TODO
         ]
        ]
-      [:li
+      [:li (if @show-help {:class "active"})
        [:a {:href "#"
-            :on-click #()}
+            :on-click #(swap! show-help not)}
         "Help"]]
       ]
      ]
     ]])
 
+(defn help-bar
+  [show-help]
+  (if @show-help
+    [:div.container-fluid
+     [:p "Right / left arrow keys move forward / back in time.
+      Up / down arrow keys select columns.
+      Click on a column to show its cells.
+      Page up / page down to scroll display.
+      TODO: improve this text!"]]))
+
 (defn comportex-app
   []
-  (let [current-tab (atom (ffirst tab-cmps))]
+  (let [current-tab (atom (ffirst tab-cmps))
+        show-help (atom false)]
     (fn []
       [:div
-       [navbar main-options model]
+       [navbar main-options model show-help]
+       [help-bar show-help]
        [:div.container-fluid
         [:div.row
          [:div.col-sm-8
