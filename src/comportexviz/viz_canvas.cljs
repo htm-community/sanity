@@ -60,14 +60,14 @@
     (str "rgb(" v "," v "," v ")")))
 
 (def state-colors
-  {:background "white"
+  {:background "#ddd"
    :inactive "white"
    :inactive-syn "black"
-   :disconnected "white"
+   :disconnected "#ddd"
    :active (hsl :red 1.0 0.5)
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
-   :highlight (hsl :yellow 1 0.75 0.5)
+   :highlight (hsl :yellow 1 0.65 0.6)
    :temporal-pooling (hsl :green 1 0.5 0.4)
    })
 
@@ -802,20 +802,12 @@
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     ;; draw timeline
     (let [current-t (p/timestep (first @steps))
-          right-px (- width-px 250)
+          right-px (- width-px 50)
           label-left (+ right-px 25)
           t-width (/ right-px @keep-steps)
           y-px (/ ts-height-px 2)
           r-px (min y-px (* t-width 0.5))
           sel-r-px y-px]
-      (c/text-baseline ctx :top)
-      (c/text ctx {:text "Right / left arrows move forward / back in time."
-                   :x label-left :y 0})
-      (c/text ctx {:text (if sel-col "Up / down arrows select columns."
-                             "Click a column to show its cells.")
-                   :x label-left :y 10})
-      (c/text ctx {:text "Page up / page down to scroll display."
-                   :x label-left :y 20})
       (c/text-align ctx :center)
       (c/text-baseline ctx :middle)
       (c/font-style ctx "bold 10px sans-serif")
