@@ -1,6 +1,6 @@
 (defproject comportexviz "0.0.8-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
-  :url "http://github.com/nupic-community/comportexviz/"
+  :url "https://github.com/nupic-community/comportexviz"
 
   :dependencies [[org.clojure/clojure "1.7.0-beta1"]
                  [org.clojure/clojurescript "0.0-3196"]

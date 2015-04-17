@@ -5,6 +5,9 @@
             [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
+
+            [reagent.core :as reagent :refer [atom]]
+
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [c2.util :refer [bind!]]))
@@ -27,9 +30,9 @@
 (def steps-c (chan))
 (def steps-mult (async/mult steps-c))
 
-(def sim-go? (atom false))
 (def main-options
-  (atom {:sim-step-ms 200
+  (atom {:sim-go? false
+         :sim-step-ms 200
          :anim-go? true
          :anim-every 1}))
 
@@ -51,14 +54,16 @@
            :run-start {:time (now)
                        :timestep (p/timestep @model)}))
   (go
-   (while @sim-go?
+   (while (:sim-go? @main-options)
      (let [tc (async/timeout (:sim-step-ms @main-options))]
        (<! (sim-step!))
        (<! tc)))))
 
-(add-watch sim-go? :run-sim
-           (fn [_ _ _ v]
-             (when v (run-sim))))
+(add-watch main-options :run-sim
+           (fn [_ _ old v]
+             (when (and (:sim-go? v)
+                        (not (:sim-go? old)))
+               (run-sim))))
 
 ;;; ## Plots
 
@@ -129,7 +134,7 @@
   [init-model]
   (init-plots! init-model (->dom "#comportex-plots"))
   (viz/init! init-model (tap-c steps-mult) selection sim-step!)
-  (cui/handle-controls! model sim-go? main-options sim-step! draw!)
+  ;(cui/handle-controls! model sim-go? main-options sim-step! draw!)
   (cui/handle-options! model viz/keep-steps viz/viz-options)
   (cui/handle-parameters! model selection))
 

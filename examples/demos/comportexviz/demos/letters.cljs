@@ -2,15 +2,34 @@
   (:require [org.nfrac.comportex.demos.letters :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
+            [org.nfrac.comportex.protocols :as p]
             [comportexviz.sentence-drawing :refer [draw-text-fn]]
-            [comportexviz.main :as main]
+            [comportexviz.main :as main :refer [main-options model sim-step!]]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
+            [goog.string :as gstring]
+            [goog.string.format]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
+
+(defn now [] (.getTime (js/Date.)))
+
+(defn sim-rate
+  "Returns the simulation rate in timesteps per second for current
+   run."
+  [model]
+  (if (:time (:run-start model))
+    (let [m (:run-start model)
+          dur-ms (- (now)
+                    (:time m))
+          steps (- (p/timestep model)
+                   (:timestep m))]
+      (-> (/ steps dur-ms)
+          (* 1000)))
+    0))
 
 (def n-predictions 8)
 
@@ -73,46 +92,50 @@ Chifung has a friend."))
 
 (def config-template
   [:div
-   [:div
-    [:label "Number of regions:"]
-    [:input {:field :text
-             :id :n-regions
-            :size 2}]]
-   [:div
-    [:label "Letter encoder:"]
-    [:select {:field :list
-              :id :encoder}
-     [:option {:key :block} "block"]
-     [:option {:key :random} "random"]]]
-   [:button {:on-click #(reset-model-from-ui)}
-    "Restart with this model"]
-   "(this will also reset all parameter values)"
-   ]
-  )
+   [:div.row
+    [:div.col-sm-6
+     [:label "Number of regions:"]]
+    [:div.col-sm-6
+     [:input {:field :numeric
+              :id :n-regions
+              :size 3}]]]
+   [:div.row
+    [:div.col-sm-6
+     [:label "Letter encoder:"]]
+    [:div.col-sm-6
+     [:select {:field :list
+               :id :encoder}
+      [:option {:key :block} "block"]
+      [:option {:key :random} "random"]]]]
+   [:div.row
+    [:div.col-sm-6
+     [:button.btn.btn-default
+      {:on-click #(reset-model-from-ui)}
+      "Restart with this model"]]]
+   [:p.text-danger "This will reset all parameter values."]
+   ])
 
-(defn setup-tab
+(defn model-tab
   []
   [:div
-   [:h3 "Letters"]
-   [:p "Text input is presented as a sequence of letters. Allowed
-        characters are letters, numbers, space, period and question
+   [:p "In this example, text input is presented as a sequence of letters.
+        Allowed characters are letters, numbers, space, period and question
         mark."]
 
-   [:h4 "HTM model"]
+   [:h3 "HTM model"]
    [bind-fields config-template config]
 
-   [:h4 "Input"]
-   [:div
-    "Immediate input as you type:"
-    [:input {:size 1 :maxLength 1
+   [:h3 "Input " [:small "Letter sequences"]]
+   [:div.well
+    "Immediate input as you type: "
+    [:input {:size 2 :maxLength 1
              :on-key-down immediate-key-down}]]
-   [:hr]
-   [:div
+   [:div.well
     [:textarea {:style {:width "90%" :height "10em"}
                 :value @text-to-send
                 :on-change #(reset! text-to-send
                                     (-> % .-target forms/getValue))}]
-    [:button {:on-click do-send-text}
+    [:button.btn.btn-default {:on-click do-send-text}
      "Send text block input"]]
    ]
   )
@@ -127,45 +150,137 @@ Chifung has a friend."))
   [:div#comportex-details
    [:textarea#detail-text]])
 
-(defn comportex-controls []
-  [:div#comportex-controls])
+(defn tabs
+  [tab-cmps current-tab]
+  [:div
+   (into [:ul.nav.nav-tabs]
+         (for [[k _] tab-cmps]
+           [:li {:role "presentation"
+                 :class (if (= @current-tab k) "active")}
+            [:a {:href "#"
+                 :on-click #(reset! current-tab k)}
+             (name k)]]))
+   (into [:div.tabs]
+         (for [[k cmp] tab-cmps]
+           [:div {:style (if (not= k @current-tab) {:display "none"})}
+            [cmp]]))
+   ])
 
 (def tab-cmps
-  [[:setup setup-tab]
+  [[:model model-tab]
    [:drawing drawing-tab]
-   [:parameters parameters-tab]
+   [:params parameters-tab]
    [:plots plots-tab]
    [:details details-tab]])
 
-(defn tab-bar
-  [current-tab]
-  (into [:div.btn-group]
-        (for [[k _] tab-cmps]
-          [:button.btn.btn-default {:key k
-                                    :class (if (= @current-tab k) "active")
-                                    :on-click #(reset! current-tab k)}
-           (name k)])))
+(defn navbar
+  [main-options model]
+  [:nav.navbar.navbar-default
+   [:div.container-fluid
+    [:div.navbar-header
+     [:button.navbar-toggle.collpased {:data-toggle "collapse"
+                                       :data-target "#comportex-navbar-collapse"}
+      [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
+     [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
+      "ComportexViz"]]
+    [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
+     [:ul.nav.navbar-nav
+      ;; pause button
+      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click #(swap! main-options assoc :sim-go? false)}
+        "Pause"]]
+      ;; sim rate
+      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+       [:p.navbar-text (gstring/format "%.1f/sec."
+                                       (sim-rate @model))]]
+      ;; run button
+      [:li (if (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-primary.navbar-btn
+        {:type :button
+         :on-click #(swap! main-options assoc :sim-go? true)}
+        "Run"]]
+      ;; step back
+      [:li (if (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click #(sim-step!)}
+        [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
+        [:span.sr-only "Step backward"]]]
+      ;; step forward
+      [:li (if (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click #(sim-step!)}
+        [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
+        [:span.sr-only "Step forward"]]]
+      ;; sim / anim options
+      [:li.dropdown
+       [:a.dropdown-toggle {:data-toggle "dropdown"
+                            :role "button"
+                            :href "#"}
+        "Speed" [:span.caret]]
+       [:ul.dropdown-menu {:role "menu"}
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 0
+                                    :anim-every 1)}
+              "max sim speed"]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 0
+                                    :anim-every 100)}
+              "max sim speed, draw every 100 steps"]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 250
+                                    :anim-every 1)}
+              "limit to 4 steps/sec."]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 500
+                                    :anim-every 1)}
+              "limit to 2 steps/sec."]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 1000
+                                    :anim-every 1)}
+              "limit to 1 step/sec."]]
+        ]]
+      ]
+     [:ul.nav.navbar-nav.navbar-right
+      [:li.dropdown
+       [:a.dropdown-toggle {:data-toggle "dropdown"
+                            :role "button"
+                            :href "#"}
+        "Draw" [:span.caret]]
+       [:ul.dropdown-menu {:role "menu"}
+        ;; TODO
+        ]
+       ]
+      [:li
+       [:a {:href "#"
+            :on-click #()}
+        "Help"]]
+      ]
+     ]
+    ]])
 
 (defn comportex-app
   []
-  (let [current-tab (atom :setup)]
+  (let [current-tab (atom (ffirst tab-cmps))]
     (fn []
       [:div
-       [:div
-        [:canvas#comportex-viz]
-        [:div#comportex-sidebar
-         [comportex-controls]
-         [tab-bar current-tab]
-         (into [:div.tabs]
-               (for [[k cmp] tab-cmps]
-                 [:div {:style (if (not= k @current-tab) {:display "none"})}
-                  [cmp]]))
-         ]]
-       [:div#comportex-loading "loading"]])))
+       [navbar main-options model]
+       [:div.container-fluid
+        [:div.row
+         [:div.col-sm-8
+          [:canvas#comportex-viz]
+          ]
+         [:div.col-sm-4
+          [tabs tab-cmps current-tab]
+          ]]
+        [:div#loading-message "loading"]]])))
 
 (defn ^:export init
   []
   (reagent/render [comportex-app] (dom/getElement "comportex-app"))
   (set-world)
   (reset-model-from-ui)
-  (reset! main/sim-go? true))
+  (swap! main-options assoc :sim-go? true))
