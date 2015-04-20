@@ -1,17 +1,15 @@
 (ns comportexviz.controls-ui
-  (:require [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]
-            [goog.events :as gevents]
+  (:require [reagent.core :as reagent :refer [atom]]
+            [reagent-forms.core :refer [bind-fields]]
+            [goog.dom :as dom]
+            [goog.dom.forms :as forms]
             [goog.string :as gstring]
             [goog.string.format]
             [clojure.string :as str]
-            [goog.ui.Slider]
-            [goog.ui.Component.EventType]
             [cljs.reader]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p])
-  (:require-macros [c2.util :refer [bind!]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -29,254 +27,316 @@
           (* 1000)))
     0))
 
-(defn slider
-  [id min-val max-val step unit]
-  (doto (goog.ui.Slider.)
-    (.setId id)
-    (.setMinimum min-val)
-    (.setMaximum max-val)
-    (.setStep step)
-    (.setUnitIncrement unit)
-    (.createDom)
-    (.render (.-body js/document))))
+(defn partype [v]
+  (cond
+    (or (true? v) (false? v)) :boolean
+    (vector? v) :vector
+    :else :number))
 
-(defn bind-slider
-  [s atom]
-  (gevents/listen s goog.ui.Component.EventType/CHANGE
-                  (fn [_] (reset! atom (.getValue s))))
-  (.setValue s @atom))
-
-(defn keys->id
-  [keys]
-  (->> (map (fn [x] (if (keyword? x) (name x) (str x))) keys)
-       (map #(str/replace % \? "_QMARK_"))
-       (interpose "_")
-       (apply str "comportex-")))
-
-(defn checkbox
-  [m keys txt]
-  [:label [:input {:id (keys->id keys)
-                   :type "checkbox"
-                   :checked (when (get-in m keys) "checked")}]
-   txt])
-
-(defn combobox
-  [m keys optvals txt]
-  [:label txt
-   [:select {:id (keys->id keys)}
-    (for [optval optvals
-          :let [optstr (if (keyword? optval) (name optval) (str optval))]]
-      [:option {:value optstr
-                :selected (when (= (get-in m keys) optval) "selected")}
-       optstr])]])
-
-(defn radio
-  [m keys value]
-  [:input {:name (keys->id keys)
-           :id (keys->id (conj keys value))
-           :type "radio"
-           :value value
-           :checked (when (= value (get-in m keys)) "checked")}])
-
-(defn parameter-input
-  [prefix [k v]]
-  [:label
-   [:span.parameter-label (name k)]
-   [:input {:id (keys->id [prefix k])
-            :value (str v)}]])
-
-(defn handle-controls!
-  [model sim-go? main-options sim-step! draw-now!]
-  (bind! "#comportex-controls"
-         [:div#comportex-controls
-
-          [:fieldset#sim-controls
-           [:legend "Simulation"]
-           [:label "Timestep:" [:span#sim-timestep
-                                (p/timestep @model)]]
-           [:span#sim-rate {:class "detail"}
-            (when @sim-go?
-              (gstring/format "%.1f steps/sec."
-                              (sim-rate @model)))]
-           [:br]
-           [:button#sim-start
-            {:style {:display (when @sim-go? "none")}} "Start"]
-           [:button#sim-stop
-            {:style {:display (when-not @sim-go? "none")}} "Stop"]
-           [:button#sim-step "Step"]
-           [:label "Step every:"
-            [:span#sim-ms-text (str (:sim-step-ms @main-options) " ms")]
-            [:span [:a#sim-slower {:href "#"} "slower"]]
-            [:span [:a#sim-faster {:href "#"} "faster"]]]
-           [:button#sim-reset "Reset model"] " (not input)"]
-
-          [:fieldset#anim-controls
-           [:legend "Animation"]
-           [:button#anim-start
-            {:style {:display (when (:anim-go? @main-options) "none")}} "Start"]
-           [:button#anim-stop
-            {:style {:display (when-not (:anim-go? @main-options) "none")}} "Stop"]
-           [:button#anim-step "Draw now"]
-           [:label "Draw every:"
-            [:span#anim-every-text (str (:anim-every @main-options) " steps")]
-            [:span [:a#anim-slower {:href "#"} "slower"]]
-            [:span [:a#anim-faster {:href "#"} "faster"]]]]
-          ])
-
-  (event/on-raw "#sim-start" :click
-                (fn [_] (reset! sim-go? true)))
-  (event/on-raw "#sim-stop" :click
-                (fn [_] (reset! sim-go? false)))
-  (event/on-raw "#sim-step" :click
-                (fn [_] (sim-step!)))
-  (event/on-raw "#sim-faster" :click
-                (fn [_] (swap! main-options update-in [:sim-step-ms]
-                              #(-> (- % 100) (max 0)))))
-  (event/on-raw "#sim-slower" :click
-                (fn [_] (swap! main-options update-in [:sim-step-ms]
-                              #(+ % 100))))
-  (event/on-raw "#sim-reset" :click
-                (fn [_]
-                  (with-ui-loading-message
-                    (swap! model p/reset))))
-
-  (event/on-raw "#anim-start" :click
-                (fn [_] (swap! main-options assoc :anim-go? true)))
-  (event/on-raw "#anim-stop" :click
-                (fn [_] (swap! main-options assoc :anim-go? false)))
-  (event/on-raw "#anim-step" :click
-                (fn [_] (draw-now!)))
-  (event/on-raw "#anim-faster" :click
-                (fn [_] (swap! main-options update-in [:anim-every]
-                              #(-> (dec %) (max 1)))))
-  (event/on-raw "#anim-slower" :click
-                (fn [_] (swap! main-options update-in [:anim-every]
-                              #(inc %)))))
-
-(defn handle-options!
-  [model keep-steps viz-options]
-  (bind! "#comportex-drawing"
-         [:div#comportex-drawing
-          (let [viz @viz-options]
-            [:fieldset#viz-options
-             [:legend "Visualisation"]
-             [:p
-              [:label
-               "Keep "
-               (combobox {:keep-steps @keep-steps}
-                         [:keep-steps] [2 5 10 20 30 40 50 100 200]
-                         "")
-               " steps of history"]]
-             [:p
-              [:label
-               (radio viz [:drawing :force-d] 1)
-               "Draw "
-               (combobox viz [:drawing :draw-steps] [1 5 10 15 20 25 30 40 50]
-                         "")
-               " steps in 1D"]
-              [:br]
-              [:label
-               (radio viz [:drawing :force-d] 2)
-               "Draw one step in 2D"]]
-             [:fieldset
-              [:legend "Input"]
-              (checkbox viz [:input :active] "Active bits") [:br]
-              (checkbox viz [:input :predicted] "Predicted bits")]
-             [:fieldset
-              [:legend "Columns"]
-              (checkbox viz [:columns :overlaps] "Overlap scores") [:br]
-              (checkbox viz [:columns :active-freq] "Activation freq") [:br]
-              (checkbox viz [:columns :boosts] "Boost factors") [:br]
-              (checkbox viz [:columns :n-segments] "Num segments") [:br]
-              (checkbox viz [:columns :active] "Active columns") [:br]
-              (checkbox viz [:columns :predictive] "Predictive columns") [:br]
-              (checkbox viz [:columns :temporal-pooling] "TP columns")]
-             [:fieldset
-              [:legend "Feed-forward synapses"]
-              (checkbox viz [:ff-synapses :active] "Active ff-synapses") [:br]
-              (checkbox viz [:ff-synapses :inactive] "Inactive ff-synapses") [:br]
-              (checkbox viz [:ff-synapses :disconnected] "Disconnected ff-synapses") [:br]
-              (checkbox viz [:ff-synapses :permanences] "Permanences")]
-             [:fieldset
-              [:legend "Distal dendrite segments"]
-              (combobox viz [:distal-synapses :from] [:learning :all :none]
-                        "Synapses from ") [:br]
-              (checkbox viz [:distal-synapses :active] "Active synapses") [:br]
-              (checkbox viz [:distal-synapses :inactive] "Inactive synapses") [:br]
-              (checkbox viz [:distal-synapses :disconnected] "Disconnected synapses") [:br]
-              (checkbox viz [:distal-synapses :permanences] "Permanences")]])
-          ])
-  (doseq [[k km] @viz-options
-          [subk v] km
-          :let [id (keys->id [k subk])
-                el (->dom (str "#" id))]
-          :when el]
-    (event/on-raw el :change
-                  (fn [_]
-                    (let [v (when-let [s (dom/val el)]
-                              (if (#{:force-d :draw-steps} subk)
-                                (cljs.reader/read-string s)
-                                (keyword s)))]
-                      (swap! viz-options assoc-in [k subk] v)))))
-  ;; radio buttons are annoyingly different
-  (let [[k subk] [:drawing :force-d]]
-    (doseq [value [1 2]
-            :let [id (keys->id [k subk value])
-                  el (->dom (str "#" id))]]
-      (event/on-raw el :change
-                    (fn [_]
-                      (when (dom/val el)
-                        (swap! viz-options assoc-in [k subk] value))))))
-  ;; keep-steps is in a separate atom
-  (let [id (keys->id [:keep-steps])
-        el (->dom (str "#" id))]
-    (event/on-raw el :change
-                  (fn [_]
-                    (let [s (dom/val el)
-                          v (cljs.reader/read-string s)]
-                      (reset! keep-steps v))))))
-
-(defn handle-parameters!
+(defn parameters-tab
   [model selection]
-  (bind! "#comportex-parameters"
-         (let [sel-region (:region @selection)
-               sel-layer (:layer @selection)]
-           [:div#comportex-parameters
-            (for [[region-key rgn] (:regions @model)
-                  layer-id (core/layers rgn)
-                  :let [spec (p/params (get rgn layer-id))
-                        uniqix (str (name region-key) (name layer-id))]]
-              [:div {:style {:display (if (not= [region-key layer-id]
-                                                [sel-region sel-layer])
-                                        "none")}}
-               [:form {:id (str "region-spec-form-" uniqix)}
-                [:p (str "Currently selected: " (name region-key) " "
-                         (name layer-id)) [:br]
-                 [:span.detail "(click on a region layer to select it)"]]
-                [:fieldset.region-spec
-                 [:legend "Parameters"]
-                 (map (partial parameter-input uniqix)
-                      (sort spec))
-                 [:p.detail [:input {:type "submit" :value "Set!"}]
-                  (str " (will be set immediately, but then use Reset above for any"
-                       " parameters that apply only in initialisation)")]]]])]
-           ))
-  ;; once only
-  (doseq [[region-key init-rgn] (:regions @model)
-          layer-id (core/layers init-rgn)
-          :let [uniqix (str (name region-key) (name layer-id))
-                form-el (->dom (str "#region-spec-form-" uniqix))]]
-    (event/on-raw form-el :submit
-                  (fn [e]
-                    (.preventDefault e)
-                    (let [rgn (get-in @model [:regions region-key])
-                          ospec (p/params (get rgn layer-id))
-                          s (reduce (fn [s k]
-                                      (let [id (keys->id [uniqix k])
-                                            el (->dom (str "#" id))
-                                            v (cljs.reader/read-string (dom/val el))]
-                                        (assoc s k v)))
-                                    {} (keys ospec))]
-                      (swap! model assoc-in [:regions region-key layer-id :spec]
-                             s)
-                      false)))))
+  (let [partypes (cljs.core/atom {})] ;; immutable cache
+    (fn []
+      [:div
+       [:p.text-muted "Read/write model parameters of the selected region layer,
+                    with immediate effect. Click a layer to select it."]
+       [:p.text-info.text-center (str (some-> (:region @selection) name) " "
+                                      (some-> (:layer @selection) name))]
+       (into
+        [:div.form-horizontal]
+        (when @model
+          (let [sel-region (:region @selection)
+                sel-layer (:layer @selection)
+                rgn (get-in @model [:regions sel-region])
+                lyr (get rgn sel-layer)
+                spec (p/params lyr)]
+            (concat
+             (for [[k v] (sort spec)
+                   :let [path [:regions sel-region sel-layer :spec k]
+                         typ (or (get @partypes k)
+                                 (get (swap! partypes assoc k (partype v))
+                                      k))]]
+               [:div.row {:class (when (or (nil? v) (string? v))
+                                   "has-error")}
+                [:div.col-sm-8
+                 [:label.control-label.text-left (name k)]]
+                [:div.col-sm-4
+                 (case typ
+                   ;; boolean
+                   :boolean
+                   [:input.form-control.input-sm
+                    {:type :checkbox
+                     :checked (if v true)
+                     :on-change #(swap! model update-in path not)}]
+                   ;; vector
+                   :vector
+                   [:input.form-control.input-sm
+                    {:value (str v)
+                     :on-change (fn [e]
+                                  (let [s (-> e .-target forms/getValue)
+                                        x (try (cljs.reader/read-string s)
+                                               (catch :default _ s))
+                                        newval (if (and (vector? x) (every? integer? x))
+                                                 x s)]
+                                    (swap! model assoc-in path newval)))}]
+                   ;; number
+                   :number
+                   [:input.form-control.input-sm
+                    {:value v
+                     :on-change (fn [e]
+                                  (let [s (-> e .-target forms/getValue)
+                                        parsed (js/parseFloat s)
+                                        newval (if (or (empty? s)
+                                                       (js/isNaN parsed))
+                                                 nil
+                                                 (->> (if (not= s (str parsed))
+                                                        s
+                                                        parsed)))]
+                                    (swap! model assoc-in path newval))
+                                  )}])]
+                ])
+             [
+              [:div.panel.panel-default
+               [:div.panel-heading [:h4.panel-title "Note"]]
+               [:div.panel-body
+                [:p "Parameter values can be altered above, but some parameters
+                     only have an effect when the HTM regions are created.
+                     Notable examples are "
+                 [:code "column-dimensions"] " and " [:code "depth"]
+                 ". After setting parameter values you can rebuild the model (all regions),
+                 obviously losing any learned connections in the process:"
+                 ]
+                [:button.btn.btn-warning.btn-block {:on-click #(swap! model p/reset)}
+                 "Rebuild model"]
+                [:p.small "This will not reset, or otherwise alter, the input stream."]]
+               ]
+              [:h4 "Current spec value"]
+              [:pre (str spec)]
+              ])
+            )))]))
+  )
+
+(defn plots-tab []
+  [:div#comportex-plots])
+(defn details-tab []
+  [:div#comportex-details
+   [:textarea#detail-text]])
+
+
+(def viz-options-template
+  (let [item (fn [id label]
+               [:li [:label [:input {:field :checkbox :id id}]
+                     (str " " label)]])
+        group (fn [title content]
+                [:div.col-sm-6
+                 [:div.panel.panel-default
+                  [:div.panel-heading
+                   [:h4.panel-title title]]
+                  content]])]
+    [:div
+     [:p.text-muted "Select drawing options, with immediate effect."]
+     [:div.panel.panel-default
+      [:div.panel-body
+       [:ul.list-unstyled
+        [:li [:label " Keep "
+              [:input {:field :numeric
+                       :id :keep-steps
+                       :size 4}]
+              " steps of history"]]
+        [:li [:label
+              [:input {:field :radio
+                       :name :drawing.force-d
+                       :value 1}]
+              " Draw "
+              [:input {:field :numeric
+                       :id :drawing.draw-steps
+                       :size 4}]
+              " steps in 1D"]]
+        [:li [:label
+              [:input {:field :radio
+                       :name :drawing.force-d
+                       :value 2}]
+              " Draw one step in 2D"]]
+        ]]]
+     [:div.row
+      (group "Inputs"
+             [:div.panel-body
+              [:ul.list-unstyled
+               (item :input.active "Active bits")
+               (item :input.predicted "Predicted bits")
+               ]])
+      (group "Columns"
+             [:div.panel-body
+              [:ul.list-unstyled
+               (item :columns.overlaps "Overlap scores")
+               (item :columns.active-freq "Activation freq")
+               (item :columns.boosts "Boost factors")
+               (item :columns.n-segments "Num segments")
+               (item :columns.active "Active columns")
+               (item :columns.predictive "Predictive columns")
+               ]])
+      ]
+     [:div.row
+      (group "Feed-forward synapses"
+             [:div.panel-body
+              [:p.help-block "To all active columns, or the selected column."]
+              [:ul.list-unstyled
+               (item :ff-synapses.active "Active")
+               (item :ff-synapses.inactive "Inactive")
+               (item :ff-synapses.disconnected "Disconnected")
+               (item :ff-synapses.permanences "Permanences")
+               ]])
+      (group "Distal dendrite segments"
+             [:div.panel-body
+              [:p.help-block "On cells of the selected column."]
+              [:ul.list-unstyled
+               (item :distal-synapses.active "Active")
+               (item :distal-synapses.inactive "Inactive")
+               (item :distal-synapses.disconnected "Disconnected")
+               (item :distal-synapses.permanences "Permanences")
+               ]])
+      ]
+     ]))
+
+(defn navbar
+  [main-options model show-help step-forward! step-backward!]
+  [:nav.navbar.navbar-default
+   [:div.container-fluid
+    [:div.navbar-header
+     [:button.navbar-toggle.collpased {:data-toggle "collapse"
+                                       :data-target "#comportex-navbar-collapse"}
+      [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
+     [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
+      "ComportexViz"]]
+    [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
+     [:ul.nav.navbar-nav
+      ;; step back
+      [:li
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click (fn [e]
+                     (step-backward!)
+                     (.preventDefault e))}
+        [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
+        [:span.sr-only "Step backward"]]]
+      ;; step forward
+      [:li
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click (fn [e]
+                     (step-forward!)
+                     (.preventDefault e))}
+        [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
+        [:span.sr-only "Step forward"]]]
+      ;; pause button
+      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click #(swap! main-options assoc :sim-go? false)}
+        "Pause"]]
+      ;; run button
+      [:li (if (:sim-go? @main-options) {:class "hidden"})
+       [:button.btn.btn-primary.navbar-btn
+        {:type :button
+         :on-click #(swap! main-options assoc :sim-go? true)}
+        "Run"]]]
+     ;; right-aligned items
+     [:ul.nav.navbar-nav.navbar-right
+      ;; sim rate
+      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+       [:p.navbar-text (gstring/format "%.1f/sec."
+                                       (sim-rate @model))]]
+      ;; sim / anim options
+      [:li.dropdown
+       [:a.dropdown-toggle {:data-toggle "dropdown"
+                            :role "button"
+                            :href "#"}
+        "Speed" [:span.caret]]
+       [:ul.dropdown-menu {:role "menu"}
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 0
+                                    :anim-every 1)}
+              "max sim speed"]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 0
+                                    :anim-every 100)}
+              "max sim speed, draw every 100 steps"]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 250
+                                    :anim-every 1)}
+              "limit to 4 steps/sec."]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 500
+                                    :anim-every 1)}
+              "limit to 2 steps/sec."]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! main-options assoc :sim-step-ms 1000
+                                    :anim-every 1)}
+              "limit to 1 step/sec."]]
+        ]]
+      [:li.dropdown
+       [:a.dropdown-toggle {:data-toggle "dropdown"
+                            :role "button"
+                            :href "#"}
+        "Draw" [:span.caret]]
+       [:ul]
+       ]
+      [:li (if @show-help {:class "active"})
+       [:a {:href "#"
+            :on-click #(swap! show-help not)}
+        "Help"]]
+      ]
+     ]
+    ]])
+
+(defn help-block
+  [show-help]
+  (if @show-help
+    [:div.container-fluid
+     [:p "Right / left arrow keys move forward / back in time.
+      Up / down arrow keys select columns.
+      Click on a column to show its cells.
+      Page up / page down to scroll display. "
+      [:small "TODO: improve this text!"]]]))
+
+(defn tabs
+  [tab-cmps]
+  (let [current-tab (atom (ffirst tab-cmps))]
+    (fn [tab-cmps]
+      [:div
+       [:nav
+        (into [:ul.nav.nav-tabs]
+              (for [[k _] tab-cmps]
+                [:li {:role "presentation"
+                      :class (if (= @current-tab k) "active")}
+                 [:a {:href "#"
+                      :on-click (fn [e]
+                                  (reset! current-tab k)
+                                  (.preventDefault e))}
+                  (name k)]]))]
+       (into [:div.tabs]
+             (for [[k cmp] tab-cmps]
+               [:div {:style (if (not= k @current-tab) {:display "none"})}
+                cmp]))
+       ])))
+
+(defn comportexviz-app
+  [model-tab model selection main-options viz-options step-forward! step-backward!]
+  (let [show-help (atom false)]
+    [:div
+     [navbar main-options model show-help step-forward! step-backward!]
+     [help-block show-help]
+     [:div.container-fluid
+      [:div.row
+       [:div.col-sm-8
+        [:canvas#comportex-viz]
+        ]
+       [:div.col-sm-4
+        [tabs
+         [[:model [model-tab]]
+          [:drawing [bind-fields viz-options-template viz-options]]
+          [:params [parameters-tab model selection]]
+          [:plots [plots-tab]]
+          [:details [details-tab]]]]
+        ]]
+      [:div#loading-message "loading"]]]))

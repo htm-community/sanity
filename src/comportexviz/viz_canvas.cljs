@@ -10,6 +10,9 @@
                      make-layout]]
             [c2.dom :as dom :refer [->dom]]
             [c2.event]
+
+            [reagent.core :as reagent :refer [atom]]
+
             [goog.events.EventType]
             [goog.events :as gevents]
             [goog.string :as gstring]
@@ -60,7 +63,7 @@
     (str "rgb(" v "," v "," v ")")))
 
 (def state-colors
-  {:background "#ddd"
+  {:background "#eee"
    :inactive "white"
    :inactive-syn "black"
    :disconnected "#ddd"
@@ -92,6 +95,7 @@
                            :inactive nil
                            :disconnected nil
                            :permanences nil}
+         :keep-steps 30
          :drawing {:draw-steps 15
                    :force-d nil
                    :world-w-px 150
@@ -108,7 +112,6 @@
                    :highlight-color (:highlight state-colors)}
          }))
 
-(def keep-steps (atom 30))
 (def steps (atom []))
 (def layouts (atom {:inputs {}
                     :regions {}}))
@@ -802,16 +805,17 @@
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     ;; draw timeline
     (let [current-t (p/timestep (first @steps))
+          keep-steps (:keep-steps opts)
           right-px (- width-px 50)
           label-left (+ right-px 25)
-          t-width (/ right-px @keep-steps)
+          t-width (/ right-px keep-steps)
           y-px (/ ts-height-px 2)
           r-px (min y-px (* t-width 0.5))
           sel-r-px y-px]
       (c/text-align ctx :center)
       (c/text-baseline ctx :middle)
       (c/font-style ctx "bold 10px sans-serif")
-      (doseq [dt (reverse (range @keep-steps))
+      (doseq [dt (reverse (range keep-steps))
               :let [t (- current-t dt)
                     kept? (< dt (count @steps))
                     x-px (- right-px r-px (* dt t-width))]]
@@ -820,7 +824,7 @@
         (c/circle ctx {:x x-px :y y-px :r (if (== dt sel-dt) sel-r-px r-px)})
         (c/fill ctx)
         (when (or (== dt sel-dt)
-                  (and kept? (< @keep-steps 100)))
+                  (and kept? (< keep-steps 100)))
           (c/fill-style ctx "white")
           (c/text ctx {:x x-px :y y-px :text (str t)})))
       (c/alpha ctx 1.0))
@@ -942,6 +946,20 @@
   (when (seq @steps)
     (do-draw! selection)))
 
+(defn step-forward!
+  [selection sim-step!]
+  (if (zero? (:dt @selection))
+    (sim-step!)
+    (swap! selection update-in [:dt]
+           (fn [x] (max (dec x) 0)))))
+
+(defn step-backward!
+  [selection]
+  (let [;; we need to assume there is a previous step, so:
+        max-dt (max 0 (- (count @steps) 2))]
+    (swap! selection update-in [:dt]
+          (fn [x] (min (inc x) max-dt)))))
+
 ;; ## Event stream processing
 
 (defn listen [el type capture-fn]
@@ -1002,17 +1020,11 @@
     (go
      (while true
        (let [e (<! presses)
-             k (code-key (.-keyCode e))
-             ;; we need to assume there is a previous step, so:
-             max-dt (max 0 (- (count @steps) 2))]
+             k (code-key (.-keyCode e))]
          (when k
            (case k
-             :left (swap! selection update-in [:dt]
-                          (fn [x] (min (inc x) max-dt)))
-             :right (if (zero? (:dt @selection))
-                      (sim-step!)
-                      (swap! selection update-in [:dt]
-                             (fn [x] (max (dec x) 0))))
+             :left (step-backward! selection)
+             :right (step-forward! selection sim-step!)
              :up (swap! selection update-in [:col]
                         (fn [x] (when x (dec x))))
              :down (swap! selection update-in [:col]
@@ -1035,9 +1047,10 @@
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]
-          (let [x (vary-meta x* assoc ::cache (atom {}))]
+          (let [x (vary-meta x* assoc ::cache (atom {}))
+                keep-steps (:keep-steps @viz-options)]
             (swap! steps (fn [xs]
-                           (take @keep-steps (cons x xs)))))
+                           (take keep-steps (cons x xs)))))
           (recur))))
   (let [el (->dom "#comportex-viz")]
     (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))

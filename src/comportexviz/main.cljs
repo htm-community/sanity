@@ -1,16 +1,12 @@
 (ns comportexviz.main
-  (:require [c2.dom :as dom :refer [->dom]]
-            [org.nfrac.comportex.core :as core]
+  (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots :as plots]
-
             [reagent.core :as reagent :refer [atom]]
-
             [cljs.core.async :as async :refer [chan put! <!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]
-                   [c2.util :refer [bind!]]))
+  (:require-macros [cljs.core.async.macros :refer [go]]))
 
 (enable-console-print!)
 
@@ -73,7 +69,7 @@
                       [:active :active-predicted :predicted]
                       viz/state-colors))
 
-(defn init-plots!
+#_(defn init-plots!
   [init-model el]
   (bind! el
          [:div
@@ -102,18 +98,14 @@
 
 (defn draw!
   []
-  (dom/request-animation-frame
-   #(viz/draw! @selection)))
+  (.requestAnimationFrame js/window
+                          #(viz/draw! @selection)))
 
 (add-watch viz/viz-options :redraw
            (fn [_ _ _ _]
              (draw!)))
 
 (add-watch selection :redraw
-           (fn [_ _ _ _]
-             (draw!)))
-
-(add-watch viz/keep-steps :redraw
            (fn [_ _ _ _]
              (draw!)))
 
@@ -128,15 +120,24 @@
             (draw!)))
         (recur c))))
 
+(defn step-forward!
+  []
+  (viz/step-forward! selection sim-step!))
+
+(defn step-backward!
+  []
+  (viz/step-backward! selection))
+
 ;;; ## Entry point
+
+(defn comportexviz-app
+  [model-tab]
+  (cui/comportexviz-app model-tab model selection main-options viz/viz-options step-forward! step-backward!))
 
 (defn- init-ui!
   [init-model]
-  (init-plots! init-model (->dom "#comportex-plots"))
-  (viz/init! init-model (tap-c steps-mult) selection sim-step!)
-  ;(cui/handle-controls! model sim-go? main-options sim-step! draw!)
-  (cui/handle-options! model viz/keep-steps viz/viz-options)
-  (cui/handle-parameters! model selection))
+  ;(init-plots! init-model (->dom "#comportex-plots"))
+  (viz/init! init-model (tap-c steps-mult) selection sim-step!))
 
 (defn- re-init-ui!
   [model]
