@@ -19,11 +19,5 @@
 
 (defmacro with-ui-loading-message
   [& body]
-  `(let [el# (c2.dom/->dom "#loading-message")]
-     (c2.dom/style el# {:display "block"})
-     ;; need a timeout to allow redraw to show loading message
-     (js/setTimeout (fn []
-                      (try
-                        ~@body)
-                      (c2.dom/style el# {:display "none"}))
-                    100)))
+  `(comportexviz.helpers/with-ui-loading-message
+     (fn [] ~@body)))

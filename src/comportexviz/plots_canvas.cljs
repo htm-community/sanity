@@ -6,11 +6,13 @@
   (vec (map-indexed vector ys)))
 
 (defprotocol PPlot
+  (bg! [this])
   (frame! [this])
   (grid! [this opts])
   (point! [this x y radius-px])
   (rect! [this x y w h])
-  (line! [this xys]))
+  (line! [this xys])
+  (->px [this x y]))
 
 (defn draw-grid
   [ctx [x-lo x-hi] [y-lo y-hi] xs ys]
@@ -33,14 +35,18 @@
 (defrecord XYPlot
     [ctx plot-size x-lim y-lim x-scale y-scale]
   PPlot
-  (frame! [_]
+  (bg! [_]
     (let [plot-rect (assoc plot-size :x 0 :y 0)]
       (doto ctx
         (c/fill-style "white")
-        (c/fill-rect plot-rect)
+        (c/fill-rect plot-rect))))
+
+  (frame! [_]
+    (let [plot-rect (assoc plot-size :x 0 :y 0)]
+      (doto ctx
         (c/stroke-style "black")
         (c/stroke-rect plot-rect))))
-      
+
   (grid! [_ {:keys [grid-every]
              :or {grid-every 1}}]
     (c/save ctx)
@@ -50,7 +56,7 @@
                  (map x-scale (range (long x-lo) (inc (long x-hi)) grid-every))
                  (map y-scale (range (long y-lo) (inc (long y-hi)) grid-every))))
     (c/restore ctx))
-      
+
   (point! [_ x y radius-px]
     (doto ctx
       (c/circle {:x (x-scale x)
@@ -67,14 +73,18 @@
                       :y ypx
                       :w (- (x-scale (+ x w)) xpx)
                       :h (- (y-scale (+ y h)) ypx)})
+        ;; TODO kill
         (c/stroke))))
-      
+
   (line! [_ xys]
     (c/begin-path ctx)
     (doseq [[i [x y]] (indexed xys)]
       (let [f (if (zero? i) c/move-to c/line-to)]
         (f ctx (x-scale x) (y-scale y))))
-    (c/stroke ctx)))
+    (c/stroke ctx))
+
+  (->px [_ x y]
+    [(x-scale x) (y-scale y)]))
 
 (defn xy-plot
   "Assumes ctx is already translated."

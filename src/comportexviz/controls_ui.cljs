@@ -7,9 +7,10 @@
             [goog.string.format]
             [clojure.string :as str]
             [cljs.reader]
+            [comportexviz.plots :as plots]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+  (:require-macros [comportexviz.macros :as macros]))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -27,7 +28,7 @@
           (* 1000)))
     0))
 
-(defn partype [v]
+(defn param-type [v]
   (cond
     (or (true? v) (false? v)) :boolean
     (vector? v) :vector
@@ -54,7 +55,7 @@
              (for [[k v] (sort spec)
                    :let [path [:regions sel-region sel-layer :spec k]
                          typ (or (get @partypes k)
-                                 (get (swap! partypes assoc k (partype v))
+                                 (get (swap! partypes assoc k (param-type v))
                                       k))]]
                [:div.row {:class (when (or (nil? v) (string? v))
                                    "has-error")}
@@ -100,13 +101,16 @@
                [:div.panel-heading [:h4.panel-title "Note"]]
                [:div.panel-body
                 [:p "Parameter values can be altered above, but some parameters
-                     only have an effect when the HTM regions are created.
+                     must be in effect when the HTM regions are created.
                      Notable examples are "
                  [:code "column-dimensions"] " and " [:code "depth"]
-                 ". After setting parameter values you can rebuild the model (all regions),
-                 obviously losing any learned connections in the process:"
+                 ". After setting such parameter values, rebuild all regions
+                 (obviously losing any learned connections in the process):"
                  ]
-                [:button.btn.btn-warning.btn-block {:on-click #(swap! model p/reset)}
+                [:button.btn.btn-warning.btn-block
+                 {:on-click (fn [_]
+                              (macros/with-ui-loading-message
+                                (swap! model p/reset)))}
                  "Rebuild model"]
                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
                ]
@@ -116,12 +120,52 @@
             )))]))
   )
 
-(defn plots-tab []
-  [:div#comportex-plots])
-(defn details-tab []
-  [:div#comportex-details
-   [:textarea#detail-text]])
+(defn ts-freqs-plot-cmp
+  [plot-step region-key layer-id series-colors]
+  (let [series-keys [:active :active-predicted :predicted]
+        step-freqs (atom nil)
+        agg-freqs-ts (plots/aggregating-ts step-freqs 200)]
+    (add-watch plot-step :calc-freqs
+               (fn [_ _ _ v]
+                 (let [freqs (-> v :regions region-key
+                                 (core/column-state-freqs layer-id))]
+                   (reset! step-freqs freqs))))
+    (fn [plot-step region-key layer-id]
+      (let [el-id (str "comportexviz-plot-" (name region-key) (name layer-id))
+            el (dom/getElement el-id)]
+        ;; draw!
+        (when el
+          (set! (.-width el) (* 0.33 (- (.-innerWidth js/window) 20)))
+          (set! (.-height el) 180)
+          (plots/stacked-ts-plot el agg-freqs-ts series-keys series-colors))
+        (when-not el
+          ;; create data dependency for re-rendering
+          @agg-freqs-ts)
+        [:div
+         [:canvas {:id el-id}]])
+      )))
 
+(defn plots-tab
+  [plot-step series-colors]
+  [:div
+   [:p.text-muted "Time series of cortical column activity."]
+   [:div
+    (when @plot-step
+      (for [[region-key rgn] (:regions @plot-step)
+            layer-id (core/layers rgn)]
+        ^{:key [region-key layer-id]}
+        [:fieldset
+         [:legend (str (name region-key) " " (name layer-id))]
+         [ts-freqs-plot-cmp plot-step region-key layer-id series-colors]
+         ]))]
+   ])
+
+(defn details-tab
+  []
+  [:div
+   [:p.text-muted "The details of current state on the selected time step, selected column."]
+   [:textarea.form-control {:id "detail-text"
+                            :rows 40}]])
 
 (def viz-options-template
   (let [item (fn [id label]
@@ -186,9 +230,9 @@
                (item :ff-synapses.disconnected "Disconnected")
                (item :ff-synapses.permanences "Permanences")
                ]])
-      (group "Distal dendrite segments"
+      (group "Distal synapses"
              [:div.panel-body
-              [:p.help-block "On cells of the selected column."]
+              [:p.help-block "To distal dendrite segments of cells in the selected column."]
               [:ul.list-unstyled
                (item :distal-synapses.active "Active")
                (item :distal-synapses.inactive "Inactive")
@@ -321,7 +365,8 @@
        ])))
 
 (defn comportexviz-app
-  [model-tab model selection main-options viz-options step-forward! step-backward!]
+  [model-tab model selection main-options viz-options step-forward! step-backward!
+   plot-step series-colors]
   (let [show-help (atom false)]
     [:div
      [navbar main-options model show-help step-forward! step-backward!]
@@ -336,7 +381,7 @@
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
           [:params [parameters-tab model selection]]
-          [:plots [plots-tab]]
+          [:plots [plots-tab plot-step series-colors]]
           [:details [details-tab]]]]
         ]]
       [:div#loading-message "loading"]]]))

@@ -3,7 +3,6 @@
             [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
             [comportexviz.viz-canvas :as viz]
-            [comportexviz.plots :as plots]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
@@ -61,39 +60,6 @@
                         (not (:sim-go? old)))
                (run-sim))))
 
-;;; ## Plots
-
-(defn update-ts-plot
-  [el agg-ts]
-  (plots/bind-ts-plot el agg-ts 400 180
-                      [:active :active-predicted :predicted]
-                      viz/state-colors))
-
-#_(defn init-plots!
-  [init-model el]
-  (bind! el
-         [:div
-          (for [[region-key rgn] (:regions init-model)
-                layer-id (core/layers rgn)
-                :let [uniqix (str (name region-key) (name layer-id))
-                      el-id (str "comportex-plot-" uniqix)]]
-            [:fieldset
-             [:legend (str (name region-key) " " (name layer-id))]
-             [:div {:id el-id}]])])
-  (doseq [[region-key rgn] (:regions init-model)
-          layer-id (core/layers rgn)
-          :let [uniqix (str (name region-key) (name layer-id))
-                el-id (str "comportex-plot-" uniqix)]]
-    (let [this-el (->dom (str "#" el-id))
-          freqs-c (async/map< (comp #(core/column-state-freqs % layer-id)
-                                    region-key
-                                    :regions)
-                              (tap-c steps-mult))
-          agg-freqs-ts (plots/aggregated-ts-ref freqs-c 200)]
-      (add-watch agg-freqs-ts :ts-plot
-                 (fn [_ _ _ v]
-                   (update-ts-plot this-el v))))))
-
 ;;; ## Visualisation
 
 (defn draw!
@@ -132,11 +98,18 @@
 
 (defn comportexviz-app
   [model-tab]
-  (cui/comportexviz-app model-tab model selection main-options viz/viz-options step-forward! step-backward!))
+  (let [plot-step (atom nil)]
+    ;; channel -> atom
+    (go (loop [c (tap-c steps-mult)]
+          (when-let [state (<! c)]
+            (reset! plot-step state)
+            (recur c))))
+    (cui/comportexviz-app model-tab model selection main-options
+                          viz/viz-options step-forward! step-backward!
+                          plot-step viz/state-colors)))
 
 (defn- init-ui!
   [init-model]
-  ;(init-plots! init-model (->dom "#comportex-plots"))
   (viz/init! init-model (tap-c steps-mult) selection sim-step!))
 
 (defn- re-init-ui!

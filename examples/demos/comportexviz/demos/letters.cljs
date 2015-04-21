@@ -11,7 +11,7 @@
             [goog.dom.forms :as forms]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+                   [comportexviz.macros :as macros]))
 
 (def n-predictions 8)
 
@@ -59,10 +59,10 @@ Chifung has a friend."))
         encoder (case (:encoder @config)
                   :block demo/block-encoder
                   :random demo/random-encoder)]
-    (with-ui-loading-message
+    (macros/with-ui-loading-message
       (main/set-model
-       (core/regions-in-series core/sensory-region (core/sensory-input encoder)
-                               n-regions demo/spec)))))
+        (core/regions-in-series core/sensory-region (core/sensory-input encoder)
+                                n-regions demo/spec)))))
 
 (defn immediate-key-down
   [e]
@@ -100,7 +100,7 @@ Chifung has a friend."))
      [:button.btn.btn-default
       {:on-click #(reset-model-from-ui)}
       "Restart with new model"]
-     [:p.text-danger "Resets all parameter values."]]]
+     [:p.text-danger "Resets all parameters."]]]
    ])
 
 (defn model-tab

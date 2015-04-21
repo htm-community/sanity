@@ -8,11 +8,8 @@
                      fill-elements
                      centred-rect
                      make-layout]]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event]
-
             [reagent.core :as reagent :refer [atom]]
-
+            [goog.dom :as dom]
             [goog.events.EventType]
             [goog.events :as gevents]
             [goog.string :as gstring]
@@ -535,118 +532,9 @@
     (c/restore ctx))
   ctx)
 
-(defn detail-text
-  [{dt :dt
-    rgn-id :region
-    lyr-id :layer
-    col :col
-    :as selection}]
-  (let [state (nth @steps dt)
-        rgn (get-in state [:regions rgn-id])
-        lyr (get rgn lyr-id)
-        depth (p/layer-depth lyr)
-        inp (first (core/input-seq state))
-        in (:value inp)
-        bits (p/bits-value inp)]
-    (->>
-     ["__Selection__"
-      (str "* timestep " (p/timestep rgn)
-           " (delay " dt ")")
-      (str "* column " (or col "nil"))
-      ""
-      "__Input__"
-      (str in " (" (count bits) " bits)")
-      ""
-      "__Input bits__"
-      (str (sort bits))
-      ""
-      "__Active columns__"
-      (str (sort (p/active-columns lyr)))
-      ""
-      "__Active cells__"
-      (str (sort (p/active-cells lyr)))
-      ""
-      "__Learnable cells__"
-      (str (sort (p/learnable-cells lyr)))
-      ""
-      "__Learning segments__"
-      (str (sort (:learn-segments (:state lyr))))
-      ""
-      "__Signal cells__"
-      (str (sort (p/signal-cells lyr)))
-      ""
-      "__Predicted cells__"
-      (str (sort (p/predictive-cells lyr)))
-      ""
-      (if (and col (> (count @steps 1)))
-        (let [dtp (inc dt)
-              p-state (nth @steps dtp)
-              p-rgn (get-in p-state [:regions rgn-id])
-              p-lyr (get p-rgn lyr-id)
-              p-prox-sg (:proximal-sg p-lyr)
-              p-distal-sg (:distal-sg p-lyr)
-              ac (p/active-cells p-lyr)
-              lc (or (p/learnable-cells p-lyr) #{})
-              pcon (:distal-perm-connected (p/params p-rgn))
-              ;; TODO
-              bits #{}
-              sig-bits #{}
-              ]
-          ["__Active cells prev__"
-           (str (sort ac))
-           ""
-           "__Learn cells prev__"
-           (str (sort lc))
-           ""
-           "__Distal LC bits prev__"
-           (str (:distal-lc-bits (:prior-distal-state lyr)))
-           ""
-           "__Distal LC bits__"
-           (str (:distal-lc-bits (:distal-state lyr)))
-           ""
-           "__Distal bits__"
-           (str (:distal-bits (:distal-state lyr)))
-           ""
-           "__Predicted cells prev__"
-           (str (sort (p/predictive-cells p-lyr)))
-           ""
-           "__Selected column__"
-           "__Connected ff-synapses__"
-           (let [syns (p/in-synapses p-prox-sg col)]
-             (for [[id p] (sort syns)]
-               (str "  " id " :=> "
-                    (gstring/format "%.2f" p)
-                    (if (sig-bits id) " S")
-                    (if (bits id) (str " A "
-                                       ;(p/source-of-incoming-bit)
-                                       )))))
-           "__Cells and their Dendrite segments__"
-           (for [ci (range (p/layer-depth lyr))
-                 :let [segs (p/cell-segments p-distal-sg [col ci])]]
-             [(str "CELL " ci)
-              (str (count segs) " = " (map count segs))
-              #_(str "Distal excitation from this cell: "
-                   (p/targets-connected-from p-distal-sg (+ ci (* depth col)))) ;; TODO cell->id
-              (for [[si syns] (map-indexed vector segs)]
-                [(str "  SEGMENT " si)
-                 (for [[id p] (sort syns)]
-                   (str "  " id
-                        (if (>= p pcon) " :=> " " :.: ")
-                        (gstring/format "%.2f" p)
-                        (if (lc id) " L"
-                            (if (ac id) " A"))))])
-              ])
-           ]))
-      ""
-      "__spec__"
-      (map str (sort (p/params rgn)))]
-     (flatten)
-     (interpose \newline)
-     (apply str))))
-
 (defn image-buffer
   [{:keys [w h]}]
-  (let [el (->dom [:canvas])]
+  (let [el (dom/createElement "canvas")]
     (set! (.-width el) w)
     (set! (.-height el) h)
     el))
@@ -784,9 +672,6 @@
     sel-lyr :layer
     sel-col :col
     :as selection}]
-  (dom/val "#detail-text"
-           (if sel-col (detail-text selection)
-               "Select a column (by clicking on it) to see details."))
   (let [opts @viz-options
         i-lays (:inputs @layouts)
         r-lays (:regions @layouts)
@@ -795,7 +680,7 @@
         dt0 (max 0 (- sel-dt (quot draw-steps 2)))
         sel-state (nth @steps sel-dt)
         sel-prev-state (nth @steps (inc sel-dt) nil)
-        canvas-el (->dom "#comportex-viz")
+        canvas-el (dom/getElement "comportex-viz")
         ctx (c/get-context canvas-el "2d")
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
@@ -1052,8 +937,8 @@
             (swap! steps (fn [xs]
                            (take keep-steps (cons x xs)))))
           (recur))))
-  (let [el (->dom "#comportex-viz")]
-    (set! (.-width el) (* 0.70 (- (.-innerWidth js/window) 20)))
+  (let [el (dom/getElement "comportex-viz")]
+    (set! (.-width el) (* 0.67 (- (.-innerWidth js/window) 20)))
     (set! (.-height el) height-px)
     (handle-canvas-clicks el selection)
     (handle-canvas-keys js/document selection sim-step!)))
