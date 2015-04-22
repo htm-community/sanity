@@ -2,15 +2,22 @@
   (:require [org.nfrac.comportex.demos.coordinates-2d :as demo]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.main :as main]
+            [reagent.core :as reagent :refer [atom]]
+            [reagent-forms.core :refer [bind-fields]]
+            [goog.dom :as dom]
+            [goog.dom.forms :as forms]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]
-            [cljs.reader]
-            [goog.ui.TabPane]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
+
+(def model-config
+  (atom {:n-regions 1}))
+
+(def world-c (async/chan))
+
+(def control-c (async/chan))
 
 (defn draw-arrow
   [ctx {:keys [x y angle]}]
@@ -79,11 +86,7 @@
                            :angle (Math/atan2 vy vx)})))
       (c/restore ctx))))
 
-(def world-c (async/chan))
-
-(def control-c (async/chan))
-
-(defn set-world
+(defn set-world!
   []
   (let [draw (draw-coords-fn demo/max-pos)]
     (main/set-world (->> world-c
@@ -106,31 +109,66 @@
                       x)))]
          (recur (demo/input-transform xx)))))))
 
-(defn set-model-from-ui
+(defn set-model!
   []
-  (let [n-regions (cljs.reader/read-string
-                   (dom/val (->dom "#comportex-n-regions")))]
+  (let [n-regions (:n-regions @model-config)]
     (with-ui-loading-message
       (main/set-model
        (demo/n-region-model n-regions)))))
 
+(def model-config-template
+  [:div.form-horizontal
+   [:div.form-group
+    [:label.col-sm-5 "Number of regions:"]
+    [:div.col-sm-7
+     [:input.form-control {:field :numeric
+                           :id :n-regions}]]]
+   [:div.form-group
+    [:div.col-sm-offset-5.col-sm-7
+     [:button.btn.btn-default
+      {:on-click (fn [e]
+                   (set-model!)
+                   (.preventDefault e))}
+      "Restart with new model"]
+     [:p.text-danger "This resets all parameters."]]]
+   ])
+
+(defn model-tab
+  []
+  [:div
+   [:p "A simple example of the coordinate encoder in 2
+    dimensions, on a repeating path."]
+   [:p "The coordinate is on a 90x90 integer grid and has a
+    locality radius of 15 units. It maintains position, velocity
+    and acceleration. Velocity is limited to 5 units per timestep.
+    When the point crosses the horizontal axis, its vertical
+    acceleration is reversed; when it crosses the vertical axis,
+    its horizontal acceleration is reversed."]
+
+   [:h3 "HTM model"]
+   [bind-fields model-config-template model-config]
+
+   [:h3 "Input"]
+   [:div
+    [:div.form-group
+     [:label "Interference with the movement path"]
+     [:div
+      [:button.btn.btn-default
+       {:on-click (fn [e]
+                    (async/put! control-c #(update-in % [:ay] dec))
+                    (.preventDefault e))}
+       "Turn up"]
+      [:button.btn.btn-default
+       {:on-click (fn [e]
+                    (async/put! control-c #(update-in % [:ay] inc))
+                    (.preventDefault e))}
+       "Turn down"]]]
+    ]
+   ])
+
 (defn ^:export init
   []
-  (goog.ui.TabPane. (.getElementById js/document "comportex-tabs"))
-  (event/on-raw (->dom "#comportex-model-form") :submit
-                (fn [e]
-                  (set-model-from-ui)
-                  (.preventDefault e)
-                  false))
-  (event/on-raw (->dom "#comportex-input-nudge-up") :click
-                (fn [e]
-                  (async/put! control-c #(update-in % [:ay] dec))
-                  (.preventDefault e)
-                  false))
-  (event/on-raw (->dom "#comportex-input-nudge-down") :click
-                (fn [e]
-                  (async/put! control-c #(update-in % [:ay] inc))
-                  (.preventDefault e)
-                  false))
-  (set-world)
-  (set-model-from-ui))
+  (reagent/render (main/comportexviz-app model-tab)
+                  (dom/getElement "comportexviz-app"))
+  (set-world!)
+  (set-model!))

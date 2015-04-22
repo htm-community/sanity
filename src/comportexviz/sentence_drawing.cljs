@@ -15,6 +15,8 @@
   (c/text ctx {:x 0 :y 0 :text text})
   (c/restore ctx))
 
+;; TODO unify these
+
 (defn draw-sentence-fn
   "For sensory input of a sequence of words. Assumes input value has
    metadata key :history with a queue of recent and current words.
@@ -36,7 +38,7 @@
           vf-x (- w-px 30)
           vpb-x (- w-px 5)
           input-top 5
-          pr-top (* 2 (quot h-px 3))
+          pr-top (quot h-px 2)
           spacing 24]
       (c/save ctx)
       (c/translate ctx left-px top-px)
@@ -136,7 +138,7 @@
           (c/fill-style ctx "darkgreen")
           (c/text ctx {:text " |" :x x-px :y y-px})))
       (c/restore ctx)
-      ;; predictions for next word - asynchronously
+      ;; predictions for next letter - asynchronously
       (go
        (let [pr-words (p/decode (:encoder inp) pr-votes n-predictions)
              ;; decode may return a channel for async calls

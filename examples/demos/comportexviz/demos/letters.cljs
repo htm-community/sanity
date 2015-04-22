@@ -11,11 +11,11 @@
             [goog.dom.forms :as forms]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :as macros]))
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def n-predictions 8)
 
-(def config
+(def model-config
   (atom {:n-regions 1
          :encoder :block}))
 
@@ -35,16 +35,15 @@ Chifung has a brain.
 Chifung has no book.
 Chifung has a friend."))
 
-(def world-buffer (async/buffer 1000))
+(def world-buffer (async/buffer 5000))
 (def world-c (async/chan world-buffer))
 
-(defn touch!
-  "Alters the atom (metadata) just to trigger Regent to re-render dependent components."
-  ;; (here `model`, to display world-buffer size)
-  [atom]
-  (swap! atom vary-meta update ::touch-flag not))
+;; used to force Reagent to re-render world-buffer count
+(def world-buffer-trigger (atom true))
+(add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
+                                               (swap! world-buffer-trigger not)))
 
-(defn set-world
+(defn set-world!
   []
   (let [draw (draw-text-fn n-predictions)]
     (main/set-world (->> world-c
@@ -53,35 +52,34 @@ Chifung has a friend."))
                                                  :comportexviz/draw-world
                                                  draw))))))
 
-(defn reset-model-from-ui
+(defn set-model!
   []
-  (let [n-regions (:n-regions @config)
-        encoder (case (:encoder @config)
+  (let [n-regions (:n-regions @model-config)
+        encoder (case (:encoder @model-config)
                   :block demo/block-encoder
                   :random demo/random-encoder)]
-    (macros/with-ui-loading-message
+    (with-ui-loading-message
       (main/set-model
         (core/regions-in-series core/sensory-region (core/sensory-input encoder)
                                 n-regions demo/spec)))))
 
-(defn immediate-key-down
+(defn immediate-key-down!
   [e]
   (when-let [[x] (->> (or (.-keyCode e) (.-charCode e))
                       (.fromCharCode js/String)
                       (demo/clean-text)
                       (seq))]
     (async/put! world-c {:value (str x)}))
-  (touch! main/model)
-  (.preventDefault e))
+  (swap! world-buffer-trigger not))
 
-(defn do-send-text
-  [e]
+(defn send-text!
+  []
   (when-let [xs (seq (demo/clean-text @text-to-send))]
     (async/onto-chan world-c (for [x xs] {:value (str x)})
                      false)
-    (touch! main/model)))
+    (swap! world-buffer-trigger not)))
 
-(def config-template
+(def model-config-template
   [:div.form-horizontal
    [:div.form-group
     [:label.col-sm-5 "Number of regions:"]
@@ -98,9 +96,11 @@ Chifung has a friend."))
    [:div.form-group
     [:div.col-sm-offset-5.col-sm-7
      [:button.btn.btn-default
-      {:on-click #(reset-model-from-ui)}
+      {:on-click (fn [e]
+                   (set-model!)
+                   (.preventDefault e))}
       "Restart with new model"]
-     [:p.text-danger "Resets all parameters."]]]
+     [:p.text-danger "This resets all parameters."]]]
    ])
 
 (defn model-tab
@@ -110,25 +110,30 @@ Chifung has a friend."))
         Allowed characters are letters, numbers, space, period and question
         mark."]
 
-   [:h3 "HTM model"]
-   [bind-fields config-template config]
-
    [:h3 "Input " [:small "Letter sequences"]]
+   ^{:key (str "reagent-refresh-key-" @world-buffer-trigger)}
    [:p.text-info
-    ;; force re-render when model atom changes:
-    {:to-force-reagent-refresh (count @main/model)}
     (str (count world-buffer) " queued input values.")]
    [:div.well
     "Immediate input as you type: "
     [:input {:size 2 :maxLength 1
-             :on-key-press immediate-key-down}]]
+             :on-key-press (fn [e]
+                             (immediate-key-down! e)
+                             (.preventDefault e))}]]
    [:div.well
     [:textarea {:style {:width "90%" :height "10em"}
                 :value @text-to-send
-                :on-change #(reset! text-to-send
-                                    (-> % .-target forms/getValue))}]
-    [:button.btn.btn-primary {:on-click do-send-text}
+                :on-change (fn [e]
+                             (reset! text-to-send
+                                     (-> e .-target forms/getValue))
+                             (.preventDefault e))}]
+    [:button.btn.btn-primary {:on-click (fn [e]
+                                          (send-text!)
+                                          (.preventDefault e))}
      "Send text block input"]]
+
+   [:h3 "HTM model"]
+   [bind-fields model-config-template model-config]
    ]
   )
 
@@ -136,6 +141,6 @@ Chifung has a friend."))
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  (set-world)
-  (reset-model-from-ui)
+  (set-world!)
+  (set-model!)
   (swap! main/main-options assoc :sim-go? true))

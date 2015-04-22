@@ -1,114 +1,37 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>fixed sequences - comportex viz</title>
-  <link href="../main.css" rel="stylesheet" type="text/css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+  <title>Fixed Seqs - ComportexViz</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" href="../main.css">
 </head>
 <body>
-  <canvas id="comportex-viz"></canvas>
-  <div id="comportex-sidebar">
-    <div id="comportex-controls"></div>
-    <div id="comportex-tabs">
-      <div><h2>input</h2>
-        <div><h3>fixed sequences</h3>
-          <p>These demos are all kinds of fixed sequences.</p>
-        <form id="comportex-input-form">
-        <fieldset>
-          <label>
-            Input source:
-            <select id="comportex-input-source">
-              <option value="directional-steps-1d">directional-steps-1d</option>
-              <option value="isolated-1d">isolated-1d</option>
-              <option value="mixed-gaps-1d">mixed-gaps-1d</option>
-              <option value="isolated-2d">isolated-2d</option>
-            </select>
-          </label>
-          <br/>
-          <label>
-            Encoder:
-            <select id="comportex-encoder" disabled="disabled">
-              <option value="block">blocks</option>
-              <option value="coord">coordinates</option>
-            </select>
-          </label>
-          <br/>
-          <label>
-            Number of regions:
-            <input id="comportex-n-regions" size="2" value="1" />
-          </label>
-          <br/>
-          <input type="submit" value="Restart with this model" />
-          (this will also reset all parameter values)
-        </fieldset>
-        </form>
 
-          <dl>
-            <dt><tt>directional-steps-1d</tt></dt>
-            <dd>
-              <p>The input stream steps through integers [0--8] either
-              upwards or downwards, chosen randomly. An indicator of
-              the next step direction is included as part of the
-              input.</p>
-            </dd>
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
 
-            <dt><tt>isolated-1d</tt></dt>
-            <dd>
-            <p>The following fixed sequences are presented one at a
-              time with a gap of 5 time steps. Each new pattern is
-              chosen randomly. This example is designed for testing
-              temporal pooling, as each fixed sequence should give
-              rise to a stable representation.</p>
-<pre>
-:run-0-5   [0 1 2 3 4 5]
-:rev-5-1   [5 4 3 2 1]
-:run-6-10  [6 7 8 9 10]
-:jump-6-12 [6 7 8 11 12]
-:twos      [0 2 4 6 8 10 12 14]
-:saw-10-15 [10 12 11 13 12 14 13 15]
-</pre>
-            </dd>
+  <div id="comportexviz-app"></div>
 
-            <dt><tt>mixed-gaps-1d</tt></dt>
-            <dd>
-              <p>The same fixed sequences as above are each repeated
-                with random-length gaps and mixed together.</p>
-            </dd>
-
-            <dt><tt>isolated-2d</tt></dt>
-            <dd><p>The following fixed sequences are presented one at a
-              time with a gap of 5 time steps. Each new pattern is
-              chosen randomly.</p>
-<pre>
-:down-1     [[1 0] [1 1] [1 2] [1 3] [1 4]
-             [1 5] [1 6] [1 7] [1 8] [1 9]]
-:down-right [[1 0] [1 1] [1 2] [1 3] [1 4]
-             [1 5] [3 5] [5 5] [7 5] [9 5]]
-:diag-tl-br [[0 0] [1 1] [2 2] [3 3] [4 4]
-             [5 5] [6 6] [7 7] [8 8] [9 9]]
-:rand-10    [ten random coordinates]
-</pre>
-            </dd>
-          </dl>
-
-      </div></div>
-      <div><h2>drawing</h2>
-        <div id="comportex-drawing"></div>
-      </div>
-      <div><h2>parameters</h2>
-        <div id="comportex-parameters"></div>
-      </div>
-      <div><h2>plots</h2>
-        <div id="comportex-plots"></div>
-      </div>
-      <div><h2>details</h2>
-        <textarea id="detail-text"></textarea>
-      </div>
-  </div>
-  <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
-  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript" src="out/comportexviz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.demos.fixed_seqs");</script>
   <script type="text/javascript">
     comportexviz.demos.fixed_seqs.init();
   </script>
 </body>
+</html>

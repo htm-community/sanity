@@ -4,15 +4,19 @@
             [comportexviz.main :as main]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]
-            [cljs.reader]
+            [reagent.core :as reagent :refer [atom]]
+            [reagent-forms.core :refer [bind-fields]]
+            [goog.dom :as dom]
+            [goog.dom.forms :as forms]
             [goog.string :as gstr]
             [goog.string.format]
-            [goog.ui.TabPane]
             [cljs.core.async :as async])
-  (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+
+(def model-config
+  (atom {:n-regions 1}))
+
+(def world-c (async/chan))
 
 (defn draw-surface-fn
   [surface]
@@ -67,7 +71,7 @@
            (do (c/fill-style ctx "#66ff66")
                (plt/rect! plot x y 1 1))
            (<= v -10)
-           (do (c/fill-style ctx "red")
+           (do (c/fill-style ctx "black")
                (plt/rect! plot x y 1 1))
            ))
         (doseq [[state-action q] (:Q-map this)
@@ -97,9 +101,7 @@
         (c/restore ctx)
         ))))
 
-(def world-c (async/chan))
-
-(defn set-world
+(defn set-world!
   []
   (let [draw (draw-surface-fn demo/surface)]
     (main/set-world (->> world-c
@@ -111,21 +113,64 @@
     (let [step-c (main/tap-c main/steps-mult)]
       (demo/feed-world-c-with-actions! step-c world-c main/model))))
 
-(defn set-model-from-ui
+(defn set-model!
   []
-  (let [n-regions (cljs.reader/read-string
-                   (dom/val (->dom "#comportex-n-regions")))]
+  (let [n-regions (:n-regions @model-config)]
     (with-ui-loading-message
       (main/set-model
        (demo/make-model)))))
 
+(def model-config-template
+  [:div.form-horizontal
+   [:div.form-group
+    [:label.col-sm-5 "Number of regions:"]
+    [:div.col-sm-7
+     [:input.form-control {:field :numeric
+                           :id :n-regions}]]]
+   [:div.form-group
+    [:div.col-sm-offset-5.col-sm-7
+     [:button.btn.btn-default
+      {:on-click (fn [e]
+                   (set-model!)
+                   (.preventDefault e))}
+      "Restart with new model"]
+     [:p.text-danger "This resets all parameters."]]]
+   ])
+
+(defn model-tab
+  []
+  [:div
+   [:p "Highly experimental attempt at integrating Q learning
+        (reinforcement learning). The Q value of an action from some state
+        is the average permanence of synapses activating the action
+        from that state, minus the initial permanence value."]
+   [:p "The action layer columns are interpreted to produce an
+        action: 100 columns are allocated to each of the four
+        directions of movement, and the direction with most active
+        columns is used to move the agent."]
+   [:p "Adjustments to the Q value, based on reward and expected
+        future reward, are applied to the permanence of synapses which
+        directly activated the action (columns). This adjustment
+        applies in the action layer only, and it does this instead of
+        the usual spatial pooling."]
+   [:p "Exploration arises from boosting neglected columns,
+        primarily in the action layer."]
+   [:p "The reward is -3 on normal squares, -200 on hazard squares
+        and +200 on the goal square. These are divided by 100 for
+        comparison to Q values on the synaptic permanence scale."]
+   [:p "This example is episodic: when the agent reaches either the
+        goal or a hazard it is returned to the starting point."]
+   [:p "The input is the location of the agent via coordinate
+        encoder, plus the last movement as distal input."]
+
+   [:h3 "HTM model"]
+   [bind-fields model-config-template model-config]
+   ]
+  )
+
 (defn ^:export init
   []
-  (goog.ui.TabPane. (.getElementById js/document "comportex-tabs"))
-  (event/on-raw (->dom "#comportex-model-form") :submit
-                (fn [e]
-                  (set-model-from-ui)
-                  (.preventDefault e)
-                  false))
-  (set-model-from-ui)
-  (set-world))
+  (reagent/render (main/comportexviz-app model-tab)
+                  (dom/getElement "comportexviz-app"))
+  (set-model!)
+  (set-world!))

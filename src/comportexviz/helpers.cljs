@@ -9,6 +9,7 @@
      ;; need a timeout to allow redraw to show loading message
      (js/setTimeout (fn []
                       (try
-                        (f))
-                      (goog.dom.classes/remove el "show"))
+                        (f)
+                        (finally
+                          (goog.dom.classes/remove el "show"))))
                     100)))

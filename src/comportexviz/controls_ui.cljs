@@ -10,7 +10,7 @@
             [comportexviz.plots :as plots]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p])
-  (:require-macros [comportexviz.macros :as macros]))
+  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -108,9 +108,8 @@
                  (obviously losing any learned connections in the process):"
                  ]
                 [:button.btn.btn-warning.btn-block
-                 {:on-click (fn [_]
-                              (macros/with-ui-loading-message
-                                (swap! model p/reset)))}
+                 {:on-click #(with-ui-loading-message
+                               (swap! model p/reset))}
                  "Rebuild model"]
                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
                ]
@@ -125,7 +124,7 @@
   (let [series-keys [:active :active-predicted :predicted]
         step-freqs (atom nil)
         agg-freqs-ts (plots/aggregating-ts step-freqs 200)]
-    (add-watch plot-step :calc-freqs
+    (add-watch plot-step [:calc-freqs region-key layer-id]
                (fn [_ _ _ v]
                  (let [freqs (-> v :regions region-key
                                  (core/column-state-freqs layer-id))]
@@ -260,7 +259,8 @@
         {:type :button
          :on-click (fn [e]
                      (step-backward!)
-                     (.preventDefault e))}
+                     (.preventDefault e))
+         :title "Step backward in time"}
         [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
         [:span.sr-only "Step backward"]]]
       ;; step forward
@@ -269,20 +269,23 @@
         {:type :button
          :on-click (fn [e]
                      (step-forward!)
-                     (.preventDefault e))}
+                     (.preventDefault e))
+         :title "Step forward in time"}
         [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
         [:span.sr-only "Step forward"]]]
       ;; pause button
       [:li (if-not (:sim-go? @main-options) {:class "hidden"})
        [:button.btn.btn-default.navbar-btn
         {:type :button
-         :on-click #(swap! main-options assoc :sim-go? false)}
+         :on-click #(swap! main-options assoc :sim-go? false)
+         :style {:width "5em"}}
         "Pause"]]
       ;; run button
       [:li (if (:sim-go? @main-options) {:class "hidden"})
        [:button.btn.btn-primary.navbar-btn
         {:type :button
-         :on-click #(swap! main-options assoc :sim-go? true)}
+         :on-click #(swap! main-options assoc :sim-go? true)
+         :style {:width "5em"}}
         "Run"]]]
      ;; right-aligned items
      [:ul.nav.navbar-nav.navbar-right
@@ -318,13 +321,6 @@
                                     :anim-every 1)}
               "limit to 1 step/sec."]]
         ]]
-      [:li.dropdown
-       [:a.dropdown-toggle {:data-toggle "dropdown"
-                            :role "button"
-                            :href "#"}
-        "Draw" [:span.caret]]
-       [:ul]
-       ]
       [:li (if @show-help {:class "active"})
        [:a {:href "#"
             :on-click #(swap! show-help not)}

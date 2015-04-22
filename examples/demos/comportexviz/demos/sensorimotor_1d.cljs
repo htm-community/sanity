@@ -3,12 +3,27 @@
             [comportexviz.main :as main]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]
-            [cljs.reader]
-            [goog.ui.TabPane]
+            [reagent.core :as reagent :refer [atom]]
+            [reagent-forms.core :refer [bind-fields]]
+            [goog.dom :as dom]
+            [goog.dom.forms :as forms]
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+
+(def model-config
+  (atom {:n-regions 1}))
+
+(def input-config
+  (atom {:field :abcdefghij
+         :n-steps 100}))
+
+(def world-buffer (async/buffer 5000))
+(def world-c (async/chan world-buffer))
+
+;; used to force Reagent to re-render world-buffer count
+(def world-buffer-trigger (atom true))
+(add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
+                                               (swap! world-buffer-trigger not)))
 
 (def item-colors
   (zipmap demo/items
@@ -111,48 +126,92 @@
                    :radius 30}))))
   (c/restore ctx))
 
-(def world-c (async/chan 100))
-
-(defn put-input-steps
-  [field-key n-steps]
-  (let [field (demo/fields field-key)]
+(defn send-input-stream!
+  []
+  (let [field-key (:field @input-config)
+        n-steps (:n-steps @input-config)
+        field (demo/fields field-key)]
     (async/onto-chan world-c
                      (take n-steps (iterate demo/input-transform
                                             {:field field
                                              :position (quot (count field) 2)
                                              :next-saccade 1}))
-                     false)))
+                     false)
+    (swap! world-buffer-trigger not)))
 
-(defn set-world
+(defn set-world!
   []
   (main/set-world (->> world-c
                        (async/map< #(vary-meta % assoc
                                                :comportexviz/draw-world
                                                draw-world)))))
 
-(defn set-n-region-model
-  [n]
-  (with-ui-loading-message
-    (main/set-model (demo/n-region-model n))))
+(defn set-model!
+  []
+  (let [n-regions (:n-regions @model-config)]
+    (with-ui-loading-message
+      (main/set-model (demo/n-region-model n-regions)))))
+
+(def model-config-template
+  [:div.form-horizontal
+   [:div.form-group
+    [:label.col-sm-5 "Number of regions:"]
+    [:div.col-sm-7
+     [:input.form-control {:field :numeric
+                           :id :n-regions}]]]
+   [:div.form-group
+    [:div.col-sm-offset-5.col-sm-7
+     [:button.btn.btn-default
+      {:on-click (fn [e]
+                   (set-model!)
+                   (.preventDefault e))}
+      "Restart with new model"]
+     [:p.text-danger "This resets all parameters."]]]
+   ])
+
+(def input-config-template
+  [:div.form-horizontal
+   [:div.form-group
+    [:label.col-sm-5 "Field of values (a world):"]
+    [:div.col-sm-7
+     [:select.form-control {:field :list
+                            :id :field}
+      (for [k (keys demo/fields)]
+        ^{:key k} [:option {:key k} (name k)])]]]
+   [:div.form-group
+    [:label.col-sm-5 "Number of steps:"]
+    [:div.col-sm-7
+     [:input.form-control {:field :numeric
+                           :id :n-steps}]]]
+   [:div.form-group
+    [:div.col-sm-offset-5.col-sm-7
+     [:button.btn.btn-primary
+      {:on-click (fn [e]
+                   (send-input-stream!)
+                   (.preventDefault e))}
+      "Send input stream"]]]
+   ])
+
+(defn model-tab
+  []
+  [:div
+   [:p "A simple example of sensorimotor input in 1D."]
+
+   [:h3 "Input " [:small "Sensorimotor sequences"]]
+   ^{:key (str "reagent-refresh-key-" @world-buffer-trigger)}
+   [:p.text-info
+    (str (count world-buffer) " queued input values.")]
+   [bind-fields input-config-template input-config]
+
+   [:h3 "HTM model"]
+   [bind-fields model-config-template model-config]
+   ]
+  )
 
 (defn ^:export init
   []
-  (goog.ui.TabPane. (.getElementById js/document "comportex-tabs"))
-  (let [form-el (->dom "#comportex-input-form")
-        field-el (->dom "#comportex-input-field")]
-    (doseq [[i k] (map-indexed vector (keys demo/fields))]
-      (dom/append! field-el
-                   [:option {:value (name k)
-                             :selected (when (zero? i) "selected")}
-                    (name k)]))
-    (event/on-raw form-el :submit
-                  (fn [e]
-                    (let [field-key (keyword (dom/val field-el))
-                          n-steps (cljs.reader/read-string
-                                   (dom/val (->dom "#comportex-input-n-steps")))]
-                      (put-input-steps field-key n-steps))
-                    (.preventDefault e)
-                    false)))
-  (set-world)
-  (set-n-region-model 1)
-  (reset! main/sim-go? true))
+  (reagent/render (main/comportexviz-app model-tab)
+                  (dom/getElement "comportexviz-app"))
+  (set-world!)
+  (set-model!)
+  (swap! main/main-options assoc :sim-go? true))

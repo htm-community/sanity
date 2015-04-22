@@ -1,61 +1,37 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>coordinates 2D - comportex viz</title>
-  <link href="../main.css" rel="stylesheet" type="text/css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+  <title>Coordinates 2D - ComportexViz</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" href="../main.css">
 </head>
 <body>
-  <canvas id="comportex-viz"></canvas>
-  <div id="comportex-sidebar">
-    <div id="comportex-controls"></div>
-    <div id="comportex-tabs">
-      <div><h2>input</h2>
-        <h3>coordinates 2D</h3>
-        <p>A simple example of the coordinate encoder in 2
-        dimensions.</p>
 
-        <p>The coordinate is on a 90x90 integer grid and has a
-        locality radius of 15 units. It maintains position, velocity
-        and acceleration. Velocity is limited to 5 units per timestep.
-        When the point crosses the horizontal axis, its vertical
-        acceleration is reversed; when it crosses the vertical axis,
-        its horizontal acceleration is reversed.</p>
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
 
-        <form id="comportex-model-form">
-        <fieldset>
-          <legend>HTM model</legend>
-          Number of regions:
-          <input id="comportex-n-regions" size="2" value="1" />
-          <br/>
-          <input type="submit" value="Restart with this model" />
-          (this will also reset all parameter values)
-        </fieldset>
-        </form>
-        <hr/>
-        <form id="comportex-input-form">
-          <p>Interference:</p>
-          <button id="comportex-input-nudge-up">Turn up</button><br/>
-          <button id="comportex-input-nudge-down">Turn down</button>
-        </form>
-      </div>
-      <div><h2>drawing</h2>
-        <div id="comportex-drawing"></div>
-      </div>
-      <div><h2>parameters</h2>
-        <div id="comportex-parameters"></div>
-      </div>
-      <div><h2>plots</h2>
-        <div id="comportex-plots"></div>
-      </div>
-      <div><h2>details</h2>
-        <textarea id="detail-text"></textarea>
-      </div>
-  </div>
-  <div id="comportex-loading">loading</div>
+  <div id="comportexviz-app"></div>
+
   <script type="text/javascript" src="out/goog/base.js"></script>
-  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript" src="out/comportexviz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.demos.coordinates_2d");</script>
   <script type="text/javascript">
     comportexviz.demos.coordinates_2d.init();
   </script>
 </body>
+</html>

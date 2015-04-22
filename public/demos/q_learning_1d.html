@@ -1,65 +1,37 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Q learning 1D - comportex viz</title>
-  <link href="../main.css" rel="stylesheet" type="text/css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+  <title>Q Learning 1D - ComportexViz</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" href="../main.css">
 </head>
 <body>
-  <canvas id="comportex-viz"></canvas>
-  <div id="comportex-sidebar">
-    <div id="comportex-controls"></div>
-    <div id="comportex-tabs">
-      <div><h2>input</h2>
-        <h3>Q learning 1D</h3>
-        <p>Highly experimental attempt at integrating reinforcement
-        learning: Q learning. The Q value of an action from some state
-        is the average permanence of synapses activating the action
-        from that state, minus the initial permanence value.</p>
-	<p>The action layer columns are interpreted to produce an
-	action: 120 columns are allocated to each of the two
-	directions of movement, where 40 are inhibitory and 80 are
-	excitatory, and the direction with most overall excitation is
-	used to move the agent.</p>
-	<p>Adjustments to the Q value, based on reward and expected
-	future reward, are applied to the permanence of synapses which
-	directly activated the action (columns). This adjustment
-	applies in the action layer only, and it does this instead of
-	the usual spatial pooling.</p>
-	<p>Exploration arises from boosting neglected columns,
-	primarily in the action layer.</p>
-        <p>The reward is the increase in y value after moving (<tt>dy</tt>).</p>
-        <p>This example is continuous, not episodic.</p>
-	<p>The input is the location of the agent via coordinate
-	encoder, plus the last movement as distal input.</p>
-        <form id="comportex-model-form">
-        <fieldset>
-          <legend>HTM model</legend>
-          Number of regions:
-          <input id="comportex-n-regions" size="2" value="1" />
-          <br/>
-          <input type="submit" value="Restart with this model" />
-          (this will also reset all parameter values)
-        </fieldset>
-        </form>
-      </div>
-      <div><h2>drawing</h2>
-        <div id="comportex-drawing"></div>
-      </div>
-      <div><h2>parameters</h2>
-        <div id="comportex-parameters"></div>
-      </div>
-      <div><h2>plots</h2>
-        <div id="comportex-plots"></div>
-      </div>
-      <div><h2>details</h2>
-        <textarea id="detail-text"></textarea>
-      </div>
-  </div>
-  <div id="comportex-loading">loading</div>
+
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+
+  <div id="comportexviz-app"></div>
+
   <script type="text/javascript" src="out/goog/base.js"></script>
-  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript" src="out/comportexviz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.demos.q_learning_1d");</script>
   <script type="text/javascript">
     comportexviz.demos.q_learning_1d.init();
   </script>
 </body>
+</html>

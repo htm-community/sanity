@@ -6,15 +6,20 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
+            [reagent.core :as reagent :refer [atom]]
+            [reagent-forms.core :refer [bind-fields]]
+            [goog.dom :as dom]
+            [goog.dom.forms :as forms]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
-            [c2.dom :as dom :refer [->dom]]
-            [c2.event :as event]
-            [cljs.reader]
-            [cljs.core.async :as async]
-            [goog.ui.TabPane])
+            [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+
+(def model-config
+  (atom {:input-stream :directional-steps-1d
+         :encoder :block
+         :n-regions 1}))
 
 (defn current-values
   [currs patterns]
@@ -77,7 +82,7 @@
                :pos i}
               ctx left-px top-px w-px h-px state)))))
 
-(defn set-world
+(defn set-world!
   [world-seq-fn patterns mixed? xy?]
   (let [draw (if patterns
                (draw-pattern-fn patterns mixed? xy?)
@@ -89,35 +94,105 @@
                                                  draw))))
     (async/onto-chan world-c (world-seq-fn) false)))
 
-(defn restart-from-ui
+(defn set-model!
   []
-  (let [inp-choice (dom/val (->dom "#comportex-input-source"))
-        enc-choice (dom/val (->dom "#comportex-encoder"))
-        ;; TODO
-        n-regions (cljs.reader/read-string
-                   (dom/val (->dom "#comportex-n-regions")))
+  (let [n-regions (:n-regions @model-config)
         [model-fn world-fn patterns mixed? xy?]
-        (case inp-choice
-          "directional-steps-1d"
+        (case (:input-stream @model-config)
+          :directional-steps-1d
           [demo-dir/n-region-model demo-dir/world-seq nil false false]
-          "isolated-1d"
+          :isolated-1d
           [demo-i1d/n-region-model demo-i1d/world-seq demo-i1d/patterns false false]
-          "mixed-gaps-1d"
+          :mixed-gaps-1d
           [demo-mix/n-region-model demo-mix/world-seq demo-mix/patterns true false]
-          "isolated-2d"
+          :isolated-2d
           [demo-i2d/n-region-model demo-i2d/world-seq demo-i2d/patterns false true])]
-    (set-world world-fn patterns mixed? xy?)
+    (set-world! world-fn patterns mixed? xy?)
     (swap! viz/viz-options assoc-in [:drawing :force-d] (if xy? 2 1))
     (with-ui-loading-message
       (main/set-model
        (model-fn n-regions)))))
 
+(def model-config-template
+  [:div.form-horizontal
+   [:div.form-group
+    [:label.col-sm-5 "Input stream:"]
+    [:div.col-sm-7
+     [:select.form-control {:field :list
+                            :id :input-stream}
+      [:option {:key :directional-steps-1d} "directional-steps-1d"]
+      [:option {:key :isolated-1d} "isolated-1d"]
+      [:option {:key :mixed-gaps-1d} "mixed-gaps-1d"]
+      [:option {:key :isolated-2d} "isolated-2d"]]]]
+   [:div.form-group
+    [:label.col-sm-5 "Encoder:"]
+    [:div.col-sm-7
+     [:select.form-control {:field :list
+                            :id :encoder
+                            :disabled "disabled"}
+      [:option {:key :block} "block"]
+      [:option {:key :random} "random"]]]]
+   [:div.form-group
+    [:label.col-sm-5 "Number of regions:"]
+    [:div.col-sm-7
+     [:input.form-control {:field :numeric
+                           :id :n-regions}]]]
+   [:div.form-group
+    [:div.col-sm-offset-5.col-sm-7
+     [:button.btn.btn-primary
+      {:on-click (fn [e]
+                   (set-model!)
+                   (.preventDefault e))}
+      "Restart with new model"]
+     [:p.text-danger "This resets all parameters."]]]
+
+   [:dl
+    [:dt [:code "directional-steps-1d"]]
+    [:dd "The input stream steps through integers [0--8] either
+              upwards or downwards, chosen randomly. An indicator of
+              the next step direction is included as part of the
+              input."]
+    [:dt [:code "isolated-1d"]]
+    [:dd "The following fixed sequences are presented one at a
+              time with a gap of 5 time steps. Each new pattern is
+              chosen randomly. This example is designed for testing
+              temporal pooling, as each fixed sequence should give
+              rise to a stable representation."
+     [:pre
+":run-0-5   [0 1 2 3 4 5]
+:rev-5-1   [5 4 3 2 1]
+:run-6-10  [6 7 8 9 10]
+:jump-6-12 [6 7 8 11 12]
+:twos      [0 2 4 6 8 10 12 14]
+:saw-10-15 [10 12 11 13 12 14 13 15]"
+      ]]
+    [:dt [:code "mixed-gaps-1d"]]
+    [:dd "The same fixed sequences as above are each repeated
+                with random-length gaps and mixed together."]
+    [:dt [:code "isolated-2d"]]
+    [:dd "The following fixed sequences are presented one at a
+              time with a gap of 5 time steps. Each new pattern is
+              chosen randomly."
+     [:pre
+":down-1     [[1 0] [1 1] [1 2] [1 3] [1 4]
+             [1 5] [1 6] [1 7] [1 8] [1 9]]
+:down-right [[1 0] [1 1] [1 2] [1 3] [1 4]
+             [1 5] [3 5] [5 5] [7 5] [9 5]]
+:diag-tl-br [[0 0] [1 1] [2 2] [3 3] [4 4]
+             [5 5] [6 6] [7 7] [8 8] [9 9]]
+:rand-10    [ten random coordinates]"]]
+    ]
+   ])
+
+(defn model-tab
+  []
+  [:div
+   [:p "These demos are all kinds of fixed sequences."]
+   [bind-fields model-config-template model-config]
+   ])
+
 (defn ^:export init
   []
-  (goog.ui.TabPane. (.getElementById js/document "comportex-tabs"))
-  (let [form-el (->dom "#comportex-input-form")]
-    (event/on-raw form-el :submit
-                  (fn [e]
-                    (restart-from-ui)
-                    (.preventDefault e)
-                    false))))
+  (reagent/render (main/comportexviz-app model-tab)
+                  (dom/getElement "comportexviz-app"))
+  )

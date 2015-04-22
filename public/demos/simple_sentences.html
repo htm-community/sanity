@@ -1,135 +1,37 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Simple sentences - comportex viz</title>
-  <link href="../main.css" rel="stylesheet" type="text/css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+  <title>Sentences - ComportexViz</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" href="../main.css">
 </head>
 <body>
-  <canvas id="comportex-viz"></canvas>
-  <div id="comportex-sidebar">
-    <div id="comportex-controls"></div>
-    <div id="comportex-tabs">
-      <div><h2>input</h2>
-        <h3>Simple sentences</h3>
-        <p>For looking at generalisation in sequence
-        learning. The text is split into sentences at each period (.)
-        and each sentence into words. The words are presented through
-        a category encoder, i.e. with non-overlapping input bits.</p>
-        <form id="comportex-model-form">
-        <fieldset>
-          <legend>HTM model</legend>
-          Number of regions:
-          <input id="comportex-n-regions" size="2" value="1" />
-          <br/>
-          Word encoder:
-          <select id="comportex-encoder">
-            <option value="block">blocks</option>
-            <option value="random">random</option>
-          </select>
-          (block encoder uses distinct words from text below).
-          <br/>
-          <input type="submit" value="Restart with this model" />
-          (this will also reset all parameter values)
-        </fieldset>
-        </form>
-        <hr/>
-        <form id="comportex-input-form">
-          Repeats (each sentence):
-          <input id="comportex-input-repeats" size="3" value="3" />
-          <br/>
-          <textarea id="comportex-input-text" style="width:90%; height:20em">
-Jane.
-Chifung.
 
-Jane has eyes.
-Jane has a head.
-Jane has a mouth.
-Jane has a brain.
-Jane has a book.
-Jane has no friend.
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
 
-Chifung has eyes.
-Chifung has a head.
-Chifung has a mouth.
-Chifung has a brain.
-Chifung has no book.
-Chifung has a friend.
+  <div id="comportexviz-app"></div>
 
-Jane is something.
-Jane is alive.
-Jane is a person.
-Jane can talk.
-Jane can walk.
-Jane can eat.
-
-Chifung is something.
-Chifung is alive.
-Chifung is a person.
-Chifung can talk.
-Chifung can walk.
-Chifung can eat.
-
-fox has eyes.
-fox has a head.
-fox has a mouth.
-fox has a brain.
-fox has a tail.
-fox is something.
-fox is alive.
-fox is no person.
-fox can no talk.
-fox can walk.
-fox can eat.
-
-does Jane have eyes ? yes.
-does Jane have a head ? yes.
-does Jane have a mouth ? yes.
-does Jane have a brain ? yes.
-does Jane have a book ? yes.
-does Jane have a friend ? no.
-does Jane have a tail ? no.
-
-does Chifung have eyes ? yes.
-does Chifung have a head ? yes.
-does Chifung have a mouth ? yes.
-does Chifung have a brain ? yes.
-does Chifung have a book ? no.
-does Chifung have a friend ? yes.
-does Chifung have a tail ? no.
-
-does fox have eyes ? yes.
-does fox have a head ? yes.
-does fox have a mouth ? yes.
-does fox have a brain ? yes.
-does fox have a book ? no.
-does fox have a friend ? no.
-does fox have a tail ? yes.
-
-Jane has no tail.
-Chifung has no tail.
-          </textarea>
-          <br/>
-          <input type="submit" id="comportex-text-send" value="Send text block input" />
-        </form>
-      </div>
-      <div><h2>drawing</h2>
-        <div id="comportex-drawing"></div>
-      </div>
-      <div><h2>parameters</h2>
-        <div id="comportex-parameters"></div>
-      </div>
-      <div><h2>plots</h2>
-        <div id="comportex-plots"></div>
-      </div>
-      <div><h2>details</h2>
-        <textarea id="detail-text"></textarea>
-      </div>
-  </div>
-  <div id="comportex-loading">loading</div>
   <script type="text/javascript" src="out/goog/base.js"></script>
-  <script type="text/javascript" src="comportexviz.js"></script>
+  <script type="text/javascript" src="out/comportexviz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.demos.simple_sentences");</script>
   <script type="text/javascript">
     comportexviz.demos.simple_sentences.init();
   </script>
 </body>
+</html>
