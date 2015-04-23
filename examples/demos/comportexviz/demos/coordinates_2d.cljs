@@ -6,6 +6,7 @@
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
+            [comportexviz.viz-canvas :as viz]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [cljs.core.async :as async])
@@ -171,6 +172,7 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
+  (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
   (reset! main/world world-c)
   (feed-world!)
   (set-model!))

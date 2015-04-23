@@ -108,7 +108,7 @@
           :isolated-2d
           [demo-i2d/n-region-model demo-i2d/world-seq demo-i2d/patterns false true])]
     (async/close! @main/world)
-    (swap! viz/viz-options assoc-in [:drawing :force-d] (if xy? 2 1))
+    (swap! viz/viz-options assoc-in [:drawing :display-mode] (if xy? :two-d :one-d))
     (with-ui-loading-message
       (main/set-model! (model-fn n-regions))
       (reset! main/world (make-world-chan world-fn patterns mixed? xy?))

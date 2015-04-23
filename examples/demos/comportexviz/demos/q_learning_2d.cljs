@@ -2,6 +2,7 @@
   (:require [org.nfrac.comportex.demos.q-learning-2d :as demo]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
+            [comportexviz.viz-canvas :as viz]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -173,6 +174,7 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
+  (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!)
   (reset! main/world world-c)
   (feed-world!))

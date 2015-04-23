@@ -188,8 +188,8 @@
               " steps of history"]]
         [:li [:label
               [:input {:field :radio
-                       :name :drawing.force-d
-                       :value 1}]
+                       :name :drawing.display-mode
+                       :value :one-d}]
               " Draw "
               [:input {:field :numeric
                        :id :drawing.draw-steps
@@ -197,8 +197,8 @@
               " steps in 1D"]]
         [:li [:label
               [:input {:field :radio
-                       :name :drawing.force-d
-                       :value 2}]
+                       :name :drawing.display-mode
+                       :value :two-d}]
               " Draw one step in 2D"]]
         ]]]
      [:div.row
@@ -242,7 +242,7 @@
      ]))
 
 (defn navbar
-  [main-options model show-help step-forward! step-backward!]
+  [main-options model show-help step-forward! step-backward! viz-options]
   [:nav.navbar.navbar-default
    [:div.container-fluid
     [:div.navbar-header
@@ -286,7 +286,23 @@
         {:type :button
          :on-click #(swap! main-options assoc :sim-go? true)
          :style {:width "5em"}}
-        "Run"]]]
+        "Run"]]
+      ;; display mode
+      [:li.dropdown
+       [:a.dropdown-toggle {:data-toggle "dropdown"
+                            :role "button"
+                            :href "#"}
+        "Display" [:span.caret]]
+       [:ul.dropdown-menu {:role "menu"}
+        [:li [:a {:href "#"
+                  :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
+                                    :one-d)}
+              "column states over time (1D)"]]
+        [:li [:a {:href "#"
+                  :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
+                                    :two-d)}
+              "column states over space (2D)"]]
+        ]]]
      ;; right-aligned items
      [:ul.nav.navbar-nav.navbar-right
       ;; sim rate
@@ -365,7 +381,7 @@
    plot-step series-colors]
   (let [show-help (atom false)]
     [:div
-     [navbar main-options model show-help step-forward! step-backward!]
+     [navbar main-options model show-help step-forward! step-backward! viz-options]
      [help-block show-help]
      [:div.container-fluid
       [:div.row

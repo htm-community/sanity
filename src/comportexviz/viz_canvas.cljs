@@ -93,8 +93,8 @@
                            :disconnected nil
                            :permanences nil}
          :keep-steps 30
-         :drawing {:draw-steps 15
-                   :force-d nil
+         :drawing {:display-mode :one-d ;; :one-d, :two-d
+                   :draw-steps 15
                    :world-w-px 150
                    :bit-w-px 3
                    :bit-h-px 3
@@ -146,7 +146,7 @@
                                 (core/layers (regions rgn-id))))
                          (core/region-keys model))
         d-opts (:drawing opts)
-        force-d (:force-d d-opts)
+        display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
         world-w-px (:world-w-px d-opts)
         ;; for now draw inputs and layers in a horizontal stack
@@ -154,7 +154,7 @@
         (reduce (fn [[lays left] inp-id]
                   (let [topo (p/topology (inputs inp-id))
                         lay (make-layout topo display-top-px left height-px d-opts
-                                         true :force-d force-d)]
+                                         true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} (+ world-w-px 10)]
@@ -163,7 +163,7 @@
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
                         lay (make-layout topo display-top-px left height-px d-opts
-                                         false :force-d force-d)]
+                                         false display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} i-right]

@@ -123,26 +123,26 @@
     {:x left-px :y top-px
      :w (* draw-steps element-w)
      :h (min height-px (* (p/size topo) element-h))})
-  
+
   (origin-px-topleft [_ dt]
     (let [right (+ left-px (* draw-steps element-w))
           off-x-px (* (- (inc dt) dt-offset) element-w)
           x-px (- right off-x-px)]
       [x-px top-px]))
-  
+
   (local-px-topleft [_ id]
     [0 (* (- id scroll-top) element-h)])
-  
+
   (element-size-px [_]
     [element-w element-h])
-  
+
   (n-onscreen [_]
     (min (p/size topo)
          (quot (- height-px top-px) element-h)))
-  
+
   (top-id-onscreen [_]
     scroll-top)
-  
+
   (clicked-id [this x y]
     (let [right (+ left-px (* draw-steps element-w))
           dt* (Math/floor (/ (- right x) element-w))
@@ -152,7 +152,7 @@
       (when (and (<= 0 dt* draw-steps)
                  (<= 0 id* (n-onscreen this)))
         [dt id])))
-  
+
   (draw-element [this ctx id]
     (let [[x y] (local-px-topleft this id)]
       (if circles?
@@ -161,7 +161,7 @@
         (.rect ctx x y
                (* element-w shrink)
                (* element-h shrink)))))
-  
+
   (highlight-dt [this ctx dt]
     ;; draw vertical axis on selected dt
     (let [[x y] (origin-px-topleft this dt)
@@ -171,7 +171,7 @@
                            :w (+ element-w 1)
                            :h (+ 10 (:h bb))}
                       highlight-color)))
-  
+
   (highlight-element [this ctx dt id]
     ;; draw horizontal axis on selected id
     (let [[x y] (origin-px-topleft this dt)
@@ -244,26 +244,26 @@
       {:x left-px :y top-px
        :w (* w element-w)
        :h (min height-px (* h element-h))}))
-  
+
   (origin-px-topleft [_ dt]
     [left-px top-px])
-  
+
   (local-px-topleft [_ id]
     (let [[x y] (p/coordinates-of-index topo (+ id scroll-top))]
       [(* x element-w)
        (* y element-h)]))
-  
+
   (element-size-px [_]
     [element-w element-h])
-  
+
   (n-onscreen [_]
     (let [[w h] (p/dimensions topo)]
       (* w (min h
                 (quot (- height-px top-px) element-h)))))
-  
+
   (top-id-onscreen [_]
     scroll-top)
-  
+
   (clicked-id [this x y]
     (let [[w h] (p/dimensions topo)
           xi (Math/floor (/ (- x left-px) element-w))
@@ -273,7 +273,7 @@
         (let [id* (p/index-of-coordinates topo [xi yi])
               id (- id* scroll-top)]
           [0 id]))))
-  
+
   (draw-element [this ctx id]
     (let [[x y] (local-px-topleft this id)]
       (if circles?
@@ -282,7 +282,7 @@
         (.rect ctx x y
                (* element-w shrink)
                (* element-h shrink)))))
-  
+
   (highlight-dt [this ctx dt]
     ;; draw vertical axis on selected dt
     (let [[x y] (origin-px-topleft this dt)
@@ -292,7 +292,7 @@
                            :w (+ 10 (:w bb))
                            :h (+ 10 (:h bb))}
                       highlight-color)))
-  
+
   (highlight-element [this ctx dt id]
     ;; draw horizontal axis on selected id
     (let [[x y] (origin-px-topleft this dt)
@@ -340,19 +340,18 @@
       :highlight-color highlight-color})))
 
 (defn make-layout
-  [topo top left height opts inbits? & {:keys [force-d]}]
+  [topo top left height opts inbits? display-mode]
   (let [ndim (count (p/dimensions topo))
-        use-ndim (or force-d ndim)
-        use-topo (case force-d
-                   1 (topology/one-d-topology (p/size topo))
-                   2 (if (== 2 ndim)
-                       topo ;; keep actual topology if possible
-                       (topology/two-d-topology 20 (quot (p/size topo) 20)))
-                   topo)]
+        lay-topo (case display-mode
+                   :one-d (topology/one-d-topology (p/size topo))
+                   :two-d (if (== 2 ndim)
+                            topo ;; keep actual topology if possible
+                            (topology/two-d-topology 20 (quot (p/size topo) 20))))
+        lay-ndim (count (p/dimensions lay-topo))]
     (if inbits?
-      (case use-ndim
-        1 (inbits-1d-layout use-topo top left height opts)
-        2 (inbits-2d-layout use-topo top left height opts))
-      (case use-ndim
-        1 (columns-1d-layout use-topo top left height opts)
-        2 (columns-2d-layout use-topo top left height opts)))))
+      (case lay-ndim
+        1 (inbits-1d-layout lay-topo top left height opts)
+        2 (inbits-2d-layout lay-topo top left height opts))
+      (case lay-ndim
+        1 (columns-1d-layout lay-topo top left height opts)
+        2 (columns-2d-layout lay-topo top left height opts)))))
