@@ -106,7 +106,7 @@
             (reset! plot-step state)
             (recur c))))
     (cui/comportexviz-app model-tab model main-options viz/viz-options
-                          viz/selection viz/canvas-click controls
+                          viz/selection viz/canvas-click controls viz/steps
                           plot-step viz/state-colors)))
 
 (defn set-model!

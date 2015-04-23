@@ -8,6 +8,7 @@
             [clojure.string :as str]
             [cljs.reader]
             [comportexviz.plots :as plots]
+            [comportexviz.details]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
@@ -160,11 +161,19 @@
    ])
 
 (defn details-tab
-  []
+  [steps selection]
   [:div
    [:p.text-muted "The details of current state on the selected time step, selected column."]
-   [:textarea.form-control {:id "detail-text"
-                            :rows 40}]])
+   [:textarea.form-control
+    {:id "detail-text"
+     :rows 30
+     :readOnly true
+     :value (if (:col @selection)
+              (let [dt (:dt @selection)]
+                (comportexviz.details/detail-text (nth @steps dt)
+                                                  (nth @steps (inc dt))
+                                                  @selection)))}
+    ]])
 
 (def viz-options-template
   (let [item (fn [id label]
@@ -404,7 +413,7 @@
     true))
 
 (defn comportexviz-app
-  [model-tab model main-options viz-options selection canvas-click controls
+  [model-tab model main-options viz-options selection canvas-click controls steps
    plot-step series-colors]
   (let [show-help (atom false)]
     [:div
@@ -423,6 +432,6 @@
           [:drawing [bind-fields viz-options-template viz-options]]
           [:params [parameters-tab model selection]]
           [:plots [plots-tab plot-step series-colors]]
-          [:details [details-tab]]]]
+          [:details [details-tab steps selection]]]]
         ]]
       [:div#loading-message "loading"]]]))
