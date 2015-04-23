@@ -17,8 +17,13 @@
   (atom {:field :abcdefghij
          :n-steps 100}))
 
+(declare draw-world)
+
 (def world-buffer (async/buffer 5000))
-(def world-c (async/chan world-buffer))
+(def world-c
+  (async/chan world-buffer (map #(vary-meta % assoc
+                                            :comportexviz/draw-world
+                                            draw-world))))
 
 ;; used to force Reagent to re-render world-buffer count
 (def world-buffer-trigger (atom true))
@@ -139,18 +144,11 @@
                      false)
     (swap! world-buffer-trigger not)))
 
-(defn set-world!
-  []
-  (main/set-world (->> world-c
-                       (async/map< #(vary-meta % assoc
-                                               :comportexviz/draw-world
-                                               draw-world)))))
-
 (defn set-model!
   []
   (let [n-regions (:n-regions @model-config)]
     (with-ui-loading-message
-      (main/set-model (demo/n-region-model n-regions)))))
+      (main/set-model! (demo/n-region-model n-regions)))))
 
 (def model-config-template
   [:div.form-horizontal
@@ -212,6 +210,6 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  (set-world!)
+  (reset! main/world world-c)
   (set-model!)
   (swap! main/main-options assoc :sim-go? true))

@@ -116,7 +116,7 @@
   [model]
   (viz/re-init! model))
 
-(defn set-model
+(defn set-model!
   [x]
   (let [init? (nil? @model)]
     (reset! model x)
@@ -127,9 +127,3 @@
           layer-id (first (core/layers (get-in x [:regions region-key])))]
       (swap! selection assoc :region region-key :layer layer-id
              :dt 0 :col nil))))
-
-(defn set-world
-  [c]
-  (when-let [old-c @world]
-    (async/close! old-c))
-  (reset! world c))

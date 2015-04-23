@@ -82,17 +82,17 @@
                :pos i}
               ctx left-px top-px w-px h-px state)))))
 
-(defn set-world!
+(defn make-world-chan
   [world-seq-fn patterns mixed? xy?]
   (let [draw (if patterns
                (draw-pattern-fn patterns mixed? xy?)
                (draw-directional-steps-fn demo-dir/numb-max))
-        world-c (async/chan)]
-    (main/set-world (->> world-c
-                         (async/map< #(vary-meta % assoc
-                                                 :comportexviz/draw-world
-                                                 draw))))
-    (async/onto-chan world-c (world-seq-fn) false)))
+        world-c (async/chan (async/buffer 1)
+                            (map #(vary-meta % assoc
+                                             :comportexviz/draw-world
+                                             draw)))]
+    (async/onto-chan world-c (world-seq-fn) false)
+    world-c))
 
 (defn set-model!
   []
@@ -107,11 +107,12 @@
           [demo-mix/n-region-model demo-mix/world-seq demo-mix/patterns true false]
           :isolated-2d
           [demo-i2d/n-region-model demo-i2d/world-seq demo-i2d/patterns false true])]
-    (set-world! world-fn patterns mixed? xy?)
+    (async/close! @main/world)
     (swap! viz/viz-options assoc-in [:drawing :force-d] (if xy? 2 1))
     (with-ui-loading-message
-      (main/set-model
-       (model-fn n-regions)))))
+      (main/set-model! (model-fn n-regions))
+      (reset! main/world (make-world-chan world-fn patterns mixed? xy?))
+      )))
 
 (def model-config-template
   [:div.form-horizontal
@@ -195,4 +196,4 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  )
+  (swap! main/main-options assoc :sim-go? true))

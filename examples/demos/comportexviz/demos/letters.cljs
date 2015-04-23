@@ -13,11 +13,24 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def n-predictions 8)
-
 (def model-config
   (atom {:n-regions 1
          :encoder :block}))
+
+(def draw (draw-text-fn 8))
+
+(def world-buffer (async/buffer 5000))
+(def world-c
+  (async/chan world-buffer
+              (comp (map (util/keep-history-middleware 400 :value :history))
+                    (map #(vary-meta % assoc
+                                     :comportexviz/draw-world
+                                     draw)))))
+
+;; used to force Reagent to re-render world-buffer count
+(def world-buffer-trigger (atom true))
+(add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
+                                               (swap! world-buffer-trigger not)))
 
 (def text-to-send
   (atom
@@ -35,23 +48,6 @@ Chifung has a brain.
 Chifung has no book.
 Chifung has a friend."))
 
-(def world-buffer (async/buffer 5000))
-(def world-c (async/chan world-buffer))
-
-;; used to force Reagent to re-render world-buffer count
-(def world-buffer-trigger (atom true))
-(add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
-                                               (swap! world-buffer-trigger not)))
-
-(defn set-world!
-  []
-  (let [draw (draw-text-fn n-predictions)]
-    (main/set-world (->> world-c
-                         (async/map< (util/keep-history-middleware 400 :value :history))
-                         (async/map< #(vary-meta % assoc
-                                                 :comportexviz/draw-world
-                                                 draw))))))
-
 (defn set-model!
   []
   (let [n-regions (:n-regions @model-config)
@@ -59,7 +55,7 @@ Chifung has a friend."))
                   :block demo/block-encoder
                   :random demo/random-encoder)]
     (with-ui-loading-message
-      (main/set-model
+      (main/set-model!
         (core/regions-in-series core/sensory-region (core/sensory-input encoder)
                                 n-regions demo/spec)))))
 
@@ -141,6 +137,6 @@ Chifung has a friend."))
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  (set-world!)
+  (reset! main/world world-c)
   (set-model!)
   (swap! main/main-options assoc :sim-go? true))

@@ -11,8 +11,6 @@
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def n-predictions 8)
-
 (def model-config
   (atom {:n-regions 1
          :encoder :block}))
@@ -21,22 +19,18 @@
   (atom {:repeats 1
          :text demo/input-text}))
 
+(def draw (draw-sentence-fn 8))
+
 (def world-buffer (async/buffer 5000))
-(def world-c (async/chan world-buffer))
+(def world-c
+  (async/chan world-buffer
+              (comp (map (util/keep-history-middleware 100 :word :history))
+                    (map #(vary-meta % assoc :comportexviz/draw-world draw)))))
 
 ;; used to force Reagent to re-render world-buffer count
 (def world-buffer-trigger (atom true))
 (add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
                                                (swap! world-buffer-trigger not)))
-
-(defn set-world!
-  []
-  (let [draw (draw-sentence-fn n-predictions)]
-    (main/set-world (->> world-c
-                         (async/map< (util/keep-history-middleware 100 :word :history))
-                         (async/map< #(vary-meta % assoc
-                                                 :comportexviz/draw-world
-                                                 draw))))))
 
 (defn set-model!
   []
@@ -45,7 +39,7 @@
                   :block (demo/make-block-encoder (:text @input-config))
                   :random demo/random-encoder)]
     (with-ui-loading-message
-      (main/set-model
+      (main/set-model!
        (core/regions-in-series core/sensory-region (core/sensory-input encoder)
                                n-regions demo/spec)))))
 
@@ -124,6 +118,6 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  (set-world!)
+  (reset! main/world world-c)
   (set-model!)
   (swap! main/main-options assoc :sim-go? true))

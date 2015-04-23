@@ -15,9 +15,33 @@
 (def model-config
   (atom {:n-regions 1}))
 
-(def world-c (async/chan))
+(declare draw-coords-fn)
+
+(def world-c
+  (async/chan (async/buffer 1)
+              (comp (map (util/keep-history-middleware
+                          50 #(select-keys % [:x :y :vx :vy])
+                          :history))
+                    (map #(vary-meta % assoc
+                                     :comportexviz/draw-world
+                                     (draw-coords-fn demo/max-pos))))))
 
 (def control-c (async/chan))
+
+(defn feed-world!
+  "Feed the world channel continuously, reacting to UI settings."
+  []
+  (go
+    (loop [x demo/initial-input-val]
+      (>! world-c x)
+      (let [tc (async/timeout 50)
+            ;; collect and apply all control messages until timeout
+            xx (loop [x x]
+                 (let [[f c] (async/alts! [control-c tc])]
+                   (if (= c control-c)
+                     (recur (f x))
+                     x)))]
+        (recur (demo/input-transform xx))))))
 
 (defn draw-arrow
   [ctx {:keys [x y angle]}]
@@ -86,34 +110,11 @@
                            :angle (Math/atan2 vy vx)})))
       (c/restore ctx))))
 
-(defn set-world!
-  []
-  (let [draw (draw-coords-fn demo/max-pos)]
-    (main/set-world (->> world-c
-                         (async/map< (util/keep-history-middleware
-                                      50 #(select-keys % [:x :y :vx :vy])
-                                      :history))
-                         (async/map< #(vary-meta % assoc
-                                                 :comportexviz/draw-world
-                                                 draw))))
-    ;; feed the world channel continuously, reacting to UI settings
-    (go
-     (loop [x demo/initial-input-val]
-       (>! world-c x)
-       (let [tc (async/timeout 50)
-             ;; collect and apply all control messages until timeout
-             xx (loop [x x]
-                  (let [[f c] (async/alts! [control-c tc])]
-                    (if (= c control-c)
-                      (recur (f x))
-                      x)))]
-         (recur (demo/input-transform xx)))))))
-
 (defn set-model!
   []
   (let [n-regions (:n-regions @model-config)]
     (with-ui-loading-message
-      (main/set-model
+      (main/set-model!
        (demo/n-region-model n-regions)))))
 
 (def model-config-template
@@ -170,5 +171,6 @@
   []
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
-  (set-world!)
+  (reset! main/world world-c)
+  (feed-world!)
   (set-model!))

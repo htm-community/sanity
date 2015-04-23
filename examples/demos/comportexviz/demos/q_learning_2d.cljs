@@ -16,7 +16,20 @@
 (def model-config
   (atom {:n-regions 1}))
 
-(def world-c (async/chan))
+(declare draw-surface-fn)
+
+(def world-c
+  (async/chan (async/buffer 1)
+              (map #(vary-meta % assoc
+                               :comportexviz/draw-world
+                               (draw-surface-fn demo/surface)))))
+
+(defn feed-world!
+  "Feed the world input channel continuously, selecting actions from
+   state of model itself."
+  []
+  (let [step-c (main/tap-c main/steps-mult)]
+    (demo/feed-world-c-with-actions! step-c world-c main/model)))
 
 (defn draw-surface-fn
   [surface]
@@ -101,23 +114,11 @@
         (c/restore ctx)
         ))))
 
-(defn set-world!
-  []
-  (let [draw (draw-surface-fn demo/surface)]
-    (main/set-world (->> world-c
-                         (async/map< #(vary-meta % assoc
-                                                 :comportexviz/draw-world
-                                                 draw))))
-    ;; feed the world input channel continuously, selecting actions
-    ;; from state of model itself
-    (let [step-c (main/tap-c main/steps-mult)]
-      (demo/feed-world-c-with-actions! step-c world-c main/model))))
-
 (defn set-model!
   []
   (let [n-regions (:n-regions @model-config)]
     (with-ui-loading-message
-      (main/set-model
+      (main/set-model!
        (demo/make-model)))))
 
 (def model-config-template
@@ -173,4 +174,5 @@
   (reagent/render (main/comportexviz-app model-tab)
                   (dom/getElement "comportexviz-app"))
   (set-model!)
-  (set-world!))
+  (reset! main/world world-c)
+  (feed-world!))
