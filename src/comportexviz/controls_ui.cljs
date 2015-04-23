@@ -242,7 +242,7 @@
      ]))
 
 (defn navbar
-  [main-options model show-help step-forward! step-backward! viz-options]
+  [main-options model show-help controls viz-options]
   [:nav.navbar.navbar-default
    [:div.container-fluid
     [:div.navbar-header
@@ -258,7 +258,8 @@
        [:button.btn.btn-default.navbar-btn
         {:type :button
          :on-click (fn [e]
-                     (step-backward!)
+                     (let [f (:step-backward controls)]
+                       (f))
                      (.preventDefault e))
          :title "Step backward in time"}
         [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
@@ -268,7 +269,8 @@
        [:button.btn.btn-default.navbar-btn
         {:type :button
          :on-click (fn [e]
-                     (step-forward!)
+                     (let [f (:step-forward controls)]
+                       (f))
                      (.preventDefault e))
          :title "Step forward in time"}
         [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
@@ -376,17 +378,44 @@
                 cmp]))
        ])))
 
+(def code-key
+  {33 :page-up
+   34 :page-down
+   37 :left
+   38 :up
+   39 :right
+   40 :down})
+
+(def key-controls
+  {:left :step-backward
+   :right :step-forward
+   :up :column-up
+   :down :column-down
+   :page-up :scroll-up
+   :page-down :scroll-down})
+
+(defn canvas-key-down
+  [e controls]
+  (if-let [k (code-key (.-keyCode e))]
+    (let [control-k (get key-controls k)
+          control-f (get controls control-k)]
+      (control-f)
+      (.preventDefault e))
+    true))
+
 (defn comportexviz-app
-  [model-tab model selection main-options viz-options step-forward! step-backward!
+  [model-tab model main-options viz-options selection canvas-click controls
    plot-step series-colors]
   (let [show-help (atom false)]
     [:div
-     [navbar main-options model show-help step-forward! step-backward! viz-options]
+     [navbar main-options model show-help controls viz-options]
      [help-block show-help]
      [:div.container-fluid
       [:div.row
        [:div.col-sm-8
-        [:canvas#comportex-viz]
+        [:canvas#comportex-viz {:on-click canvas-click
+                                :on-key-down (fn [e] (canvas-key-down e controls))
+                                :tabIndex 1}]
         ]
        [:div.col-sm-4
         [tabs

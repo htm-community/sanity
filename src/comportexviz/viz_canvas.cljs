@@ -10,10 +10,6 @@
                      make-layout]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
-            [goog.events.EventType]
-            [goog.events :as gevents]
-            [goog.string :as gstring]
-            [goog.string.format]
             [monet.canvas :as c]
             [monet.core]
             [org.nfrac.comportex.core :as core]
@@ -21,11 +17,19 @@
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.cells :as cells]
             [clojure.set :as set]
-            [cljs.core.async :as async :refer [chan put! <!]])
+            [cljs.core.async :as async :refer [<!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-cache]]))
 
 ;; TODO 'state -> 'htm
+
+(def steps (atom []))
+(def layouts (atom {:inputs {}
+                    :regions {}}))
+(def selection (atom {:region nil
+                      :layer nil
+                      :dt 0
+                      :col nil}))
 
 (def height-px 900)
 (def ts-height-px 30)
@@ -109,10 +113,6 @@
                    :highlight-color (:highlight state-colors)}
          }))
 
-(def steps (atom []))
-(def layouts (atom {:inputs {}
-                    :regions {}}))
-
 (defn draw-image-dt
   [ctx lay dt img]
   (let [[x y] (lay/origin-px-topleft lay dt)]
@@ -179,10 +179,10 @@
                (reset! layouts (rebuild-layouts (first @steps) opts)))))
 
 (defn update-dt-offsets!
-  [selection]
+  []
   (swap! layouts
          (fn [m]
-           (let [sel-dt (:dt selection)
+           (let [sel-dt (:dt @selection)
                  draw-steps (get-in @viz-options [:drawing :draw-steps])
                  dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
              (-> (reduce (fn [m path]
@@ -191,6 +191,10 @@
                          m
                          (all-layout-paths m))
                  (reset-layout-caches))))))
+
+(add-watch selection :update-dt-offsets
+           (fn [_ _ _ _]
+             (update-dt-offsets!)))
 
 (defn scroll-layout
   [lay down?]
@@ -667,12 +671,12 @@
        " of " (p/size-of lay)))
 
 (defn do-draw!
-  [{sel-dt :dt
-    sel-rgn :region
-    sel-lyr :layer
-    sel-col :col
-    :as selection}]
-  (let [opts @viz-options
+  []
+  (let [{sel-dt :dt
+         sel-rgn :region
+         sel-lyr :layer
+         sel-col :col} @selection
+        opts @viz-options
         i-lays (:inputs @layouts)
         r-lays (:regions @layouts)
         draw-steps (get-in opts [:drawing :draw-steps])
@@ -686,7 +690,9 @@
                         (map lay/right-px)
                         (apply max)
                         (+ (get-in opts [:drawing :h-space-px])))
-        width-px (.-width canvas-el)]
+        width-px (* 0.67 (- (.-innerWidth js/window) 20))]
+    (set! (.-width canvas-el) width-px)
+    (set! (.-height canvas-el) height-px)
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     ;; draw timeline
     (let [current-t (p/timestep (first @steps))
@@ -820,115 +826,72 @@
         (lay/highlight-element lay ctx sel-dt sel-col)))
     ;; draw ff synapses
     (when (get-in opts [:ff-synapses :active])
-      (draw-ff-synapses ctx sel-state r-lays i-lays selection opts))
+      (draw-ff-synapses ctx sel-state r-lays i-lays @selection opts))
     ;; draw selected cells and segments
     (when sel-col
-      (draw-cell-segments ctx sel-state r-lays i-lays selection opts cells-left)))
+      (draw-cell-segments ctx sel-state r-lays i-lays @selection opts cells-left)))
   nil)
 
 (defn draw!
-  [selection]
+  []
   (when (seq @steps)
-    (do-draw! selection)))
+    (do-draw!)))
 
 (defn step-forward!
-  [selection sim-step!]
+  [sim-step!]
   (if (zero? (:dt @selection))
     (sim-step!)
     (swap! selection update-in [:dt]
            (fn [x] (max (dec x) 0)))))
 
 (defn step-backward!
-  [selection]
+  []
   (let [;; we need to assume there is a previous step, so:
         max-dt (max 0 (- (count @steps) 2))]
     (swap! selection update-in [:dt]
           (fn [x] (min (inc x) max-dt)))))
 
-;; ## Event stream processing
+(defn canvas-click
+  [e*]
+  (let [e (.-nativeEvent e*)
+        x (.-offsetX e)
+        y (.-offsetY e)
+        i-lays (:inputs @layouts)
+        r-lays (:regions @layouts)
+        ;; we need to assume there is a previous step, so:
+        max-dt (max 0 (- (count @steps) 2))
+        hit? (atom false)]
+    ;; check inputs
+    (doseq [[k lay] i-lays
+            :let [[dt id] (lay/clicked-id lay x y)]
+            :when dt]
+      (reset! hit? true)
+      (when (== 1 (count (p/dims-of lay)))
+        (swap! selection assoc :dt (min dt max-dt))))
+    ;; check regions
+    (doseq [[rgn-id lyr-lays] r-lays
+            [lyr-id lay] lyr-lays
+            :let [[dt col] (lay/clicked-id lay x y)]
+            :when dt]
+      (reset! hit? true)
+      (if (== 1 (count (p/dims-of lay)))
+        (swap! selection assoc :region rgn-id :layer lyr-id :col col
+               :dt (min dt max-dt))
+        (swap! selection assoc :region rgn-id :layer lyr-id :col col)))
+    (when-not @hit?
+      ;; checked all, nothing clicked
+      (swap! selection assoc :col nil))))
 
-(defn listen [el type capture-fn]
-  (let [out (chan)]
-    (gevents/listen el type
-                    (fn [e] (put! out e)
-                      (when (capture-fn e)
-                        (.preventDefault e)
-                        false)))
-    out))
-
-(defn handle-canvas-clicks
-  [el selection]
-  (let [clicks (listen el "click" (fn [_] false))]
-    (go
-     (while true
-       (let [e (<! clicks)
-             x (.-offsetX e)
-             y (.-offsetY e)
-             i-lays (:inputs @layouts)
-             r-lays (:regions @layouts)
-             ;; we need to assume there is a previous step, so:
-             max-dt (max 0 (- (count @steps) 2))
-             hit? (atom false)]
-         ;; check inputs
-         (doseq [[k lay] i-lays
-                 :let [[dt id] (lay/clicked-id lay x y)]
-                 :when dt]
-           (reset! hit? true)
-           (when (== 1 (count (p/dims-of lay)))
-             (swap! selection assoc :dt (min dt max-dt))))
-         ;; check regions
-         (doseq [[rgn-id lyr-lays] r-lays
-                 [lyr-id lay] lyr-lays
-                 :let [[dt col] (lay/clicked-id lay x y)]
-                 :when dt]
-           (reset! hit? true)
-           (if (== 1 (count (p/dims-of lay)))
-             (swap! selection assoc :region rgn-id :layer lyr-id :col col
-                    :dt (min dt max-dt))
-             (swap! selection assoc :region rgn-id :layer lyr-id :col col)))
-         (when-not @hit?
-           ;; checked all, nothing clicked
-           (swap! selection assoc :col nil)))))))
-
-(def code-key
-  {33 :page-up
-   34 :page-down
-   37 :left
-   38 :up
-   39 :right
-   40 :down})
-
-(defn handle-canvas-keys
-  [el selection sim-step!]
-  (let [presses (listen el goog.events.EventType.KEYDOWN
-                        (fn [e] (code-key (.-keyCode e))))]
-    (go
-     (while true
-       (let [e (<! presses)
-             k (code-key (.-keyCode e))]
-         (when k
-           (case k
-             :left (step-backward! selection)
-             :right (step-forward! selection sim-step!)
-             :up (swap! selection update-in [:col]
-                        (fn [x] (when x (dec x))))
-             :down (swap! selection update-in [:col]
-                          (fn [x] (when x (inc x))))
-             :page-up (scroll! false)
-             :page-down (scroll! true)
-             )))))))
-
-(defn re-init!
-  [model]
-  (reset! layouts (rebuild-layouts model @viz-options)))
+(defn oh-look-the-model-changed!
+  [htm]
+  (reset! layouts (rebuild-layouts htm @viz-options))
+  (let [region-key (first (core/region-keys htm))
+        layer-id (first (core/layers (get-in htm [:regions region-key])))]
+    (swap! selection assoc :region region-key :layer layer-id
+           :dt 0 :col nil)))
 
 (defn init!
-  [init-model steps-c selection sim-step!]
-  (reset! layouts
-          (rebuild-layouts init-model @viz-options))
-  (add-watch selection :update-dt-offsets
-             (fn [_ _ _ v]
-               (update-dt-offsets! v)))
+  [steps-c]
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]
@@ -936,9 +899,4 @@
                 keep-steps (:keep-steps @viz-options)]
             (swap! steps (fn [xs]
                            (take keep-steps (cons x xs)))))
-          (recur))))
-  (let [el (dom/getElement "comportex-viz")]
-    (set! (.-width el) (* 0.67 (- (.-innerWidth js/window) 20)))
-    (set! (.-height el) height-px)
-    (handle-canvas-clicks el selection)
-    (handle-canvas-keys js/document selection sim-step!)))
+          (recur)))))
