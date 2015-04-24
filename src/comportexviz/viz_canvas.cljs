@@ -21,8 +21,6 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-cache]]))
 
-;; TODO 'state -> 'htm
-
 (def steps (atom []))
 (def layouts (atom {:inputs {}
                     :regions {}}))

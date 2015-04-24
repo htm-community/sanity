@@ -1,6 +1,10 @@
 # TODO
 
-* cortical-io example
+* 'state -> 'htm
+
+* always show ff synapses to one selected column
+
+* unify model-config and input-config atoms/templates
 
 * implement encoder options in fixed-seqs demo
 

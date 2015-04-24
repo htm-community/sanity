@@ -1,113 +1,37 @@
 <!DOCTYPE html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>cortical.io - comportex viz</title>
-  <link href="../main.css" rel="stylesheet" type="text/css" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The above 3 meta tags *must* come first in the head; any other head content must come *after* these tags -->
+  <title>cortical.io - ComportexViz</title>
+
+  <!-- Bootstrap -->
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/css/bootstrap.min.css">
+
+  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+  <!--[if lt IE 9]>
+    <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+    <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+  <![endif]-->
+
+  <link rel="stylesheet" href="../main.css">
 </head>
 <body>
-  <canvas id="comportex-viz"></canvas>
-  <div id="comportex-sidebar">
-    <div id="comportex-controls"></div>
-    <div id="comportex-tabs">
-      <div><h2>input</h2>
-        <h3>cortical.io</h3>
-        <p>This demo looks up
-        the <a href="http://cortical.io/">cortical.io</a> fingerprint
-        for each word. Enter your API key below to start. The
-        pre-loaded text below is the
-        famous <a href="https://github.com/numenta/nupic.nlp-examples/blob/master/resources/associations/foxeat.csv">"fox
-        eats what?" example</a>, but you can enter whatever text you
-        like. Words that are not found in
-        cortical.io <tt>associative_en</tt> retina are assigned a
-        random SDR.</p>
-        <p>Note that even though only a single time step is shown, you
-        can still use the right/left arrow keys to step the simulation
-        and look back through the last 25 time steps.</p>
-        <form id="comportex-input-text-form">
-          Repeats (each sentence):
-          <input id="comportex-input-repeats" size="2" value="1" />
-          Encoder:
-          <select id="comportex-encoder">
-            <option value="cortical_io">cortical.io</option>
-            <option value="random">random</option>
-            </select>
-          <br/>
-          API key:
-          <input id="comportex-api-key" size="16" />
-          <label><input id="comportex-decode-local" type="checkbox" />
-            decode locally
-          </label>
-          <label><input id="comportex-scramble" type="checkbox" />
-            spatial scramble
-          </label>
-          <br/>
-          Starting parameter set:
-          <select id="comportex-starting-parameters">
-            <option value="a">20% potential, no topology</option>
-            <option value="b">30% * local 16% area = 5% potential</option>
-          </select>
-          <textarea id="comportex-input-text" style="width:90%; height:35em">
-frog 	eat 	flies.
-cow 	eat 	grain.
-elephant 	eat 	leaves.
-goat 	eat 	grass.
-wolf 	eat 	rabbit.
-cat 	likes 	ball.
-elephant 	likes 	water.
-sheep 	eat 	grass.
-cat 	eat 	salmon.
-wolf 	eat 	mice.
-lion 	eat 	cow.
-dog 	likes 	sleep.
-coyote 	eat 	mice.
-coyote 	eat 	rodent.
-coyote 	eat 	rabbit.
-wolf 	eat 	squirrel.
-cow 	eat 	grass.
-frog 	eat 	flies.
-cow 	eat 	grain.
-elephant 	eat 	leaves.
-goat 	eat 	grass.
-wolf 	eat 	rabbit.
-sheep 	eat 	grass.
-cat 	eat 	salmon.
-wolf 	eat 	mice.
-lion 	eat 	cow.
-coyote 	eat 	mice.
-elephant 	likes 	water.
-cat 	likes 	ball.
-coyote 	eat 	rodent.
-coyote 	eat 	rabbit.
-wolf 	eat 	squirrel.
-dog 	likes 	sleep.
-cat 	eat 	salmon.
-cat 	likes 	ball.
-cow 	eat 	grass.
-fox 	eat 	something.
-          </textarea>
-          <br/>
-          <input type="submit" value="Restart with this input" />
-          (this will also reset all parameter values)
-        </form>
-      </div>
-      <div><h2>drawing</h2>
-        <div id="comportex-drawing"></div>
-      </div>
-      <div><h2>parameters</h2>
-        <div id="comportex-parameters"></div>
-      </div>
-      <div><h2>plots</h2>
-        <div id="comportex-plots"></div>
-      </div>
-      <div><h2>details</h2>
-        <textarea id="detail-text"></textarea>
-      </div>
-  </div>
-  <div id="comportex-loading">loading</div>
+
+  <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.2/jquery.min.js"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.4/js/bootstrap.min.js"></script>
+
+  <div id="comportexviz-app"></div>
+
   <script type="text/javascript" src="out/goog/base.js"></script>
-  <script type="text/javascript" src="comportexviz_cio.js"></script>
+  <script type="text/javascript" src="out/comportexviz_cio.js"></script>
   <script type="text/javascript">goog.require("comportexviz.cortical_io_demo");</script>
   <script type="text/javascript">
     comportexviz.cortical_io_demo.init();
   </script>
 </body>
+</html>
