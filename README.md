@@ -6,6 +6,20 @@ A web-based visualization layer for
 See it in action in [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
+ComportexViz runs HTM models in the browser with interactive
+controls. The model state from recent timesteps is kept, so you can step
+back in time. You can inspect input values, encoded input bits, and the
+columns that make up cortical region layers. Within a column you can inspect
+cells and their distal dendrite segments. Feed-forward and distal synapses
+can be shown.
+
+Kept timesteps are shown in a row at the top of the display.
+Below that, the blocks represent input fields (squares) and
+layers of cortical columns (circles). Depending on the display mode,
+these may be shown in 2D grids from a single time step, or as one
+vertical line per timestep, allowing several time steps to be shown
+in series. Also, summarised time series are shown in the 'plots' tab.
+
 
 ## Usage
 
