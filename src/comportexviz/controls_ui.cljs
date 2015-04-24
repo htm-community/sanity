@@ -164,17 +164,15 @@
 (defn details-tab
   [steps selection]
   [:div
-   [:p.text-muted "The details of current state on the selected time step, selected column."]
-   [:textarea.form-control
-    {:id "detail-text"
-     :rows 30
-     :readOnly true
-     :value (if (:col @selection)
-              (let [dt (:dt @selection)]
-                (comportexviz.details/detail-text (nth @steps dt)
-                                                  (nth @steps (inc dt))
-                                                  @selection)))}
-    ]])
+   [:p.text-muted "The details of model state on the selected time step, selected column."]
+   [:pre.pre-scrollable
+    (if (:col @selection)
+      (let [dt (:dt @selection)]
+        (comportexviz.details/detail-text (nth @steps dt)
+                                          (nth @steps (inc dt))
+                                          @selection)))
+    ]
+   [:p.text-muted [:small "(scrollable)"]]])
 
 (def viz-options-template
   (let [item (fn [id label]
@@ -373,7 +371,9 @@
         ]]
       [:li (if @show-help {:class "active"})
        [:a {:href "#"
-            :on-click #(swap! show-help not)}
+            :on-click (fn [e]
+                        (swap! show-help not)
+                        (.preventDefault e))}
         "Help"]]
       ]
      ]

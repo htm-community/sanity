@@ -1,13 +1,13 @@
 # TODO
 
+* cortical-io example
+
+* implement encoder options in fixed-seqs demo
+
 * gh-pages branch with compiled demos
 
-* plot most recent sliding window
+* click on timesteps to jump
 
-* summary of % predicted etc in recent time
+* show column state freqs in timestep bar
 
-* controls to add noise to input generator
-
-* snapshots (store state of `steps`)
-
-* allow different viz to be plugged in (runtime config)
+* 'export' model state as edn / transit
