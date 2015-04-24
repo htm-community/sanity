@@ -87,11 +87,12 @@
   {:step-backward viz/step-backward!
    :step-forward #(viz/step-forward! sim-step!)
    :column-up #(swap! viz/selection update-in [:col]
-                      (fn [x] (when x (dec x))))
+                      (fn [x] (when (and x (pos? x)) (dec x))))
    :column-down #(swap! viz/selection update-in [:col]
-                        (fn [x] (when x (inc x))))
+                        (fn [x] (if x (inc x) 0)))
    :scroll-up #(viz/scroll! false)
-   :scoll-down #(viz/scroll! true)
+   :scroll-down #(viz/scroll! true)
+   :toggle-run #(swap! main-options update-in [:sim-go?] not)
    })
 
 ;;; ## Entry point

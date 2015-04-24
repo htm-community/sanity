@@ -314,7 +314,29 @@
                   :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
                                     :two-d)}
               "column states over space (2D)"]]
-        ]]]
+        ]]
+      ;; scroll down
+      [:li
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click (fn [e]
+                     (let [f (:scroll-down controls)]
+                       (f))
+                     (.preventDefault e))
+         :title "Scroll down visible columns"}
+        [:span.glyphicon.glyphicon-arrow-down {:aria-hidden "true"}]
+        [:span.sr-only "Scroll down"]]]
+      ;; scroll up
+      [:li
+       [:button.btn.btn-default.navbar-btn
+        {:type :button
+         :on-click (fn [e]
+                     (let [f (:scroll-up controls)]
+                       (f))
+                     (.preventDefault e))
+         :title "Scroll down visible columns"}
+        [:span.glyphicon.glyphicon-arrow-up {:aria-hidden "true"}]
+        [:span.sr-only "Scroll up"]]]]
      ;; right-aligned items
      [:ul.nav.navbar-nav.navbar-right
       ;; sim rate
@@ -357,16 +379,6 @@
      ]
     ]])
 
-(defn help-block
-  [show-help]
-  (if @show-help
-    [:div.container-fluid
-     [:p "Right / left arrow keys move forward / back in time.
-      Up / down arrow keys select columns.
-      Click on a column to show its cells.
-      Page up / page down to scroll display. "
-      [:small "TODO: improve this text!"]]]))
-
 (defn tabs
   [tab-cmps]
   (let [current-tab (atom (ffirst tab-cmps))]
@@ -388,8 +400,54 @@
                 cmp]))
        ])))
 
+(defn help-block
+  [show-help]
+  (if @show-help
+    [:div.container-fluid
+     [:div.row
+      [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Overview"]
+       [:p [:a {:href "https://github.com/nupic-community/comportexviz"}
+            "ComportexViz"]
+        " runs HTM models in the browser with interactive
+       controls. The model state from recent timesteps is kept, so you can step
+       back in time. You can inspect input values, encoded input bits, and the
+       columns that make up cortical region layers. Within a column you can inspect
+       cells and their distal dendrite segments. Feed-forward and distal synapses
+       can be shown."]]
+      [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Display"]
+       [:p "Kept timesteps are shown in a row at the top of the display.
+      Below that, the blocks represent input fields (squares) and
+      layers of cortical columns (circles). Depending on the display mode,
+      these may be shown in 2D grids from a single time step, or as one
+      vertical line per timestep, allowing several time steps to be shown
+      in series. Also, summarised time series are shown in the 'plots' tab."]]
+      [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Selection"]
+       [:p "Click on the main canvas to select one column of cells,
+      within some region layer. The individual cells
+      and their distal dendrite segments will be shown.
+      If you click off the layer, the column will be de-selected, but
+      the layer will remain selected. Its parameters can be seen and edited in
+      the 'params' tab."]]
+      [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Key controls"]
+       [:p "When the main canvas is selected, "
+        [:kbd "up"] "/" [:kbd "down"]
+        " select columns; "
+        [:kbd "page up"] "/" [:kbd "page down"]
+        " scroll the visible field; "
+        [:kbd "right"] "/" [:kbd "left"]
+        " step forward / back in time; "
+        [:kbd "space"]
+        " starts or stops running. "
+        ]]]
+     [:hr]]))
+
 (def code-key
-  {33 :page-up
+  {32 :space
+   33 :page-up
    34 :page-down
    37 :left
    38 :up
@@ -402,7 +460,8 @@
    :up :column-up
    :down :column-down
    :page-up :scroll-up
-   :page-down :scroll-down})
+   :page-down :scroll-down
+   :space :toggle-run})
 
 (defn canvas-key-down
   [e controls]
