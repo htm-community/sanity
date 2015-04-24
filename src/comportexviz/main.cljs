@@ -99,15 +99,9 @@
 (defn comportexviz-app
   [model-tab]
   (viz/init! (tap-c steps-mult))
-  (let [plot-step (atom nil)]
-    ;; channel -> atom
-    (go (loop [c (tap-c steps-mult)]
-          (when-let [state (<! c)]
-            (reset! plot-step state)
-            (recur c))))
-    (cui/comportexviz-app model-tab model main-options viz/viz-options
-                          viz/selection viz/canvas-click controls viz/steps
-                          plot-step viz/state-colors)))
+  (cui/comportexviz-app model-tab model main-options viz/viz-options
+                        viz/selection viz/canvas-click controls viz/steps
+                        viz/state-colors))
 
 (defn set-model!
   [x]

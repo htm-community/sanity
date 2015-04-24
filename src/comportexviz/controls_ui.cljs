@@ -121,16 +121,17 @@
   )
 
 (defn ts-freqs-plot-cmp
-  [plot-step region-key layer-id series-colors]
+  [steps region-key layer-id series-colors]
   (let [series-keys [:active :active-predicted :predicted]
         step-freqs (atom nil)
         agg-freqs-ts (plots/aggregating-ts step-freqs 200)]
-    (add-watch plot-step [:calc-freqs region-key layer-id]
+    (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
                (fn [_ _ _ v]
-                 (let [freqs (-> v :regions region-key
+                 (let [htm (first v)
+                       freqs (-> htm :regions region-key
                                  (core/column-state-freqs layer-id))]
                    (reset! step-freqs freqs))))
-    (fn [plot-step region-key layer-id]
+    (fn [_ _ _ _]
       (let [el-id (str "comportexviz-plot-" (name region-key) (name layer-id))
             el (dom/getElement el-id)]
         ;; draw!
@@ -146,17 +147,17 @@
       )))
 
 (defn plots-tab
-  [plot-step series-colors]
+  [steps series-colors]
   [:div
    [:p.text-muted "Time series of cortical column activity."]
    [:div
-    (when @plot-step
-      (for [[region-key rgn] (:regions @plot-step)
+    (when (first @steps)
+      (for [[region-key rgn] (:regions (first @steps))
             layer-id (core/layers rgn)]
         ^{:key [region-key layer-id]}
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
-         [ts-freqs-plot-cmp plot-step region-key layer-id series-colors]
+         [ts-freqs-plot-cmp steps region-key layer-id series-colors]
          ]))]
    ])
 
@@ -395,7 +396,7 @@
    39 :right
    40 :down})
 
-(def key-controls
+(def key->control-k
   {:left :step-backward
    :right :step-forward
    :up :column-up
@@ -406,15 +407,14 @@
 (defn canvas-key-down
   [e controls]
   (if-let [k (code-key (.-keyCode e))]
-    (let [control-k (get key-controls k)
-          control-f (get controls control-k)]
-      (control-f)
+    (let [control-fn (-> k key->control-k controls)]
+      (control-fn)
       (.preventDefault e))
     true))
 
 (defn comportexviz-app
   [model-tab model main-options viz-options selection canvas-click controls steps
-   plot-step series-colors]
+   series-colors]
   (let [show-help (atom false)]
     [:div
      [navbar main-options model show-help controls viz-options]
@@ -431,7 +431,7 @@
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
           [:params [parameters-tab model selection]]
-          [:plots [plots-tab plot-step series-colors]]
+          [:plots [plots-tab steps series-colors]]
           [:details [details-tab steps selection]]]]
         ]]
       [:div#loading-message "loading"]]]))
