@@ -13,7 +13,7 @@
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def model-config
+(def config
   (atom {:n-regions 1}))
 
 (declare draw-surface-fn)
@@ -126,11 +126,11 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @model-config)]
+  (let [n-regions (:n-regions @config)]
     (with-ui-loading-message
       (main/set-model! (demo/make-model)))))
 
-(def model-config-template
+(def config-template
   [:div.form-horizontal
    [:div.form-group
     [:label.col-sm-5 "Number of regions:"]
@@ -172,7 +172,7 @@
         encoder, plus the last movement as distal input."]
 
    [:h3 "HTM model"]
-   [bind-fields model-config-template model-config]
+   [bind-fields config-template config]
    ]
   )
 

@@ -13,7 +13,7 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def model-config
+(def config
   (atom {:n-regions 1}))
 
 (declare draw-coords-fn)
@@ -113,12 +113,12 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @model-config)]
+  (let [n-regions (:n-regions @config)]
     (with-ui-loading-message
       (main/set-model!
        (demo/n-region-model n-regions)))))
 
-(def model-config-template
+(def config-template
   [:div.form-horizontal
    [:div.form-group
     [:label.col-sm-5 "Number of regions:"]
@@ -148,7 +148,7 @@
     its horizontal acceleration is reversed."]
 
    [:h3 "HTM model"]
-   [bind-fields model-config-template model-config]
+   [bind-fields config-template config]
 
    [:h3 "Input"]
    [:div

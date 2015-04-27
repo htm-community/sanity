@@ -13,9 +13,10 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def model-config
+(def config
   (atom {:n-regions 1
-         :encoder :block}))
+         :encoder :block
+         :world-buffer-count 0}))
 
 (def draw (draw-text-fn 8))
 
@@ -27,10 +28,9 @@
                                      :comportexviz/draw-world
                                      draw)))))
 
-;; used to force Reagent to re-render world-buffer count
-(def world-buffer-trigger (atom true))
-(add-watch main/model ::world-buffer-trigger (fn [_ _ _ _]
-                                               (swap! world-buffer-trigger not)))
+(add-watch main/model ::count-world-buffer
+           (fn [_ _ _ _]
+             (swap! config assoc :world-buffer-count (count world-buffer))))
 
 (def text-to-send
   (atom
@@ -50,8 +50,8 @@ Chifung has a friend."))
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @model-config)
-        encoder (case (:encoder @model-config)
+  (let [n-regions (:n-regions @config)
+        encoder (case (:encoder @config)
                   :block demo/block-encoder
                   :random demo/random-encoder)]
     (with-ui-loading-message
@@ -66,16 +66,16 @@ Chifung has a friend."))
                       (demo/clean-text)
                       (seq))]
     (async/put! world-c {:value (str x)}))
-  (swap! world-buffer-trigger not))
+  (swap! config assoc :world-buffer-count (count world-buffer)))
 
 (defn send-text!
   []
   (when-let [xs (seq (demo/clean-text @text-to-send))]
     (async/onto-chan world-c (for [x xs] {:value (str x)})
                      false)
-    (swap! world-buffer-trigger not)))
+    (swap! config assoc :world-buffer-count (count world-buffer))))
 
-(def model-config-template
+(def config-template
   [:div.form-horizontal
    [:div.form-group
     [:label.col-sm-5 "Number of regions:"]
@@ -107,9 +107,8 @@ Chifung has a friend."))
         mark."]
 
    [:h3 "Input " [:small "Letter sequences"]]
-   ^{:key (str "reagent-refresh-key-" @world-buffer-trigger)}
    [:p.text-info
-    (str (count world-buffer) " queued input values.")]
+    (str (:world-buffer-count @config) " queued input values.")]
    [:div.well
     "Immediate input as you type: "
     [:input {:size 2 :maxLength 1
@@ -129,7 +128,7 @@ Chifung has a friend."))
      "Send text block input"]]
 
    [:h3 "HTM model"]
-   [bind-fields model-config-template model-config]
+   [bind-fields config-template config]
    ]
   )
 

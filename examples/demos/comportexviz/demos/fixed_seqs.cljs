@@ -16,7 +16,7 @@
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
-(def model-config
+(def config
   (atom {:input-stream :directional-steps-1d
          :encoder :block
          :n-regions 1}))
@@ -96,9 +96,9 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @model-config)
+  (let [n-regions (:n-regions @config)
         [model-fn world-fn patterns mixed? xy?]
-        (case (:input-stream @model-config)
+        (case (:input-stream @config)
           :directional-steps-1d
           [demo-dir/n-region-model demo-dir/world-seq nil false false]
           :isolated-1d
@@ -114,7 +114,7 @@
       (reset! main/world (make-world-chan world-fn patterns mixed? xy?))
       )))
 
-(def model-config-template
+(def config-template
   [:div.form-horizontal
    [:div.form-group
     [:label.col-sm-5 "Input stream:"]
@@ -189,7 +189,7 @@
   []
   [:div
    [:p "These demos are all kinds of fixed sequences."]
-   [bind-fields model-config-template model-config]
+   [bind-fields config-template config]
    ])
 
 (defn ^:export init
