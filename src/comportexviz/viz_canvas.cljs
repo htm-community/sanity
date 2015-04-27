@@ -85,15 +85,16 @@
                    :predictive true
                    :temporal-pooling true
                    :scroll-counter 0}
-         :ff-synapses {:active nil
+         :ff-synapses {:to :selected ;; :selected, :all, :none
+                       :active true
                        :inactive nil
                        :disconnected nil
-                       :permanences nil}
+                       :permanences true}
          :distal-synapses {:from :learning ;; :learning, :all, :none
                            :active true
                            :inactive nil
                            :disconnected nil
-                           :permanences nil}
+                           :permanences true}
          :keep-steps 30
          :drawing {:display-mode :one-d ;; :one-d, :two-d
                    :draw-steps 15
@@ -244,9 +245,10 @@
                                    regions))
         this-rgn (get regions sel-rgn)
         this-lyr (get this-rgn sel-lyr)
-        sel-cols (if sel-col [sel-col]
-                     (p/active-columns this-lyr))
-        this-paths (map #(vector sel-rgn sel-lyr %) sel-cols)]
+        to-cols (case (get-in opts [:ff-synapses :to])
+                    :all (p/active-columns this-lyr)
+                    :selected [sel-col])
+        this-paths (map #(vector sel-rgn sel-lyr %) to-cols)]
     ;; trace ff connections downwards
     (loop [path (first this-paths)
            more (rest this-paths)
@@ -823,8 +825,11 @@
       (let [lay (get-in r-lays [sel-rgn sel-lyr])]
         (lay/highlight-element lay ctx sel-dt sel-col)))
     ;; draw ff synapses
-    (when (get-in opts [:ff-synapses :active])
-      (draw-ff-synapses ctx sel-state r-lays i-lays @selection opts))
+    (let [to (get-in opts [:ff-synapses :to])]
+      (when (or (= to :all)
+                (and (= to :selected )
+                     sel-col))
+        (draw-ff-synapses ctx sel-state r-lays i-lays @selection opts)))
     ;; draw selected cells and segments
     (when sel-col
       (draw-cell-segments ctx sel-state r-lays i-lays @selection opts cells-left)))

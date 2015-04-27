@@ -175,9 +175,11 @@
    [:p.text-muted [:small "(scrollable)"]]])
 
 (def viz-options-template
-  (let [item (fn [id label]
-               [:li [:label [:input {:field :checkbox :id id}]
-                     (str " " label)]])
+  (let [chbox (fn [id label]
+                [:div.checkbox
+                 [:label
+                  [:input {:field :checkbox :id id}]
+                  (str " " label)]])
         group (fn [title content]
                 [:div.col-sm-6
                  [:div.panel.panel-default
@@ -188,65 +190,66 @@
      [:p.text-muted "Select drawing options, with immediate effect."]
      [:div.panel.panel-default
       [:div.panel-body
-       [:ul.list-unstyled
-        [:li [:label " Keep "
-              [:input {:field :numeric
-                       :id :keep-steps
-                       :size 4}]
-              " steps of history"]]
-        [:li [:label
-              [:input {:field :radio
-                       :name :drawing.display-mode
-                       :value :one-d}]
-              " Draw "
-              [:input {:field :numeric
-                       :id :drawing.draw-steps
-                       :size 4}]
-              " steps in 1D"]]
-        [:li [:label
-              [:input {:field :radio
-                       :name :drawing.display-mode
-                       :value :two-d}]
-              " Draw one step in 2D"]]
-        ]]]
+       [:div
+        [:label " Keep "
+         [:input {:field :numeric
+                  :id :keep-steps
+                  :size 4}]
+         " steps of history"]]
+       [:div.radio
+        [:label
+         [:input {:field :radio
+                  :name :drawing.display-mode
+                  :value :one-d}]
+         " Draw "
+         [:input {:field :numeric
+                  :id :drawing.draw-steps
+                  :size 4}]
+         " steps in 1D"]]
+       [:div.radio
+        [:label
+         [:input {:field :radio
+                  :name :drawing.display-mode
+                  :value :two-d}]
+         " Draw one step in 2D"]]
+       ]]
      [:div.row
       (group "Inputs"
              [:div.panel-body
-              [:ul.list-unstyled
-               (item :input.active "Active bits")
-               (item :input.predicted "Predicted bits")
-               ]])
+              (chbox :input.active "Active bits")
+              (chbox :input.predicted "Predicted bits")
+              ])
       (group "Columns"
              [:div.panel-body
-              [:ul.list-unstyled
-               (item :columns.overlaps "Overlap scores")
-               (item :columns.active-freq "Activation freq")
-               (item :columns.boosts "Boost factors")
-               (item :columns.n-segments "Num segments")
-               (item :columns.active "Active columns")
-               (item :columns.predictive "Predictive columns")
-               ]])
-      ]
-     [:div.row
+              (chbox :columns.overlaps "Overlap scores")
+              (chbox :columns.active-freq "Activation freq")
+              (chbox :columns.boosts "Boost factors")
+              (chbox :columns.n-segments "Num segments")
+              (chbox :columns.active "Active columns")
+              (chbox :columns.predictive "Predictive columns")
+              ])
       (group "Feed-forward synapses"
              [:div.panel-body
-              [:p.help-block "To all active columns, or the selected column."]
-              [:ul.list-unstyled
-               (item :ff-synapses.active "Active")
-               (item :ff-synapses.inactive "Inactive")
-               (item :ff-synapses.disconnected "Disconnected")
-               (item :ff-synapses.permanences "Permanences")
-               ]])
+              [:div "To "
+               [:select {:field :list
+                         :id :ff-synapses.to}
+                [:option {:key :all} "all active columns"]
+                [:option {:key :selected} "selected column"]
+                [:option {:key :none} "none"]
+                ]]
+              (chbox :ff-synapses.active "Active")
+              (chbox :ff-synapses.inactive "Inactive")
+              (chbox :ff-synapses.disconnected "Disconnected")
+              (chbox :ff-synapses.permanences "Permanences")
+              ])
       (group "Distal synapses"
              [:div.panel-body
               [:p.help-block "To distal dendrite segments of cells in the selected column."]
-              [:ul.list-unstyled
-               (item :distal-synapses.active "Active")
-               (item :distal-synapses.inactive "Inactive")
-               (item :distal-synapses.disconnected "Disconnected")
-               (item :distal-synapses.permanences "Permanences")
-               ]])
-      ]
+              (chbox :distal-synapses.active "Active")
+              (chbox :distal-synapses.inactive "Inactive")
+              (chbox :distal-synapses.disconnected "Disconnected")
+              (chbox :distal-synapses.permanences "Permanences")
+              ])]
      ]))
 
 (defn navbar
@@ -480,12 +483,12 @@
      [help-block show-help]
      [:div.container-fluid
       [:div.row
-       [:div.col-sm-8
+       [:div.col-xs-8
         [:canvas#comportex-viz {:on-click canvas-click
                                 :on-key-down (fn [e] (canvas-key-down e controls))
                                 :tabIndex 1}]
         ]
-       [:div.col-sm-4
+       [:div.col-xs-4
         [tabs
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
