@@ -99,8 +99,7 @@
                    :draw-steps 15
                    :height-px nil ;; set on init / resize
                    :width-px nil ;; set on init / resize
-                   :top-px 40
-                   :world-w-px 150
+                   :top-px 30
                    :bit-w-px 3
                    :bit-h-px 3
                    :bit-shrink 0.85
@@ -151,7 +150,6 @@
         spacer (:h-space-px d-opts)
         height-px (:height-px d-opts)
         top-px (:top-px d-opts)
-        world-w-px (:world-w-px d-opts)
         ;; for now draw inputs and layers in a horizontal stack
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
@@ -160,7 +158,7 @@
                                          true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
-                [{} (+ world-w-px 10)]
+                [{} 0]
                 (core/input-keys model))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
@@ -734,7 +732,7 @@
                         (map lay/right-px)
                         (apply max)
                         (+ (get-in opts [:drawing :h-space-px])))
-        label-top-px 10
+        label-top-px 0
         top-px (get-in opts [:drawing :top-px])
         width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))]
@@ -744,9 +742,6 @@
     (c/text-baseline ctx :top)
     (c/font-style ctx "10px sans-serif")
     (c/fill-style ctx "black")
-    (c/text ctx {:text "Input on selected timestep."
-                 :x 2
-                 :y label-top-px})
     (doseq [[inp-id lay] i-lays]
       (c/text ctx {:text (str (name inp-id) " encoded bits.")
                    :x (:x (layout-bounds lay))
@@ -764,11 +759,6 @@
                    :y (+ label-top-px 10)}))
     (c/text ctx {:text "Cells and distal dendrite segments."
                  :x cells-left :y label-top-px})
-    ;; draw world
-    (let [world-w-px (get-in opts [:drawing :world-w-px])
-          in-value (:value (first (core/input-seq sel-state)))]
-      (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
-        (draw-world in-value ctx 0 top-px world-w-px (- height-px top-px) sel-state)))
     (doseq [dt (range dt0 (min (+ dt0 draw-steps)
                                (count steps)))
             :let [state (nth steps dt)
@@ -877,16 +867,20 @@
                          (-> opts
                              (assoc-in [:drawing :height-px] height-px)
                              (assoc-in [:drawing :width-px] width-px))))))
+
+(defn selected-model-state
+  []
+  (nth @model-steps (:dt @selection) nil))
+
 (defn draw!
   []
   (if (nil? (get-in @viz-options [:drawing :height-px]))
-    (on-resize nil)
+    (on-resize nil) ;; triggers another redraw
     (when (seq @model-steps)
       (let [viz-el (dom/getElement "comportex-viz")
             viz-ctx (c/get-context viz-el "2d")
             tl-el (dom/getElement "comportex-timeline")
-            tl-ctx (c/get-context tl-el "2d")
-            ]
+            tl-ctx (c/get-context tl-el "2d")]
         (draw-viz! viz-ctx
                    @model-steps
                    @viz-layouts
@@ -952,9 +946,8 @@
 
 (defn init!
   [steps-c]
-  (let [vsm (goog.dom.ViewportSizeMonitor.)]
-    (events/listen vsm event-type/RESIZE
-                   on-resize))
+  (events/listen (goog.dom.ViewportSizeMonitor.) event-type/RESIZE
+                 on-resize)
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]

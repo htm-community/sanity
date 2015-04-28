@@ -475,7 +475,7 @@
     true))
 
 (defn comportexviz-app
-  [model-tab model main-options viz-options selection steps
+  [model-tab world-cmp model main-options viz-options selection steps
    viz-click timeline-click controls series-colors]
   (let [show-help (atom false)]
     [:div
@@ -483,17 +483,21 @@
      [help-block show-help]
      [:div.container-fluid
       [:div.row
-       [:div.col-sm-8
+       [:div.col-sm-9
         [:canvas#comportex-timeline {:on-click timeline-click
                                      :style {:width "100%"
                                              :height "2em"}}]
-        [:canvas#comportex-viz {:on-click viz-click
-                                :on-key-down (fn [e] (viz-key-down e controls))
-                                :tabIndex 1
-                                :style {:width "100%"
-                                        :height "100vh"}}]
+        [:div.row
+         [:div.col-sm-3
+          [world-cmp]]
+         [:div.col-sm-9
+          [:canvas#comportex-viz {:on-click viz-click
+                                  :on-key-down (fn [e] (viz-key-down e controls))
+                                  :tabIndex 1
+                                  :style {:width "100%"
+                                          :height "100vh"}}]]]
         ]
-       [:div.col-sm-4
+       [:div.col-sm-3
         [tabs
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
