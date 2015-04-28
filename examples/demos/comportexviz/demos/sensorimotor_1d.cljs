@@ -9,9 +9,6 @@
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [goog.events :as events]
-            [goog.events.EventType :as event-type]
-            [goog.dom.ViewportSizeMonitor]
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
@@ -224,8 +221,7 @@
   []
   (reagent/render (main/comportexviz-app model-tab world-cmp)
                   (dom/getElement "comportexviz-app"))
-  (events/listen (goog.dom.ViewportSizeMonitor.) event-type/RESIZE
-                 on-resize)
+  (.addEventListener js/window "resize" on-resize)
   (reset! main/world world-c)
   (set-model!)
   (swap! main/main-options assoc :sim-go? true))

@@ -3,6 +3,7 @@
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
+            [goog.dom.classes :as classes]
             [goog.string :as gstring]
             [goog.string.format]
             [clojure.string :as str]
@@ -253,7 +254,7 @@
      ]))
 
 (defn navbar
-  [main-options model show-help controls viz-options]
+  [main-options model show-help controls viz-options viz-expanded]
   [:nav.navbar.navbar-default
    [:div.container-fluid
     [:div.navbar-header
@@ -274,7 +275,7 @@
                      (.preventDefault e))
          :title "Step backward in time"}
         [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
-        [:span.sr-only "Step backward"]]]
+        [:span.visible-xs-inline "Step backward"]]]
       ;; step forward
       [:li
        [:button.btn.btn-default.navbar-btn
@@ -285,7 +286,7 @@
                      (.preventDefault e))
          :title "Step forward in time"}
         [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
-        [:span.sr-only "Step forward"]]]
+        [:span.visible-xs-inline "Step forward"]]]
       ;; pause button
       [:li (if-not (:sim-go? @main-options) {:class "hidden"})
        [:button.btn.btn-default.navbar-btn
@@ -326,7 +327,7 @@
                      (.preventDefault e))
          :title "Scroll down visible columns"}
         [:span.glyphicon.glyphicon-arrow-down {:aria-hidden "true"}]
-        [:span.sr-only "Scroll down"]]]
+        [:span.visible-xs-inline "Scroll down"]]]
       ;; scroll up
       [:li
        [:button.btn.btn-default.navbar-btn
@@ -337,7 +338,36 @@
                      (.preventDefault e))
          :title "Scroll down visible columns"}
         [:span.glyphicon.glyphicon-arrow-up {:aria-hidden "true"}]
-        [:span.sr-only "Scroll up"]]]]
+        [:span.visible-xs-inline "Scroll up"]]]
+      ;; expand canvas
+      (when-not @viz-expanded
+        [:li.hidden-xs
+         [:button.btn.btn-default.navbar-btn
+          {:type :button
+           :on-click (fn [e]
+                       (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
+                         (classes/swap el "col-sm-9" "col-sm-12"))
+                       (reset! viz-expanded true)
+                       (.dispatchEvent js/window (js/Event. "resize"))
+                       (.preventDefault e))
+           :title "Expand visualisation"}
+          [:span.glyphicon.glyphicon-resize-full {:aria-hidden "true"}]
+          [:span.sr-only "Expand"]]])
+      ;; un-expand canvas
+      (when @viz-expanded
+        [:li.hidden-xs
+         [:button.btn.btn-default.navbar-btn
+          {:type :button
+           :on-click (fn [e]
+                       (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
+                         (classes/swap el "col-sm-12" "col-sm-9"))
+                       (reset! viz-expanded false)
+                       (.dispatchEvent js/window (js/Event. "resize"))
+                       (.preventDefault e))
+           :title "Un-expand visualisation"}
+          [:span.glyphicon.glyphicon-resize-small {:aria-hidden "true"}]
+          [:span.sr-only "Un-expand"]]])
+      ]
      ;; right-aligned items
      [:ul.nav.navbar-nav.navbar-right
       ;; sim rate
@@ -477,20 +507,21 @@
 (defn comportexviz-app
   [model-tab world-cmp model main-options viz-options selection steps
    viz-click timeline-click controls series-colors]
-  (let [show-help (atom false)]
+  (let [show-help (atom false)
+        viz-expanded (atom false)]
     [:div
-     [navbar main-options model show-help controls viz-options]
+     [navbar main-options model show-help controls viz-options viz-expanded]
      [help-block show-help]
      [:div.container-fluid
       [:div.row
-       [:div.col-sm-9
+       [:div.col-sm-9.viz-expandable
         [:canvas#comportex-timeline {:on-click timeline-click
                                      :style {:width "100%"
                                              :height "2em"}}]
         [:div.row
-         [:div.col-sm-3
+         [:div.col-sm-3.col-lg-2
           [world-cmp]]
-         [:div.col-sm-9
+         [:div.col-sm-9.col-lg-10
           [:canvas#comportex-viz {:on-click viz-click
                                   :on-key-down (fn [e] (viz-key-down e controls))
                                   :tabIndex 1

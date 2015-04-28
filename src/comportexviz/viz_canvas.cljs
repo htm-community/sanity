@@ -11,9 +11,6 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [goog.style :as style]
-            [goog.events :as events]
-            [goog.events.EventType :as event-type]
-            [goog.dom.ViewportSizeMonitor]
             [monet.canvas :as c]
             [monet.core]
             [org.nfrac.comportex.core :as core]
@@ -946,8 +943,7 @@
 
 (defn init!
   [steps-c]
-  (events/listen (goog.dom.ViewportSizeMonitor.) event-type/RESIZE
-                 on-resize)
+  (.addEventListener js/window "resize" on-resize)
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]
