@@ -100,8 +100,8 @@
 (defn comportexviz-app
   [model-tab]
   (viz/init! (tap-c steps-mult))
-  (cui/comportexviz-app model-tab model main-options viz/viz-options
-                        viz/selection viz/canvas-click controls viz/steps
+  (cui/comportexviz-app model-tab model main-options viz/viz-options viz/selection
+                        viz/model-steps viz/viz-click viz/timeline-click controls
                         viz/state-colors))
 
 (defn set-model!

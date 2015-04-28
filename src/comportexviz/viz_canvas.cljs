@@ -10,6 +10,10 @@
                      make-layout]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
+            [goog.style :as style]
+            [goog.events :as events]
+            [goog.events.EventType :as event-type]
+            [goog.dom.ViewportSizeMonitor]
             [monet.canvas :as c]
             [monet.core]
             [org.nfrac.comportex.core :as core]
@@ -21,18 +25,13 @@
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-cache]]))
 
-(def steps (atom []))
-(def layouts (atom {:inputs {}
-                    :regions {}}))
+(def model-steps (atom []))
+(def viz-layouts (atom {:inputs {}
+                        :regions {}}))
 (def selection (atom {:region nil
                       :layer nil
                       :dt 0
                       :col nil}))
-
-(def height-px 900)
-(def ts-height-px 30)
-(def label-top-px (+ ts-height-px 10))
-(def display-top-px (+ label-top-px 30))
 
 ;;; ## Colours
 
@@ -98,6 +97,9 @@
          :keep-steps 30
          :drawing {:display-mode :one-d ;; :one-d, :two-d
                    :draw-steps 15
+                   :height-px nil ;; set on init / resize
+                   :width-px nil ;; set on init / resize
+                   :top-px 40
                    :world-w-px 150
                    :bit-w-px 3
                    :bit-h-px 3
@@ -147,12 +149,14 @@
         d-opts (:drawing opts)
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
+        height-px (:height-px d-opts)
+        top-px (:top-px d-opts)
         world-w-px (:world-w-px d-opts)
         ;; for now draw inputs and layers in a horizontal stack
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
                   (let [topo (p/topology (inputs inp-id))
-                        lay (make-layout topo display-top-px left height-px d-opts
+                        lay (make-layout topo top-px left height-px d-opts
                                          true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -161,7 +165,7 @@
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
-                        lay (make-layout topo display-top-px left height-px d-opts
+                        lay (make-layout topo top-px left height-px d-opts
                                          false display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -175,11 +179,11 @@
            (fn [_ _ old-opts opts]
              (when (not= (:drawing opts)
                          (:drawing old-opts))
-               (reset! layouts (rebuild-layouts (first @steps) opts)))))
+               (reset! viz-layouts (rebuild-layouts (first @model-steps) opts)))))
 
 (defn update-dt-offsets!
   []
-  (swap! layouts
+  (swap! viz-layouts
          (fn [m]
            (let [sel-dt (:dt @selection)
                  draw-steps (get-in @viz-options [:drawing :draw-steps])
@@ -207,7 +211,7 @@
 
 (defn scroll!
   [down?]
-  (swap! layouts
+  (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path scroll-layout down?))
@@ -344,15 +348,16 @@
   (let [nsegbycell (map count segs-by-cell)
         nsegbycell-pad (map (partial max 1) nsegbycell)
         nseg-pad (apply + nsegbycell-pad)
-        segs-left (+ cells-left (get-in opts [:drawing :seg-h-space-px]))
-        col-d-px (get-in opts [:drawing :col-d-px])
+        d-opts (:drawing opts)
+        segs-left (+ cells-left (:seg-h-space-px d-opts))
+        col-d-px (:col-d-px d-opts)
         col-r-px (* col-d-px 0.5)
-        cell-r-px (get-in opts [:drawing :cell-r-px])
-        seg-h-px (get-in opts [:drawing :seg-h-px])
-        seg-w-px (get-in opts [:drawing :seg-w-px])
+        cell-r-px (:cell-r-px d-opts)
+        seg-h-px (:seg-h-px d-opts)
+        seg-w-px (:seg-w-px d-opts)
         seg-r-px (* seg-w-px 0.5)
-        our-height (* 0.95 (.-innerHeight js/window))
-        our-top (+ display-top-px (.-pageYOffset js/window) cell-r-px)
+        our-height (:height-px d-opts)
+        our-top (+ (:top-px d-opts) cell-r-px)
         [col-x col-y] (element-xy cols-lay col dt)]
     (reify PCellsSegmentsLayout
       (seg-xy
@@ -670,55 +675,70 @@
                (n-onscreen lay) -1)
        " of " (p/size-of lay)))
 
-(defn do-draw!
-  []
+(defn draw-timeline!
+  [ctx steps sel-dt opts]
+  (let [current-t (p/timestep (first steps))
+        keep-steps (:keep-steps opts)
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        t-width (/ width-px keep-steps)
+        y-px (/ height-px 2)
+        r-px (min y-px (* t-width 0.5))
+        sel-r-px y-px]
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (c/text-align ctx :center)
+    (c/text-baseline ctx :middle)
+    (c/font-style ctx "bold 10px sans-serif")
+    (doseq [dt (reverse (range keep-steps))
+            :let [t (- current-t dt)
+                  kept? (< dt (count steps))
+                  x-px (- (dec width-px) r-px (* dt t-width))]]
+      (c/fill-style ctx "black")
+      (c/alpha ctx (cond (== dt sel-dt) 1.0 kept? 0.3 :else 0.1))
+      (c/circle ctx {:x x-px :y y-px :r (if (== dt sel-dt) sel-r-px r-px)})
+      (c/fill ctx)
+      (when (or (== dt sel-dt)
+                (and kept? (< keep-steps 100)))
+        (c/fill-style ctx "white")
+        (c/text ctx {:x x-px :y y-px :text (str t)})))
+    (c/alpha ctx 1.0)))
+
+(defn timeline-click
+  [e*]
+  (let [e (.-nativeEvent e*)
+        x (.-offsetX e)
+        steps @model-steps
+        opts @viz-options
+        keep-steps (:keep-steps opts)
+        width-px (.-width (.-target e))
+        t-width (/ width-px keep-steps)
+        click-dt (quot (- (dec width-px) x) t-width)]
+    (when (< click-dt (count @model-steps))
+      (swap! selection assoc :dt click-dt))
+    ))
+
+(defn draw-viz!
+  [ctx steps layouts sel opts]
   (let [{sel-dt :dt
          sel-rgn :region
          sel-lyr :layer
-         sel-col :col} @selection
-        opts @viz-options
-        i-lays (:inputs @layouts)
-        r-lays (:regions @layouts)
+         sel-col :col} sel
+        i-lays (:inputs layouts)
+        r-lays (:regions layouts)
         draw-steps (get-in opts [:drawing :draw-steps])
         ;; in case scrolled back in history
         dt0 (max 0 (- sel-dt (quot draw-steps 2)))
-        sel-state (nth @steps sel-dt)
-        sel-prev-state (nth @steps (inc sel-dt) nil)
-        canvas-el (dom/getElement "comportex-viz")
-        ctx (c/get-context canvas-el "2d")
+        sel-state (nth steps sel-dt)
+        sel-prev-state (nth steps (inc sel-dt) nil)
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
                         (apply max)
                         (+ (get-in opts [:drawing :h-space-px])))
-        width-px (* 0.67 (- (.-innerWidth js/window) 20))]
-    (set! (.-width canvas-el) width-px)
-    (set! (.-height canvas-el) height-px)
+        label-top-px 10
+        top-px (get-in opts [:drawing :top-px])
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    ;; draw timeline
-    (let [current-t (p/timestep (first @steps))
-          keep-steps (:keep-steps opts)
-          right-px (- width-px 50)
-          label-left (+ right-px 25)
-          t-width (/ right-px keep-steps)
-          y-px (/ ts-height-px 2)
-          r-px (min y-px (* t-width 0.5))
-          sel-r-px y-px]
-      (c/text-align ctx :center)
-      (c/text-baseline ctx :middle)
-      (c/font-style ctx "bold 10px sans-serif")
-      (doseq [dt (reverse (range keep-steps))
-              :let [t (- current-t dt)
-                    kept? (< dt (count @steps))
-                    x-px (- right-px r-px (* dt t-width))]]
-        (c/fill-style ctx "black")
-        (c/alpha ctx (cond (== dt sel-dt) 1.0 kept? 0.3 :else 0.1))
-        (c/circle ctx {:x x-px :y y-px :r (if (== dt sel-dt) sel-r-px r-px)})
-        (c/fill ctx)
-        (when (or (== dt sel-dt)
-                  (and kept? (< keep-steps 100)))
-          (c/fill-style ctx "white")
-          (c/text ctx {:x x-px :y y-px :text (str t)})))
-      (c/alpha ctx 1.0))
     ;; draw labels
     (c/text-align ctx :start)
     (c/text-baseline ctx :top)
@@ -748,11 +768,11 @@
     (let [world-w-px (get-in opts [:drawing :world-w-px])
           in-value (:value (first (core/input-seq sel-state)))]
       (when-let [draw-world (:comportexviz/draw-world (meta in-value))]
-        (draw-world in-value ctx 0 display-top-px world-w-px (- height-px display-top-px) sel-state)))
+        (draw-world in-value ctx 0 top-px world-w-px (- height-px top-px) sel-state)))
     (doseq [dt (range dt0 (min (+ dt0 draw-steps)
-                               (count @steps)))
-            :let [state (nth @steps dt)
-                  prev-state (nth @steps (inc dt) nil)
+                               (count steps)))
+            :let [state (nth steps dt)
+                  prev-state (nth steps (inc dt) nil)
                   dt-cache (::cache (meta state))]]
       ;; draw encoded inbits
       (doseq [[inp-id lay] i-lays
@@ -829,16 +849,53 @@
       (when (or (= to :all)
                 (and (= to :selected )
                      sel-col))
-        (draw-ff-synapses ctx sel-state r-lays i-lays @selection opts)))
+        (draw-ff-synapses ctx sel-state r-lays i-lays sel opts)))
     ;; draw selected cells and segments
     (when sel-col
-      (draw-cell-segments ctx sel-state r-lays i-lays @selection opts cells-left)))
+      (draw-cell-segments ctx sel-state r-lays i-lays sel opts cells-left)))
   nil)
 
+(defn set-canvas-pixels-from-element-size!
+  [el min-px-width]
+  (let [size-px (style/getSize el)
+        width-px (-> (.-width size-px)
+                     (max min-px-width))
+        height-px (.-height size-px)]
+    (set! (.-width el) width-px)
+    (set! (.-height el) height-px)))
+
+(defn on-resize
+  [_]
+  (let [viz-el (dom/getElement "comportex-viz")
+        tl-el (dom/getElement "comportex-timeline")
+        size-px (style/getSize viz-el)
+        width-px (.-width size-px)
+        height-px (.-height size-px)]
+    (set-canvas-pixels-from-element-size! viz-el 300)
+    (set-canvas-pixels-from-element-size! tl-el 300)
+    (swap! viz-options (fn [opts]
+                         (-> opts
+                             (assoc-in [:drawing :height-px] height-px)
+                             (assoc-in [:drawing :width-px] width-px))))))
 (defn draw!
   []
-  (when (seq @steps)
-    (do-draw!)))
+  (if (nil? (get-in @viz-options [:drawing :height-px]))
+    (on-resize nil)
+    (when (seq @model-steps)
+      (let [viz-el (dom/getElement "comportex-viz")
+            viz-ctx (c/get-context viz-el "2d")
+            tl-el (dom/getElement "comportex-timeline")
+            tl-ctx (c/get-context tl-el "2d")
+            ]
+        (draw-viz! viz-ctx
+                   @model-steps
+                   @viz-layouts
+                   @selection
+                   @viz-options)
+        (draw-timeline! tl-ctx
+                        @model-steps
+                        (:dt @selection)
+                        @viz-options)))))
 
 (defn step-forward!
   [sim-step!]
@@ -850,19 +907,19 @@
 (defn step-backward!
   []
   (let [;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count @steps) 2))]
+        max-dt (max 0 (- (count @model-steps) 2))]
     (swap! selection update-in [:dt]
           (fn [x] (min (inc x) max-dt)))))
 
-(defn canvas-click
+(defn viz-click
   [e*]
   (let [e (.-nativeEvent e*)
         x (.-offsetX e)
         y (.-offsetY e)
-        i-lays (:inputs @layouts)
-        r-lays (:regions @layouts)
+        i-lays (:inputs @viz-layouts)
+        r-lays (:regions @viz-layouts)
         ;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count @steps) 2))
+        max-dt (max 0 (- (count @model-steps) 2))
         hit? (atom false)]
     ;; check inputs
     (doseq [[k lay] i-lays
@@ -887,7 +944,7 @@
 
 (defn oh-look-the-model-changed!
   [htm]
-  (reset! layouts (rebuild-layouts htm @viz-options))
+  (reset! viz-layouts (rebuild-layouts htm @viz-options))
   (let [region-key (first (core/region-keys htm))
         layer-id (first (core/layers (get-in htm [:regions region-key])))]
     (swap! selection assoc :region region-key :layer layer-id
@@ -895,11 +952,14 @@
 
 (defn init!
   [steps-c]
+  (let [vsm (goog.dom.ViewportSizeMonitor.)]
+    (events/listen vsm event-type/RESIZE
+                   on-resize))
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]
           (let [x (vary-meta x* assoc ::cache (atom {}))
                 keep-steps (:keep-steps @viz-options)]
-            (swap! steps (fn [xs]
-                           (take keep-steps (cons x xs)))))
+            (swap! model-steps (fn [xs]
+                                 (take keep-steps (cons x xs)))))
           (recur)))))

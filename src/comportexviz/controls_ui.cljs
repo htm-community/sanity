@@ -466,7 +466,7 @@
    :page-down :scroll-down
    :space :toggle-run})
 
-(defn canvas-key-down
+(defn viz-key-down
   [e controls]
   (if-let [k (code-key (.-keyCode e))]
     (let [control-fn (-> k key->control-k controls)]
@@ -475,20 +475,25 @@
     true))
 
 (defn comportexviz-app
-  [model-tab model main-options viz-options selection canvas-click controls steps
-   series-colors]
+  [model-tab model main-options viz-options selection steps
+   viz-click timeline-click controls series-colors]
   (let [show-help (atom false)]
     [:div
      [navbar main-options model show-help controls viz-options]
      [help-block show-help]
      [:div.container-fluid
       [:div.row
-       [:div.col-xs-8
-        [:canvas#comportex-viz {:on-click canvas-click
-                                :on-key-down (fn [e] (canvas-key-down e controls))
-                                :tabIndex 1}]
+       [:div.col-sm-8
+        [:canvas#comportex-timeline {:on-click timeline-click
+                                     :style {:width "100%"
+                                             :height "2em"}}]
+        [:canvas#comportex-viz {:on-click viz-click
+                                :on-key-down (fn [e] (viz-key-down e controls))
+                                :tabIndex 1
+                                :style {:width "100%"
+                                        :height "100vh"}}]
         ]
-       [:div.col-xs-4
+       [:div.col-sm-4
         [tabs
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
