@@ -21,97 +21,129 @@
          :encoder :block
          :n-regions 1}))
 
-(defn current-values
-  [currs patterns]
-  (map (fn [[id index]]
-         (get-in patterns [id index]))
-       currs))
+(def model-info
+  {:directional-steps-1d {:model-fn demo-dir/n-region-model
+                          :world-fn demo-dir/world-seq
+                          :patterns {:dir [[0 1] [0 -1]]
+                                     :pos (plt/indexed (range (inc demo-dir/numb-max)))}
+                          :mixed? true
+                          :xy? true}
+   :isolated-1d {:model-fn demo-i1d/n-region-model
+                 :world-fn demo-i1d/world-seq
+                 :patterns demo-i1d/patterns
+                 :mixed? false
+                 :xy? false}
+   :mixed-gaps-1d {:model-fn demo-mix/n-region-model
+                   :world-fn demo-mix/world-seq
+                   :patterns demo-mix/patterns
+                   :mixed? true
+                   :xy? false}
+   :isolated-2d {:model-fn demo-i2d/n-region-model
+                 :world-fn demo-i2d/world-seq
+                 :patterns demo-i2d/patterns
+                 :mixed? false
+                 :xy? true}})
 
-(defn draw-pattern-fn
-  [patterns mixed? xy?]
+(defn draw-world
+  "Currs should be a map from patt-id to index (current position in the pattern)."
+  [ctx currs patterns xy?]
   (let [patterns-xy (if xy?
                       patterns
                       (util/remap plt/indexed patterns))
         x-max (reduce max (map first (mapcat val patterns-xy)))
         y-max (reduce max (map second (mapcat val patterns-xy)))
         x-lim [(- 0 1) (+ x-max 1)]
-        y-lim [(- 0 1) (+ y-max 1)]]
-    (fn [this ctx left-px top-px w-px h-px state]
-      (let [[plot-x plot-y] [10 120]
-            plot-size {:w (- w-px 20)
-                       :h 200}
-            plot (plt/xy-plot ctx plot-size x-lim y-lim)
-            curr-patts (if mixed?
-                         this
-                         (when (:id this)
-                           [[(:id this) (:index this)]]))
-            label (if mixed?
-                    (keys curr-patts)
-                    (if (seq curr-patts) (name (ffirst curr-patts))))]
-        (c/save ctx)
-        (c/translate ctx left-px top-px)
-        ;; draw pattern name and current value
-        (doto ctx
-          (c/fill-style "black")
-          (c/font-style "14px monospace")
-          (c/text {:x plot-x :y (quot plot-y 2)
-                   :text (or label "_")})
-          (c/text {:x plot-x :y (+ (quot plot-y 2) 20)
-                   :text (current-values curr-patts patterns)}))
-        ;; draw the plot
-        (c/translate ctx plot-x plot-y)
-        (plt/frame! plot)
-        (c/stroke-style ctx "lightgray")
-        (plt/grid! plot {})
-        (c/stroke-style ctx "black")
-        (doseq [[id index] curr-patts]
-          (plt/line! plot (patterns-xy id))
-          (doseq [[i [x y]] (plt/indexed (patterns-xy id))]
-            (c/fill-style ctx (if (== i index) "red" "lightgrey"))
-            (plt/point! plot x y 4)))
-        (c/restore ctx)))))
+        y-lim [(- 0 1) (+ y-max 1)]
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        plot-size {:w width-px
+                   :h 200}
+        plot (plt/xy-plot ctx plot-size x-lim y-lim)]
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (plt/frame! plot)
+    (c/stroke-style ctx "lightgray")
+    (plt/grid! plot {})
+    (c/stroke-style ctx "black")
+    (doseq [[patt-id index] currs]
+      (plt/line! plot (patterns-xy patt-id))
+      (doseq [[i [x y]] (plt/indexed (patterns-xy patt-id))]
+        (c/fill-style ctx (if (== i index) "red" "lightgrey"))
+        (plt/point! plot x y 4)))))
 
-(defn draw-directional-steps-fn
-  [numb-max]
-  (let [patterns {:dir [[0 1] [0 -1]]
-                  :pos (plt/indexed (range (inc numb-max)))}
-        draw (draw-pattern-fn patterns true true)]
-    (fn [this ctx left-px top-px w-px h-px state]
-      (let [[dir i] this]
-        (draw {:dir (case dir :up 0 :down 1)
-               :pos i}
-              ctx left-px top-px w-px h-px state)))))
+;; fluid canvas - resizes drawing area as element stretches
+
+(def trigger-redraw (atom 0))
+
+(defn on-resize
+  [_]
+  (let [el (dom/getElement "comportex-world")]
+    (viz/set-canvas-pixels-from-element-size! el 160)
+    (swap! trigger-redraw inc)))
+
+(defn pattern-index-map
+  [in-value mixed? model-id]
+  (case model-id
+    :directional-steps-1d
+    (let [[dir i] in-value]
+      {:dir (case dir :up 0 :down 1)
+       :pos i})
+    ;; default case
+    (if mixed?
+      in-value
+      (when (:id in-value)
+        {(:id in-value) (:index in-value)}))
+    ))
+
+(defn world-cmp
+  []
+  (when-let [htm (viz/selected-model-state)]
+    (let [in-value (:value (first (core/input-seq htm)))
+          model-id (::model-id (meta in-value))
+          {:keys [patterns mixed? xy?]} (model-info model-id)
+          currs (pattern-index-map in-value mixed? model-id)
+          canvas (dom/getElement "comportex-world")]
+      (when canvas
+        (when (zero? @trigger-redraw)
+          (on-resize nil))
+        (let [ctx (c/get-context canvas "2d")]
+          (draw-world ctx currs patterns xy?)
+          ))
+      [:div
+       [:p.muted [:small "Input on selected timestep."]]
+       [:table.table
+        [:tbody
+         [:tr
+          [:th "pattern"]
+          [:th "value"]]
+         (for [[patt-id v] currs]
+           ^{:key (str patt-id v)}
+           [:tr
+            [:td (str patt-id)]
+            [:td v
+             (when (and (= model-id :directional-steps-1d)
+                        (= patt-id :dir))
+               (str " (" (first in-value) ")"))]])]]
+       [:canvas#comportex-world {:style {:width "100%"
+                                         :height "300px"}}]])))
 
 (defn make-world-chan
-  [world-seq-fn patterns mixed? xy?]
-  (let [draw (if patterns
-               (draw-pattern-fn patterns mixed? xy?)
-               (draw-directional-steps-fn demo-dir/numb-max))
-        world-c (async/chan (async/buffer 1)
-                            (map #(vary-meta % assoc
-                                             :comportexviz/draw-world
-                                             draw)))]
+  [world-seq-fn model-id]
+  (let [world-c (async/chan (async/buffer 1)
+                            (map #(vary-meta % assoc ::model-id model-id)))]
     (async/onto-chan world-c (world-seq-fn) false)
     world-c))
 
 (defn set-model!
   []
   (let [n-regions (:n-regions @config)
-        [model-fn world-fn patterns mixed? xy?]
-        (case (:input-stream @config)
-          :directional-steps-1d
-          [demo-dir/n-region-model demo-dir/world-seq nil false false]
-          :isolated-1d
-          [demo-i1d/n-region-model demo-i1d/world-seq demo-i1d/patterns false false]
-          :mixed-gaps-1d
-          [demo-mix/n-region-model demo-mix/world-seq demo-mix/patterns true false]
-          :isolated-2d
-          [demo-i2d/n-region-model demo-i2d/world-seq demo-i2d/patterns false true])]
+        model-id (:input-stream @config)
+        {:keys [model-fn world-fn xy?]} (model-info model-id)]
     (async/close! @main/world)
-    (swap! viz/viz-options assoc-in [:drawing :display-mode] (if xy? :two-d :one-d))
+    (swap! viz/viz-options assoc-in [:drawing :display-mode]
+           (if (= model-id :isolated-2d) :two-d :one-d))
     (with-ui-loading-message
       (main/set-model! (model-fn n-regions))
-      (reset! main/world (make-world-chan world-fn patterns mixed? xy?))
+      (reset! main/world (make-world-chan world-fn (:input-stream @config)))
       )))
 
 (def config-template
@@ -194,6 +226,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-cmp)
                   (dom/getElement "comportexviz-app"))
+  (.addEventListener js/window "resize" on-resize)
   (swap! main/main-options assoc :sim-go? true))

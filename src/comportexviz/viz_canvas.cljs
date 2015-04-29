@@ -155,7 +155,7 @@
                                          true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
-                [{} 0]
+                [{} 6]
                 (core/input-keys model))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]

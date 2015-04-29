@@ -129,22 +129,22 @@
   []
   (when-let [htm (viz/selected-model-state)]
     (let [in-value (:value (first (core/input-seq htm)))
-          {:keys [field position next-saccade]} in-value
           canvas (dom/getElement "comportex-world")]
       (when canvas
         (when (zero? @trigger-redraw)
           (on-resize nil))
         (let [ctx (c/get-context canvas "2d")]
           (draw-world ctx in-value)))
-      [:div
-       [:p.muted [:small "Input on selected timestep."]]
-       [:table.table
-        [:tr [:th "val"]
-         [:td (str (get field position))]]
-        [:tr [:th "next"]
-         [:td (if (neg? next-saccade) "" "+") next-saccade]]]
-       [:canvas#comportex-world {:style {:width "100%"
-                                         :height "300px"}}]])))
+      (let [{:keys [field position next-saccade]} in-value]
+        [:div
+         [:p.muted [:small "Input on selected timestep."]]
+         [:table.table
+          [:tr [:th "val"]
+           [:td (str (get field position))]]
+          [:tr [:th "next"]
+           [:td (if (neg? next-saccade) "" "+") next-saccade]]]
+         [:canvas#comportex-world {:style {:width "100%"
+                                           :height "300px"}}]]))))
 
 (defn send-input-stream!
   []

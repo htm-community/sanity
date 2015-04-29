@@ -1,13 +1,14 @@
 (ns comportexviz.demos.coordinates-2d
   (:require [org.nfrac.comportex.demos.coordinates-2d :as demo]
+            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.main :as main]
+            [comportexviz.viz-canvas :as viz]
+            [comportexviz.plots-canvas :as plt]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [comportexviz.viz-canvas :as viz]
-            [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
@@ -16,16 +17,11 @@
 (def config
   (atom {:n-regions 1}))
 
-(declare draw-coords-fn)
-
 (def world-c
   (async/chan (async/buffer 1)
-              (comp (map (util/keep-history-middleware
-                          50 #(select-keys % [:x :y :vx :vy])
-                          :history))
-                    (map #(vary-meta % assoc
-                                     :comportexviz/draw-world
-                                     (draw-coords-fn demo/max-pos))))))
+              (map (util/keep-history-middleware
+                    50 #(select-keys % [:x :y :vx :vy])
+                    :history))))
 
 (def control-c (async/chan))
 
@@ -65,51 +61,76 @@
    :w w
    :h h})
 
-(defn draw-coords-fn
-  [max-pos]
-  (let [x-lim [(- max-pos) max-pos]
-        y-lim [(- max-pos) max-pos]]
-    (fn [this ctx left-px top-px w-px h-px state]
-      (let [[plot-x plot-y] [10 100]
-            plot-size {:w (- w-px 20)
-                       :h (- w-px 20)}
-            plot (plt/xy-plot ctx plot-size x-lim y-lim)
-            x-scale (plt/scale-fn x-lim (:w plot-size))
-            y-scale (plt/scale-fn y-lim (:h plot-size))
-            {:keys [x y vx vy]} this
-            history (:history (meta this))
-            r-px (- (x-scale demo/radius) (x-scale 0))]
-        (c/save ctx)
-        (c/translate ctx left-px top-px)
-        ;; draw coordinates text
-        (doto ctx
-          (c/fill-style "black")
-          (c/font-style "14px monospace")
-          (c/text {:x plot-x :y (quot plot-y 2)
-                   :text (str "(" x "," y ")")}))
-        ;; draw the plot
-        (c/translate ctx plot-x plot-y)
-        (plt/frame! plot)
-        (c/stroke-style ctx "lightgray")
-        (plt/grid! plot {:grid-every 2})
-        ;; draw the axes
-        (c/stroke-style ctx "black")
-        (plt/draw-grid ctx (map x-scale x-lim) (map y-scale y-lim)
-                       [(round (x-scale 0))] [(round (y-scale 0))])
-        ;; draw the radius
-        (c/fill-style ctx "rgba(255,0,0,0.25)")
-        (c/fill-rect ctx (centred-rect (x-scale x) (y-scale y)
-                                       (* 2 r-px) (* 2 r-px)))
-        ;; draw the locations and headings
-        (c/stroke-style ctx "black")
-        (c/fill-style ctx "yellow")
-        (doseq [[i {:keys [x y vx vy]}] (map-indexed vector history)]
-          (if (== (inc i) (count history))
-            (c/alpha ctx 1)
-            (c/alpha ctx (/ (inc i) (count history) 2)))
-          (draw-arrow ctx {:x (x-scale x) :y (y-scale y)
-                           :angle (Math/atan2 vy vx)})))
-      (c/restore ctx))))
+(defn draw-world
+  [ctx in-value]
+  (let [max-pos demo/max-pos
+        radius demo/radius
+        x-lim [(- max-pos) max-pos]
+        y-lim [(- max-pos) max-pos]
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        edge-px (min width-px height-px)
+        plot-size {:w edge-px
+                   :h edge-px}
+        plot (plt/xy-plot ctx plot-size x-lim y-lim)
+        x-scale (plt/scale-fn x-lim (:w plot-size))
+        y-scale (plt/scale-fn y-lim (:h plot-size))
+        {:keys [x y vx vy]} in-value
+        history (:history (meta in-value))
+        r-px (- (x-scale radius) (x-scale 0))]
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (plt/frame! plot)
+    (c/stroke-style ctx "lightgray")
+    (plt/grid! plot {:grid-every 2})
+    ;; draw the axes
+    (c/stroke-style ctx "black")
+    (plt/draw-grid ctx (map x-scale x-lim) (map y-scale y-lim)
+                   [(round (x-scale 0))] [(round (y-scale 0))])
+    ;; draw the radius
+    (c/fill-style ctx "rgba(255,0,0,0.25)")
+    (c/fill-rect ctx (centred-rect (x-scale x) (y-scale y)
+                                   (* 2 r-px) (* 2 r-px)))
+    ;; draw the locations and headings
+    (c/stroke-style ctx "black")
+    (c/fill-style ctx "yellow")
+    (doseq [[i {:keys [x y vx vy]}] (map-indexed vector history)]
+      (if (== (inc i) (count history))
+        (c/alpha ctx 1)
+        (c/alpha ctx (/ (inc i) (count history) 2)))
+      (draw-arrow ctx {:x (x-scale x) :y (y-scale y)
+                       :angle (Math/atan2 vy vx)}))
+    ))
+
+;; fluid canvas - resizes drawing area as element stretches
+
+(def trigger-redraw (atom 0))
+
+(defn on-resize
+  [_]
+  (let [el (dom/getElement "comportex-world")]
+    (viz/set-canvas-pixels-from-element-size! el 160)
+    (swap! trigger-redraw inc)))
+
+(defn world-cmp
+  []
+  (when-let [htm (viz/selected-model-state)]
+    (let [in-value (:value (first (core/input-seq htm)))
+          canvas (dom/getElement "comportex-world")]
+      (when canvas
+        (when (zero? @trigger-redraw)
+          (on-resize nil))
+        (let [ctx (c/get-context canvas "2d")]
+          (draw-world ctx in-value)))
+      (let [{:keys [x y vx vy]} in-value]
+        [:div
+         [:p.muted [:small "Input on selected timestep."]]
+         [:table.table
+          [:tr [:th "x"]
+           [:td x]]
+          [:tr [:th "y"]
+           [:td y]]]
+         [:canvas#comportex-world {:style {:width "100%"
+                                           :height "300px"}}]]))))
 
 (defn set-model!
   []
@@ -170,8 +191,9 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-cmp)
                   (dom/getElement "comportexviz-app"))
+  (.addEventListener js/window "resize" on-resize)
   (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
   (reset! main/world world-c)
   (feed-world!)
