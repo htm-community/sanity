@@ -98,9 +98,9 @@
 ;;; ## Entry point
 
 (defn comportexviz-app
-  [model-tab world-cmp]
+  [model-tab world-pane]
   (viz/init! (tap-c steps-mult))
-  (cui/comportexviz-app model-tab world-cmp model main-options viz/viz-options viz/selection
+  (cui/comportexviz-app model-tab world-pane model main-options viz/viz-options viz/selection
                         viz/model-steps viz/viz-click viz/timeline-click controls
                         viz/state-colors))
 

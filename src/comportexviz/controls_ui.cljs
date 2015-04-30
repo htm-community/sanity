@@ -505,7 +505,7 @@
     true))
 
 (defn comportexviz-app
-  [model-tab world-cmp model main-options viz-options selection steps
+  [model-tab world-pane model main-options viz-options selection steps
    viz-click timeline-click controls series-colors]
   (let [show-help (atom false)
         viz-expanded (atom false)]
@@ -520,7 +520,7 @@
                                              :height "2em"}}]
         [:div.row
          [:div.col-sm-3.col-lg-2
-          [world-cmp]]
+          [world-pane]]
          [:div.col-sm-9.col-lg-10
           [:canvas#comportex-viz {:on-click viz-click
                                   :on-key-down (fn [e] (viz-key-down e controls))

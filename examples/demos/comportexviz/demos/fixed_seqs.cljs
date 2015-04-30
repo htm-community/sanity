@@ -94,7 +94,7 @@
         {(:id in-value) (:index in-value)}))
     ))
 
-(defn world-cmp
+(defn world-pane
   []
   (when-let [htm (viz/selected-model-state)]
     (let [in-value (:value (first (core/input-seq htm)))
@@ -226,7 +226,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-cmp)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
   (.addEventListener js/window "resize" on-resize)
   (swap! main/main-options assoc :sim-go? true))

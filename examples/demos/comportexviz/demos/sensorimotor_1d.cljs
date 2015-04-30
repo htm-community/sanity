@@ -125,7 +125,7 @@
     (viz/set-canvas-pixels-from-element-size! el 160)
     (swap! trigger-redraw inc)))
 
-(defn world-cmp
+(defn world-pane
   []
   (when-let [htm (viz/selected-model-state)]
     (let [in-value (:value (first (core/input-seq htm)))
@@ -219,7 +219,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-cmp)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
   (.addEventListener js/window "resize" on-resize)
   (reset! main/world world-c)
