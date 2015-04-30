@@ -1,7 +1,9 @@
 (ns comportexviz.demos.q-learning-1d
   (:require [org.nfrac.comportex.demos.q-learning-1d :as demo]
+            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
+            [comportexviz.viz-canvas :as viz]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -16,14 +18,9 @@
 (def config
   (atom {:n-regions 1}))
 
-(declare draw-surface-fn)
-
 (def world-c
   (async/chan (async/buffer 1)
-              (comp (map (util/frequencies-middleware :x :freqs))
-                    (map #(vary-meta % assoc
-                                     :comportexviz/draw-world
-                                     (draw-surface-fn demo/surface))))))
+              (map (util/frequencies-middleware :x :freqs))))
 
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
@@ -32,97 +29,173 @@
   (let [step-c (main/tap-c main/steps-mult)]
     (demo/feed-world-c-with-actions! step-c world-c main/model)))
 
-(defn draw-surface-fn
-  [surface]
-  (let [x-max (count surface)
+(defn draw-world
+  [ctx in-value htm]
+  (let [surface demo/surface
+        surface-xy (mapv vector (range) surface)
+        x-max (count surface)
         y-max (reduce max surface)
         x-lim [(- 0 1) (+ x-max 1)]
         y-lim [(+ y-max 1) 0]
-        surface-xy (mapv vector (range) surface)]
-    (fn [this ctx left-px top-px w-px h-px state]
-      (let [[plot-x plot-y] [0 160]
-            plot-size {:w (- w-px 0)
-                       :h 100}
-            label-y 10
-            alyr (get-in state [:regions :action :layer-3])
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        plot-size {:w width-px
+                   :h 100}]
+    (c/save ctx)
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    ;; draw Q values for right/left at each position
+    (let [qplot-size {:w (:w plot-size) :h 40}
+          qplot-lim [0 2]
+          qplot (plt/xy-plot ctx qplot-size x-lim qplot-lim)]
+      (plt/frame! qplot)
+      (doseq [[state-action q] (:Q-map in-value)
+              :let [{:keys [x dx]} state-action]]
+        (c/fill-style ctx (if (pos? q) "green" "red"))
+        (c/alpha ctx (abs q))
+        (cond
+          ;; from left
+          (pos? dx)
+          (plt/rect! qplot (- x 0.6) 0 0.6 1)
+          ;; from right
+          (neg? dx)
+          (plt/rect! qplot x 1 0.6 1))
+        )
+      ;; draw ticks to separate left/right indicators
+      (c/alpha ctx 0.25)
+      (c/fill-style ctx "black")
+      (doseq [x (range (inc (count surface)))]
+        (plt/line! qplot [[x 0] [x 2]]))
+      )
+    (c/alpha ctx 1)
+    ;; draw surface and current position
+    (c/translate ctx 0 40)
+    (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
+      (plt/frame! plot)
+      (c/stroke-style ctx "lightgray")
+      (plt/grid! plot {})
+      (c/stroke-style ctx "black")
+      (plt/line! plot surface-xy)
+      (c/stroke-style ctx "yellow")
+      (c/fill-style ctx "#6666ff")
+      (plt/point! plot (:x in-value) (:y in-value) 4))
+    ;; histogram
+    (c/translate ctx 0 (:h plot-size))
+    (let [freqs (:freqs (meta in-value))
+          hist-lim [0 (inc (apply max (vals freqs)))]
+          histogram (plt/xy-plot ctx plot-size x-lim hist-lim)]
+      ;; draw the plot
+                                        ;(plt/frame! histogram)
+      (c/stroke-style ctx "black")
+      (doseq [[x f] freqs]
+        (plt/line! histogram [[x 0] [x f]])))
+    (c/restore ctx)
+    ))
+
+;; fluid canvas - resizes drawing area as element stretches
+
+(def trigger-redraw (atom 0))
+
+(defn on-resize
+  [_]
+  (let [el (dom/getElement "comportex-world")]
+    (viz/set-canvas-pixels-from-element-size! el 160)
+    (swap! trigger-redraw inc)))
+
+(defn signed-str [x] (str (if (neg? x) "" "+") x))
+
+(defn world-pane
+  []
+  (when-let [htm (viz/selected-model-state)]
+    (let [in-value (:value (first (core/input-seq htm)))
+          canvas (dom/getElement "comportex-world")]
+      (when canvas
+        (when (zero? @trigger-redraw)
+          (on-resize nil))
+        (let [ctx (c/get-context canvas "2d")]
+          (draw-world ctx in-value htm)))
+      (let [alyr (get-in htm [:regions :action :layer-3])
             qinfo (get-in alyr [:prior-state :Q-info])
-            {:keys [q-alpha q-discount]} (:spec alyr)]
-        (c/save ctx)
-        (c/translate ctx left-px top-px)
-        ;; draw current value
-        (doto ctx
-          (c/fill-style "black")
-          (c/font-style "14px monospace")
-          (c/text {:x plot-x :y label-y
-                   :text (str "x " (:x this)
-                              " dx " (if (neg? (:dx this)) "" "+") (:dx this))})
-          (c/text {:x plot-x :y (+ label-y 20)
-                   :text (str "y " (:y this)
-                              " dy "(if (neg? (:dy this)) "" "+") (:dy this))})
-          (c/font-style "12px sans-serif")
-          (c/text {:x plot-x :y (+ label-y 40)
-                   :text (str "prior: reward " (gstr/format "%.2f" (:reward qinfo 0)))})
-          (c/text {:x plot-x :y (+ label-y 60)
-                   :text (str "Q=" (gstr/format "%.3f" (:Qt qinfo 0))
-                              " Qn=" (gstr/format "%.3f" (:Q-val (:prior-state alyr) 0))
-                              )})
-          (c/text {:x plot-x :y (+ label-y 80)
-                   :text "adjustment:"})
-          (c/text {:x plot-x :y (+ label-y 100)
-                   :text (str (gstr/format "%.2f" q-alpha)
-                              "(R + " (gstr/format "%.2f" q-discount)
-                              "[Qn] - Q)")})
-          (c/text {:x plot-x :y (+ label-y 120)
-                   :text (str " = " (gstr/format "%.3f" (:adj qinfo 0)))}))
-        ;; draw the plots
-        (c/translate ctx plot-x plot-y)
-        ;; draw Q values for right/left at each position
-        (let [qplot-size {:w (:w plot-size) :h 40}
-              qplot-lim [0 2]
-              qplot (plt/xy-plot ctx qplot-size x-lim qplot-lim)]
-          (plt/frame! qplot)
-          (doseq [[state-action q] (:Q-map this)
-                  :let [{:keys [x dx]} state-action]]
-            (c/fill-style ctx (if (pos? q) "green" "red"))
-            (c/alpha ctx (abs q))
-            (cond
-             ;; from left
-             (pos? dx)
-             (plt/rect! qplot (- x 0.6) 0 0.6 1)
-             ;; from right
-             (neg? dx)
-             (plt/rect! qplot x 1 0.6 1))
-            )
-          ;; draw ticks to separate left/right indicators
-          (c/alpha ctx 0.25)
-          (c/fill-style ctx "black")
-          (doseq [x (range (inc (count surface)))]
-            (plt/line! qplot [[x 0] [x 2]]))
-          )
-        (c/alpha ctx 1)
-        ;; draw surface and current position
-        (c/translate ctx 0 40)
-        (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
-          (plt/frame! plot)
-          (c/stroke-style ctx "lightgray")
-          (plt/grid! plot {})
-          (c/stroke-style ctx "black")
-          (plt/line! plot surface-xy)
-          (c/stroke-style ctx "yellow")
-          (c/fill-style ctx "#6666ff")
-          (plt/point! plot (:x this) (:y this) 4))
-        ;; histogram
-        (c/translate ctx 0 (:h plot-size))
-        (let [freqs (:freqs (meta this))
-              hist-lim [0 (inc (apply max (vals freqs)))]
-              histogram (plt/xy-plot ctx plot-size x-lim hist-lim)]
-          ;; draw the plot
-          ;(plt/frame! histogram)
-          (c/stroke-style ctx "black")
-          (doseq [[x f] freqs]
-            (plt/line! histogram [[x 0] [x f]])))
-        (c/restore ctx)
-        ))))
+            {:keys [q-alpha q-discount]} (:spec alyr)
+            DELTA (gstr/unescapeEntities "&Delta;")
+            TIMES (gstr/unescapeEntities "&times;")
+            Q_T [:var "Q" [:sub "t"]]
+            Q_T+1 [:var.text-nowrap "Q" [:sub "t+1"]]
+            R_T+1 [:var.text-nowrap "R" [:sub "t+1"]]
+            ]
+        [:div
+         [:p.muted [:small "Input on selected timestep."]]
+         [:table.table.table-condensed
+          [:tr
+           [:th "x"]
+           [:td [:small "position"]]
+           [:td (:x in-value)]]
+          [:tr
+           [:th "y"]
+           [:td [:small "objective"]]
+           [:td (-> (:y in-value) (.toFixed 1))]]
+          [:tr
+           [:th (str DELTA "x")]
+           [:td [:small "action"]]
+           [:td (signed-str (:dx in-value))]]
+          [:tr
+           [:th (str DELTA "y")]
+           [:td [:small "~reward"]]
+           [:td (signed-str (:dy in-value))]]
+          [:tr
+           [:td {:colSpan 3}
+            [:small DELTA "y " TIMES " 0.5 = " [:var "R"]]]]]
+         [:h4 "Q learning"]
+         [:small.text-muted
+          "This is from 2 time steps back "
+          [:abbr {:title
+                  (str "1. We wait one step (+1) to see the reward and Q value resulting from an action. "
+                       "2. This display shows on the following step (+2) for technical reasons.")}
+           "(why?)"]]
+         [:table.table.table-condensed
+          [:tr
+           [:th R_T+1]
+           [:td [:small "reward"]]
+           [:td (-> (:reward qinfo 0) (.toFixed 2))]]
+          [:tr
+           [:th Q_T+1]
+           [:td [:small "goodness"]]
+           [:td (-> (:Qt qinfo 0) (.toFixed 3))]]
+          [:tr
+           [:th Q_T]
+           [:td [:small "current"]]
+           [:td (-> (:Q-val (:prior-state alyr) 0) (.toFixed 3))]]
+          [:tr
+           [:th [:var "n"]]
+           [:td [:small "active synapses"]]
+           [:td (:perms qinfo 0)]]
+          ]
+         [:p.text-right
+          [:b "adjustment: "] [:br]
+          [:abbr {:title (str "learning rate, alpha")} q-alpha]
+          "("
+          R_T+1
+          " + "
+          [:abbr {:title "discount factor"} q-discount]
+          Q_T+1
+          " - "
+          Q_T
+          ") = "
+          [:mark
+           (->> (:adj qinfo 0)
+                (gstr/format "%+.3f"))]
+          ]
+         ;; plot
+         [:canvas#comportex-world {:style {:width "100%"
+                                           :height "240px"}}]
+         [:small
+          [:p [:b "top: "]
+           "approx Q values for each position/action combination,
+            where green is positive and red is negative.
+            These are the last seen Q values including last adjustments."]
+          [:p [:b "middle: "]
+           "current position on the objective function surface."]
+          [:p [:b "bottom: "]
+           "frequencies of being at each position."]]]))))
 
 (defn set-model!
   []
@@ -150,8 +223,9 @@
 (defn model-tab
   []
   [:div
-   [:p "Highly experimental attempt at integrating Q learning
-        (reinforcement learning). The Q value of an action from some state
+   [:p "Highly experimental attempt at integrating "
+    [:a {:href "http://en.wikipedia.org/wiki/Q-learning"} "Q learning"]
+    " (reinforcement learning). The Q value of an action from some state
         is the average permanence of synapses activating the action
         from that state, minus the initial permanence value."]
    [:p "The action layer columns are interpreted to produce an
@@ -178,8 +252,9 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
+  (.addEventListener js/window "resize" on-resize)
   (reset! main/world world-c)
   (set-model!)
   (feed-world!))
