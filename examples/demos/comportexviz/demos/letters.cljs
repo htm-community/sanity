@@ -2,31 +2,25 @@
   (:require [org.nfrac.comportex.demos.letters :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
-            [org.nfrac.comportex.protocols :as p]
-            [comportexviz.sentence-drawing :refer [draw-text-fn]]
             [comportexviz.main :as main]
+            [comportexviz.helpers :as helpers]
+            [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [cljs.core.async :as async])
-  (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1
          :encoder :block
          :world-buffer-count 0}))
 
-(def draw (draw-text-fn 8))
-
 (def world-buffer (async/buffer 5000))
 (def world-c
   (async/chan world-buffer
-              (comp (map (util/keep-history-middleware 400 :value :history))
-                    (map #(vary-meta % assoc
-                                     :comportexviz/draw-world
-                                     draw)))))
+              (map (util/keep-history-middleware 300 :value :history))))
 
 (add-watch main/model ::count-world-buffer
            (fn [_ _ _ _]
@@ -47,6 +41,28 @@ Chifung has a mouth.
 Chifung has a brain.
 Chifung has no book.
 Chifung has a friend."))
+
+(def max-shown 300)
+(def scroll-every 150)
+
+(defn world-pane
+  []
+  (let [show-predictions (atom false)]
+    (fn []
+      (when-let [htm (viz/selected-model-state)]
+       (let [in-value (:value (first (core/input-seq htm)))]
+         [:div
+          [:p.muted [:small "Input on selected timestep."]]
+          [:div {:style {:min-height "40vh"}}
+           (helpers/text-world-input-component in-value htm max-shown scroll-every "")]
+          [:div
+           [:button.btn.btn-default {:class (if @show-predictions "active")
+                                     :on-click (fn [e]
+                                                 (swap! show-predictions not)
+                                                 (.preventDefault e))}
+            "Compute predictions"]]
+          (when @show-predictions
+            (helpers/text-world-predictions-component in-value htm 8))])))))
 
 (defn set-model!
   []
@@ -134,7 +150,7 @@ Chifung has a friend."))
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
   (reset! main/world world-c)
   (set-model!)

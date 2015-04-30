@@ -2,12 +2,13 @@
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.encoders :as enc]
+            [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.cortical-io :as cio
              :refer [cortical-io-encoder
                      cache-fingerprint!]]
             [clojure.string :as str]
-            [comportexviz.sentence-drawing :refer [draw-sentence-fn]]
             [comportexviz.main :as main]
+            [comportexviz.helpers :as helpers]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -19,43 +20,43 @@
 
 (def fox-eats-what
   "
-frog 	eat 	flies.
-cow 	eat 	grain.
-elephant 	eat 	leaves.
-goat 	eat 	grass.
-wolf 	eat 	rabbit.
-cat 	likes 	ball.
-elephant 	likes 	water.
-sheep 	eat 	grass.
-cat 	eat 	salmon.
-wolf 	eat 	mice.
-lion 	eat 	cow.
-dog 	likes 	sleep.
-coyote 	eat 	mice.
-coyote 	eat 	rodent.
-coyote 	eat 	rabbit.
-wolf 	eat 	squirrel.
-cow 	eat 	grass.
-frog 	eat 	flies.
-cow 	eat 	grain.
-elephant 	eat 	leaves.
-goat 	eat 	grass.
-wolf 	eat 	rabbit.
-sheep 	eat 	grass.
-cat 	eat 	salmon.
-wolf 	eat 	mice.
-lion 	eat 	cow.
-coyote 	eat 	mice.
-elephant 	likes 	water.
-cat 	likes 	ball.
-coyote 	eat 	rodent.
-coyote 	eat 	rabbit.
-wolf 	eat 	squirrel.
-dog 	likes 	sleep.
-cat 	eat 	salmon.
-cat 	likes 	ball.
-cow 	eat 	grass.
-fox 	eat 	something.
+frog eat flies.
+cow eat grain.
+elephant eat leaves.
+goat eat grass.
+wolf eat rabbit.
+cat likes ball.
+elephant likes water.
+sheep eat grass.
+cat eat salmon.
+wolf eat mice.
+lion eat cow.
+dog likes sleep.
+coyote eat mice.
+coyote eat rodent.
+coyote eat rabbit.
+wolf eat squirrel.
+cow eat grass.
+frog eat flies.
+cow eat grain.
+elephant eat leaves.
+goat eat grass.
+wolf eat rabbit.
+sheep eat grass.
+cat eat salmon.
+wolf eat mice.
+lion eat cow.
+coyote eat mice.
+elephant likes water.
+cat likes ball.
+coyote eat rodent.
+coyote eat rabbit.
+wolf eat squirrel.
+dog likes sleep.
+cat eat salmon.
+cat likes ball.
+cow eat grass.
+fox eat something.
 ")
 
 (def fingerprint-cache (atom {}))
@@ -74,13 +75,10 @@ fox 	eat 	something.
          :have-model? false
          }))
 
-(def draw (draw-sentence-fn 8))
-
 (def world-buffer (async/buffer 5000))
 (def world-c
   (async/chan world-buffer
-              (comp (map (util/keep-history-middleware 100 :word :history))
-                    (map #(vary-meta % assoc :comportexviz/draw-world draw)))))
+              (map (util/keep-history-middleware 100 :word :history))))
 
 (add-watch main/model ::count-world-buffer
            (fn [_ _ _ _]
@@ -124,6 +122,48 @@ fox 	eat 	something.
     :global-inhibition? false
     :inhibition-base-distance 1))
 
+(defn load-predictions
+  [in-value htm n-predictions predictions-cache]
+  (let [inp (first (core/input-seq htm))
+        rgn (first (core/region-seq htm))
+        pr-votes (core/predicted-bit-votes rgn)
+        predictions (p/decode (:encoder inp) pr-votes n-predictions)]
+    (if-let [c (:channel predictions)]
+      ;; async call, return nil and await cache (like a promise)
+      (do
+        (go (let [predictions (<! c)]
+              (swap! predictions-cache assoc htm predictions)))
+        nil)
+      ;; sync call, return predictions without caching
+      predictions)))
+
+(def max-shown 100)
+(def scroll-every 50)
+
+(defn world-pane
+  []
+  (let [show-predictions (atom false)
+        predictions-cache (atom {})]
+    (fn []
+      (when-let [htm (viz/selected-model-state)]
+        (let [in-value (:value (first (core/input-seq htm)))]
+          [:div
+           [:p.muted [:small "Input on selected timestep."]]
+           [:div {:style {:min-height "40vh"}}
+            (helpers/text-world-input-component in-value htm max-shown scroll-every " ")]
+           [:div
+            [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
+                                                :on-click (fn [e]
+                                                            (swap! show-predictions not)
+                                                            (.preventDefault e))}
+             "Compute predictions"]]
+           (when @show-predictions
+             (if-let [predictions (or (get @predictions-cache htm)
+                                      (load-predictions in-value htm 8 predictions-cache))]
+               (helpers/predictions-table predictions)
+               ;; not cached and not returned immediately
+               [:p.text-info "Loading predictions..."]))])))))
+
 (defn split-sentences
   [text]
   (->> (str/split (str/trim text) #"[^\w]*[\.\!\?]+[^\w]*")
@@ -159,7 +199,7 @@ fox 	eat 	something.
         (cio-start-requests! (:api-key @config)
                              (:text @config))
           ;; allow some time for the first fingerprint request to cortical.io
-          (<! (timeout 1000)))
+          (<! (timeout 2500)))
       (async/onto-chan world-c xs false)
       (swap! config assoc :world-buffer-count (count world-buffer)))))
 
@@ -292,7 +332,7 @@ fox 	eat 	something.
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
   (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
   (reset! main/world world-c)

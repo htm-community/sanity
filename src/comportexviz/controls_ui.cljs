@@ -451,6 +451,7 @@
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Display"]
        [:p "Kept timesteps are shown in a row at the top of the display.
+      Click one to jump to it.
       Below that, the blocks represent input fields (squares) and
       layers of cortical columns (circles). Depending on the display mode,
       these may be shown in 2D grids from a single time step, or as one
@@ -466,7 +467,7 @@
       the 'params' tab."]]
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Key controls"]
-       [:p "When the main canvas is selected, "
+       [:p "When the main canvas is in focus, "
         [:kbd "up"] "/" [:kbd "down"]
         " select columns; "
         [:kbd "page up"] "/" [:kbd "page down"]
