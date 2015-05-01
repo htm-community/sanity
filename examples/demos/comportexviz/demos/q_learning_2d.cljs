@@ -1,6 +1,8 @@
 (ns comportexviz.demos.q-learning-2d
   (:require [org.nfrac.comportex.demos.q-learning-2d :as demo]
+            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
+            [comportexviz.demos.q-learning-1d :refer [q-learning-sub-pane]]
             [comportexviz.main :as main]
             [comportexviz.viz-canvas :as viz]
             [comportexviz.plots-canvas :as plt]
@@ -17,13 +19,8 @@
 (def config
   (atom {:n-regions 1}))
 
-(declare draw-surface-fn)
-
 (def world-c
-  (async/chan (async/buffer 1)
-              (map #(vary-meta % assoc
-                               :comportexviz/draw-world
-                               (draw-surface-fn demo/surface)))))
+  (async/chan (async/buffer 1)))
 
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
@@ -32,88 +29,113 @@
   (let [step-c (main/tap-c main/steps-mult)]
     (demo/feed-world-c-with-actions! step-c world-c main/model)))
 
-(defn draw-surface-fn
-  [surface]
-  (let [x-max (count surface)
+(defn draw-world
+  [ctx in-value htm]
+  (let [surface demo/surface
+        x-max (count surface)
         y-max (count (first surface))
         x-lim [0 x-max]
-        y-lim [0 y-max]]
-    (fn [this ctx left-px top-px w-px h-px state]
-      (let [[plot-x plot-y] [10 160]
-            plot-size {:w 120
-                       :h 120}
-            plot (plt/xy-plot ctx plot-size x-lim y-lim)
-            label-y 10
-            alyr (get-in state [:regions :action :layer-3])
-            qinfo (get-in alyr [:prior-state :Q-info])
-            {:keys [q-alpha q-discount]} (:spec alyr)]
-        (c/save ctx)
-        (c/translate ctx left-px top-px)
-        ;; draw current value
-        (doto ctx
-          (c/fill-style "black")
-          (c/font-style "14px monospace")
-          (c/text {:x plot-x :y label-y
-                   :text (str "x " (:x this)
-                              " dx " (if (neg? (:dx this)) "" "+") (:dx this))})
-          (c/text {:x plot-x :y (+ label-y 20)
-                   :text (str "y " (:y this)
-                              " dy "(if (neg? (:dy this)) "" "+") (:dy this))})
-          (c/font-style "12px sans-serif")
-          (c/text {:x plot-x :y (+ label-y 40)
-                   :text (str "prior: reward " (gstr/format "%.2f" (:reward qinfo 0)))})
-          (c/text {:x plot-x :y (+ label-y 60)
-                   :text (str "Q=" (gstr/format "%.3f" (:Qt qinfo 0))
-                              " Qn=" (gstr/format "%.3f" (:Q-val (:prior-state alyr) 0))
-                              )})
-          (c/text {:x plot-x :y (+ label-y 80)
-                   :text "adjustment:"})
-          (c/text {:x plot-x :y (+ label-y 100)
-                   :text (str (gstr/format "%.2f" q-alpha)
-                              "(R + " (gstr/format "%.2f" q-discount)
-                              "[Qn] - Q)")})
-          (c/text {:x plot-x :y (+ label-y 120)
-                   :text (str " = " (gstr/format "%.3f" (:adj qinfo 0)))}))
-        ;; draw the plot
-        (c/translate ctx plot-x plot-y)
-        (plt/frame! plot)
-        (doseq [y (range (count surface))
-                x (range (count (first surface)))
-                :let [v (get-in surface [x y])]]
-          (cond
-           (>= v 10)
-           (do (c/fill-style ctx "#66ff66")
-               (plt/rect! plot x y 1 1))
-           (<= v -10)
-           (do (c/fill-style ctx "black")
-               (plt/rect! plot x y 1 1))
-           ))
-        (doseq [[state-action q] (:Q-map this)
-                :let [{:keys [x y dx dy]} state-action]]
-          (c/fill-style ctx (if (pos? q) "green" "red"))
-          (c/alpha ctx (abs q))
-          (cond
-           ;; from left
-           (pos? dx)
-           (plt/rect! plot (- x 0.25) y 0.25 1)
-           ;; from right
-           (neg? dx)
-           (plt/rect! plot (+ x 1) y 0.25 1)
-           ;; from above
-           (pos? dy)
-           (plt/rect! plot x (- y 0.25) 1 0.25)
-           ;; from below
-           (neg? dy)
-           (plt/rect! plot x (+ y 1) 1 0.25)
-           ))
-        (c/alpha ctx 1)
-        (c/stroke-style ctx "yellow")
-        (c/fill-style ctx "#6666ff")
-        (plt/point! plot (+ 0.5 (:x this)) (+ 0.5 (:y this)) 4)
-        (c/stroke-style ctx "black")
-        (plt/grid! plot {})
-        (c/restore ctx)
-        ))))
+        y-lim [0 y-max]
+        width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        edge-px (min width-px height-px)
+        plot-size {:w edge-px
+                   :h edge-px}
+        plot (plt/xy-plot ctx plot-size x-lim y-lim)]
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (plt/frame! plot)
+    (doseq [y (range (count surface))
+            x (range (count (first surface)))
+            :let [v (get-in surface [x y])]]
+      (cond
+        (>= v 10)
+        (do (c/fill-style ctx "#66ff66")
+            (plt/rect! plot x y 1 1))
+        (<= v -10)
+        (do (c/fill-style ctx "black")
+            (plt/rect! plot x y 1 1))
+        ))
+    (doseq [[state-action q] (:Q-map in-value)
+            :let [{:keys [x y dx dy]} state-action]]
+      (c/fill-style ctx (if (pos? q) "green" "red"))
+      (c/alpha ctx (abs q))
+      (cond
+        ;; from left
+        (pos? dx)
+        (plt/rect! plot (- x 0.25) y 0.25 1)
+        ;; from right
+        (neg? dx)
+        (plt/rect! plot (+ x 1) y 0.25 1)
+        ;; from above
+        (pos? dy)
+        (plt/rect! plot x (- y 0.25) 1 0.25)
+        ;; from below
+        (neg? dy)
+        (plt/rect! plot x (+ y 1) 1 0.25)
+        ))
+    (c/alpha ctx 1)
+    (c/stroke-style ctx "yellow")
+    (c/fill-style ctx "#6666ff")
+    (plt/point! plot (+ 0.5 (:x in-value)) (+ 0.5 (:y in-value)) 4)
+    (c/stroke-style ctx "black")
+    (plt/grid! plot {})))
+
+;; fluid canvas - resizes drawing area as element stretches
+
+(def trigger-redraw (atom 0))
+
+(defn on-resize
+  [_]
+  (let [el (dom/getElement "comportex-world")]
+    (viz/set-canvas-pixels-from-element-size! el 120)
+    (swap! trigger-redraw inc)))
+
+(defn signed-str [x] (str (if (neg? x) "" "+") x))
+
+(defn world-pane
+  []
+  (when-let [htm (viz/selected-model-state)]
+    (let [in-value (:value (first (core/input-seq htm)))
+          canvas (dom/getElement "comportex-world")]
+      (when canvas
+        (when (zero? @trigger-redraw)
+          (on-resize nil))
+        (let [ctx (c/get-context canvas "2d")]
+          (draw-world ctx in-value htm)))
+      (let [DELTA (gstr/unescapeEntities "&Delta;")
+            TIMES (gstr/unescapeEntities "&times;")
+            ]
+        [:div
+         [:p.muted [:small "Input on selected timestep."]]
+         [:table.table.table-condensed
+          [:tr
+           [:th "x,y"]
+           [:td [:small "position"]]
+           [:td (:x in-value) "," (:y in-value)]]
+          [:tr
+           [:th (str DELTA "x," DELTA "y")]
+           [:td [:small "action"]]
+           [:td (str (signed-str (:dx in-value))
+                     ","
+                     (signed-str (:dy in-value)))]]
+          [:tr
+           [:th [:var "z"]]
+           [:td [:small "~reward"]]
+           [:td (signed-str (:z in-value))]]
+          [:tr
+           [:td {:colSpan 3}
+            [:small DELTA "z " TIMES " 0.01 = " [:var "R"]]]]]
+         (q-learning-sub-pane htm)
+         ;; plot
+         [:canvas#comportex-world {:style {:width "100%"
+                                           :height "240px"}}]
+         [:small
+          [:p
+           "Current position on the objective function surface. "
+           "Also shows approx Q values for each position/action combination,
+            where green is positive and red is negative.
+            These are the last seen Q values including last adjustments."]
+          ]]))))
 
 (defn set-model!
   []
@@ -142,28 +164,39 @@
 (defn model-tab
   []
   [:div
-   [:p "Highly experimental attempt at integrating Q learning
-        (reinforcement learning). The Q value of an action from some state
-        is the average permanence of synapses activating the action
-        from that state, minus the initial permanence value."]
-   [:p "The action layer columns are interpreted to produce an
-        action: 100 columns are allocated to each of the four
-        directions of movement, and the direction with most active
-        columns is used to move the agent."]
-   [:p "Adjustments to the Q value, based on reward and expected
-        future reward, are applied to the permanence of synapses which
+   [:p "Highly experimental attempt at integrating "
+    [:a {:href "http://en.wikipedia.org/wiki/Q-learning"} "Q learning"]
+    " (reinforcement learning)."]
+   [:h4 "General approach"]
+   [:p "A Q value indicates the goodness of taking an action from some
+        state. We represent a Q value by the average permanence of
+        synapses activating the action from that state, minus the
+        initial permanence value."]
+   [:p "The action region columns are activated just like any other
+        region, but are then interpreted to produce an action."]
+   [:p "Adjustments to a Q value, based on reward and expected future
+        reward, are applied to the permanence of synapses which
         directly activated the action (columns). This adjustment
-        applies in the action layer only, and it does this instead of
-        the usual spatial pooling."]
-   [:p "Exploration arises from boosting neglected columns,
-        primarily in the action layer."]
-   [:p "The reward is -3 on normal squares, -200 on hazard squares
+        applies in the action layer only, where it replaces the usual
+        learning of proximal synapses (spatial pooling)."]
+   [:p "Exploration arises from the usual boosting of neglected
+        columns, primarily in the action layer."]
+
+   [:h4 "This example"]
+   [:p "The agent can move up, down, left or right on a surface.
+        The reward is -3 on normal squares, -200 on hazard squares
         and +200 on the goal square. These are divided by 100 for
         comparison to Q values on the synaptic permanence scale."]
-   [:p "This example is episodic: when the agent reaches either the
-        goal or a hazard it is returned to the starting point."]
+   [:p "The action layer columns are interpreted to produce an
+        action. 100 columns are allocated to each of the four
+        directions of movement, and the direction with most active
+        columns is used to move the agent."]
    [:p "The input is the location of the agent via coordinate
         encoder, plus the last movement as distal input."]
+   [:p "This example is episodic: when the agent reaches either the
+        goal or a hazard it is returned to the starting point. Success
+        is indicated by the agent following a direct path to the goal
+        square."]
 
    [:h3 "HTM model"]
    [bind-fields config-template config]
@@ -172,8 +205,9 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab)
+  (reagent/render (main/comportexviz-app model-tab world-pane)
                   (dom/getElement "comportexviz-app"))
+  (.addEventListener js/window "resize" on-resize)
   (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!)
   (reset! main/world world-c)

@@ -103,6 +103,57 @@
 
 (defn signed-str [x] (str (if (neg? x) "" "+") x))
 
+(defn q-learning-sub-pane
+  [htm]
+  (let [alyr (get-in htm [:regions :action :layer-3])
+        qinfo (get-in alyr [:prior-state :Q-info])
+        {:keys [q-alpha q-discount]} (:spec alyr)
+        Q_T [:var "Q" [:sub "t"]]
+        Q_T+1 [:var.text-nowrap "Q" [:sub "t+1"]]
+        R_T+1 [:var.text-nowrap "R" [:sub "t+1"]]
+        ]
+    [:div
+     [:h4 "Q learning"]
+     [:small.text-muted
+      "This is from 2 time steps back "
+      [:abbr {:title
+              (str "1. We wait one step (+1) to see the reward and Q value resulting from an action. "
+                   "2. This display shows on the following step (+2) for technical reasons.")}
+       "(why?)"]]
+     [:table.table.table-condensed
+      [:tr
+       [:th R_T+1]
+       [:td [:small "reward"]]
+       [:td (-> (:reward qinfo 0) (.toFixed 2))]]
+      [:tr
+       [:th Q_T+1]
+       [:td [:small "goodness"]]
+       [:td (-> (:Qt qinfo 0) (.toFixed 3))]]
+      [:tr
+       [:th Q_T]
+       [:td [:small "current"]]
+       [:td (-> (:Q-val (:prior-state alyr) 0) (.toFixed 3))]]
+      [:tr
+       [:th [:var "n"]]
+       [:td [:small "active synapses"]]
+       [:td (:perms qinfo 0)]]
+      ]
+     [:p.text-right
+      [:b "adjustment: "] [:br]
+      [:abbr {:title (str "learning rate, alpha")} q-alpha]
+      "("
+      R_T+1
+      " + "
+      [:abbr {:title "discount factor"} q-discount]
+      Q_T+1
+      " - "
+      Q_T
+      ") = "
+      [:mark
+       (->> (:adj qinfo 0)
+            (gstr/format "%+.3f"))]
+      ]]))
+
 (defn world-pane
   []
   (when-let [htm (viz/selected-model-state)]
@@ -113,15 +164,8 @@
           (on-resize nil))
         (let [ctx (c/get-context canvas "2d")]
           (draw-world ctx in-value htm)))
-      (let [alyr (get-in htm [:regions :action :layer-3])
-            qinfo (get-in alyr [:prior-state :Q-info])
-            {:keys [q-alpha q-discount]} (:spec alyr)
-            DELTA (gstr/unescapeEntities "&Delta;")
-            TIMES (gstr/unescapeEntities "&times;")
-            Q_T [:var "Q" [:sub "t"]]
-            Q_T+1 [:var.text-nowrap "Q" [:sub "t+1"]]
-            R_T+1 [:var.text-nowrap "R" [:sub "t+1"]]
-            ]
+      (let [DELTA (gstr/unescapeEntities "&Delta;")
+            TIMES (gstr/unescapeEntities "&times;")]
         [:div
          [:p.muted [:small "Input on selected timestep."]]
          [:table.table.table-condensed
@@ -144,58 +188,19 @@
           [:tr
            [:td {:colSpan 3}
             [:small DELTA "y " TIMES " 0.5 = " [:var "R"]]]]]
-         [:h4 "Q learning"]
-         [:small.text-muted
-          "This is from 2 time steps back "
-          [:abbr {:title
-                  (str "1. We wait one step (+1) to see the reward and Q value resulting from an action. "
-                       "2. This display shows on the following step (+2) for technical reasons.")}
-           "(why?)"]]
-         [:table.table.table-condensed
-          [:tr
-           [:th R_T+1]
-           [:td [:small "reward"]]
-           [:td (-> (:reward qinfo 0) (.toFixed 2))]]
-          [:tr
-           [:th Q_T+1]
-           [:td [:small "goodness"]]
-           [:td (-> (:Qt qinfo 0) (.toFixed 3))]]
-          [:tr
-           [:th Q_T]
-           [:td [:small "current"]]
-           [:td (-> (:Q-val (:prior-state alyr) 0) (.toFixed 3))]]
-          [:tr
-           [:th [:var "n"]]
-           [:td [:small "active synapses"]]
-           [:td (:perms qinfo 0)]]
-          ]
-         [:p.text-right
-          [:b "adjustment: "] [:br]
-          [:abbr {:title (str "learning rate, alpha")} q-alpha]
-          "("
-          R_T+1
-          " + "
-          [:abbr {:title "discount factor"} q-discount]
-          Q_T+1
-          " - "
-          Q_T
-          ") = "
-          [:mark
-           (->> (:adj qinfo 0)
-                (gstr/format "%+.3f"))]
-          ]
+         (q-learning-sub-pane htm)
          ;; plot
          [:canvas#comportex-world {:style {:width "100%"
                                            :height "240px"}}]
          [:small
           [:p [:b "top: "]
-           "approx Q values for each position/action combination,
+           "Approx Q values for each position/action combination,
             where green is positive and red is negative.
             These are the last seen Q values including last adjustments."]
           [:p [:b "middle: "]
-           "current position on the objective function surface."]
+           "Current position on the objective function surface."]
           [:p [:b "bottom: "]
-           "frequencies of being at each position."]]]))))
+           "Frequencies of being at each position."]]]))))
 
 (defn set-model!
   []
@@ -225,25 +230,36 @@
   [:div
    [:p "Highly experimental attempt at integrating "
     [:a {:href "http://en.wikipedia.org/wiki/Q-learning"} "Q learning"]
-    " (reinforcement learning). The Q value of an action from some state
-        is the average permanence of synapses activating the action
-        from that state, minus the initial permanence value."]
+    " (reinforcement learning)."]
+   [:h4 "General approach"]
+   [:p "A Q value indicates the goodness of taking an action from some
+        state. We represent a Q value by the average permanence of
+        synapses activating the action from that state, minus the
+        initial permanence value."]
+   [:p "The action region columns are activated just like any other
+        region, but are then interpreted to produce an action."]
+   [:p "Adjustments to a Q value, based on reward and expected future
+        reward, are applied to the permanence of synapses which
+        directly activated the action (columns). This adjustment
+        applies in the action layer only, where it replaces the usual
+        learning of proximal synapses (spatial pooling)."]
+   [:p "Exploration arises from the usual boosting of neglected
+        columns, primarily in the action layer."]
+
+   [:h4 "This example"]
+   [:p "The agent can move left or right on a reward surface. The
+        reward is proportional to the change in y value after
+        moving (dy)."]
    [:p "The action layer columns are interpreted to produce an
-        action: 120 columns are allocated to each of the two
+        action. 120 columns are allocated to each of the two
         directions of movement, where 40 are inhibitory and 80 are
         excitatory, and the direction with most overall excitation is
         used to move the agent."]
-   [:p "Adjustments to the Q value, based on reward and expected
-        future reward, are applied to the permanence of synapses which
-        directly activated the action (columns). This adjustment
-        applies in the action layer only, and it does this instead of
-        the usual spatial pooling."]
-   [:p "Exploration arises from boosting neglected columns,
-        primarily in the action layer."]
-   [:p "The reward is the increase in y value after moving (dy)."]
-   [:p "This example is continuous, not episodic."]
    [:p "The input is the location of the agent via coordinate
         encoder, plus the last movement as distal input."]
+   [:p "This example is continuous, not episodic. Success is
+        presumably indicated by the agent finding the optimum position
+        and staying there."]
 
    [:h3 "HTM model"]
    [bind-fields config-template config]
