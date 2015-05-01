@@ -4,9 +4,9 @@
 
 * implement encoder options in fixed-seqs demo
 
-* gh-pages branch with compiled demos
+* option to avoid calculating predicted inbits (for speed)
 
-* click on timesteps to jump
+* gh-pages branch with compiled demos
 
 * show column state freqs in timestep bar
 
