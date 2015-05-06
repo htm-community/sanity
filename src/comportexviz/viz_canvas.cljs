@@ -222,7 +222,7 @@
                           #(if down? (inc %) (dec %)))))))
 
 (defn draw-ff-synapses
-  [ctx state r-lays i-lays selection opts]
+  [ctx htm r-lays i-lays selection opts]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
@@ -233,7 +233,7 @@
         syn-states (concat (when do-disconn? [:disconnected])
                            (when do-inactive? [:inactive-syn])
                            [:active :active-predicted])
-        regions (:regions state)
+        regions (:regions htm)
         ;; need to know which layers have input across regions
         input-layer? (into #{} (map (fn [[rgn-id rgn]]
                                       [rgn-id (first (core/layers rgn))])
@@ -256,7 +256,7 @@
         (let [[rgn-id lyr-id col] path
               lyr (get-in regions [rgn-id lyr-id])
               in-bits (:in-ff-bits (:state lyr))
-              in-sbits (:in-signal-ff-bits (:state lyr))
+              in-sbits (:in-stable-ff-bits (:state lyr))
               sg (:proximal-sg lyr)
               all-syns (p/in-synapses sg col)
               syns (select-keys all-syns (p/sources-connected-to sg col))
@@ -277,7 +277,7 @@
                          (if (input-layer? [rgn-id lyr-id])
                            ;; input from another region
                            (let [[src-id src-i]
-                                 (core/source-of-incoming-bit state rgn-id i)]
+                                 (core/source-of-incoming-bit htm rgn-id i)]
                              [src-id (output-layer src-id) src-i])
                            ;; input from another layer in same region (hardcoded)
                            [rgn-id :layer-4 i])
@@ -384,10 +384,10 @@
             (c/stroke)))))))
 
 (defn draw-cell-segments
-  [ctx state r-lays i-lays selection opts cells-left]
+  [ctx htm r-lays i-lays selection opts cells-left]
   (c/save ctx)
   (let [{dt :dt, sel-rgn :region, sel-lyr :layer, col :col} selection
-        regions (:regions state)
+        regions (:regions htm)
         lyr (get-in regions [sel-rgn sel-lyr])
         lay (get-in r-lays [sel-rgn sel-lyr])
         spec (p/params lyr)
@@ -506,7 +506,7 @@
               grouped-sourced-syns
               (util/remap (fn [syns]
                             (map (fn [[i p]]
-                                   [(core/source-of-distal-bit state sel-rgn sel-lyr i)
+                                   [(core/source-of-distal-bit htm sel-rgn sel-lyr i)
                                     p])
                                  syns))
                           grouped-syns)]
@@ -723,8 +723,8 @@
         draw-steps (get-in opts [:drawing :draw-steps])
         ;; in case scrolled back in history
         dt0 (max 0 (- sel-dt (quot draw-steps 2)))
-        sel-state (nth steps sel-dt)
-        sel-prev-state (nth steps (inc sel-dt) nil)
+        sel-htm (nth steps sel-dt)
+        sel-prev-htm (nth steps (inc sel-dt) nil)
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
                         (apply max)
@@ -758,19 +758,19 @@
                  :x cells-left :y label-top-px})
     (doseq [dt (range dt0 (min (+ dt0 draw-steps)
                                (count steps)))
-            :let [state (nth steps dt)
-                  prev-state (nth steps (inc dt) nil)
-                  dt-cache (::cache (meta state))]]
+            :let [htm (nth steps dt)
+                  prev-htm (nth steps (inc dt) nil)
+                  dt-cache (::cache (meta htm))]]
       ;; draw encoded inbits
       (doseq [[inp-id lay] i-lays
               :when (or (== 1 (count (p/dims-of lay)))
                         (== dt sel-dt))
-              :let [inp (get-in state [:inputs inp-id])
+              :let [inp (get-in htm [:inputs inp-id])
                     ;; region this input feeds to, for predictions
-                    ff-rgn-id (first (get-in state [:fb-deps inp-id]))
+                    ff-rgn-id (first (get-in htm [:fb-deps inp-id]))
                     ;; TODO offset if multiple inputs feeding to region
                     prev-ff-rgn (when (pos? (p/size (p/ff-topology inp)))
-                                  (get-in prev-state [:regions ff-rgn-id]))
+                                  (get-in prev-htm [:regions ff-rgn-id]))
                     lay-cache (::cache (meta lay))]]
         (->> (bg-image lay)
              (with-cache lay-cache [::bg inp-id] opts #{:drawing})
@@ -789,7 +789,7 @@
               [lyr-id lay] lyr-lays
               :when (or (== 1 (count (p/dims-of lay)))
                         (== dt sel-dt))
-              :let [lyr (get-in state [:regions rgn-id lyr-id])
+              :let [lyr (get-in htm [:regions rgn-id lyr-id])
                     uniqix (str (name rgn-id) (name lyr-id))
                     lay-cache (::cache (meta lay))]]
         (->> (bg-image lay)
@@ -836,10 +836,10 @@
       (when (or (= to :all)
                 (and (= to :selected )
                      sel-col))
-        (draw-ff-synapses ctx sel-state r-lays i-lays sel opts)))
+        (draw-ff-synapses ctx sel-htm r-lays i-lays sel opts)))
     ;; draw selected cells and segments
     (when sel-col
-      (draw-cell-segments ctx sel-state r-lays i-lays sel opts cells-left)))
+      (draw-cell-segments ctx sel-htm r-lays i-lays sel opts cells-left)))
   nil)
 
 (defn set-canvas-pixels-from-element-size!
@@ -865,7 +865,7 @@
                              (assoc-in [:drawing :height-px] height-px)
                              (assoc-in [:drawing :width-px] width-px))))))
 
-(defn selected-model-state
+(defn selected-model-step
   []
   (nth @model-steps (:dt @selection) nil))
 

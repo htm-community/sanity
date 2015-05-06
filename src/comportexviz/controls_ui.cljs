@@ -166,7 +166,7 @@
   [steps selection]
   [:div
    [:p.text-muted "The details of model state on the selected time step, selected column."]
-   [:pre.pre-scrollable
+   [:pre.pre-scrollable {:style {:resize "both"}}
     (if (:col @selection)
       (let [dt (:dt @selection)]
         (comportexviz.details/detail-text (nth @steps dt)

@@ -35,7 +35,7 @@
   []
   (let [show-predictions (atom false)]
     (fn []
-      (when-let [htm (viz/selected-model-state)]
+      (when-let [htm (viz/selected-model-step)]
         (let [in-value (:value (first (core/input-seq htm)))]
           [:div
            [:p.muted [:small "Input on selected timestep."]]

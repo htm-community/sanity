@@ -6,17 +6,17 @@
             [goog.string.format]))
 
 (defn detail-text
-  [state
-   prior-state
+  [htm
+   prior-htm
    {dt :dt
     rgn-id :region
     lyr-id :layer
     col :col
     :as selection}]
-  (let [rgn (get-in state [:regions rgn-id])
+  (let [rgn (get-in htm [:regions rgn-id])
         lyr (get rgn lyr-id)
         depth (p/layer-depth lyr)
-        inp (first (core/input-seq state))
+        inp (first (core/input-seq htm))
         in (:value inp)
         bits (p/bits-value inp)]
     (->>
@@ -43,14 +43,17 @@
       "__Learning segments__"
       (str (sort (:learn-segments (:state lyr))))
       ""
-      "__Signal cells__"
-      (str (sort (p/signal-cells lyr)))
+      "__TP cells__"
+      (str (sort (p/temporal-pooling-cells lyr)))
+      ""
+      "__Slow proximal excitation__"
+      (str (sort (:proximal-slow-exc (:state lyr))))
       ""
       "__Predicted cells__"
       (str (sort (p/predictive-cells lyr)))
       ""
       (if col
-        (let [p-lyr (get-in prior-state [:regions rgn-id lyr-id])
+        (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
               p-prox-sg (:proximal-sg p-lyr)
               p-distal-sg (:distal-sg p-lyr)
               ac (p/active-cells p-lyr)

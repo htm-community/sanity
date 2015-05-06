@@ -94,7 +94,7 @@
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-state)]
+  (when-let [htm (viz/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           canvas (dom/getElement "comportex-world")]
       (when canvas
@@ -124,7 +124,7 @@
            [:td (signed-str (:z in-value))]]
           [:tr
            [:td {:colSpan 3}
-            [:small DELTA "z " TIMES " 0.01 = " [:var "R"]]]]]
+            [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
          (q-learning-sub-pane htm)
          ;; plot
          [:canvas#comportex-world {:style {:width "100%"

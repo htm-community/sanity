@@ -121,13 +121,13 @@
 
 (defn on-resize
   [_]
-  (let [el (dom/getElement "comportex-world")]
+  (when-let [el (dom/getElement "comportex-world")]
     (viz/set-canvas-pixels-from-element-size! el 160)
     (swap! trigger-redraw inc)))
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-state)]
+  (when-let [htm (viz/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           canvas (dom/getElement "comportex-world")]
       (when canvas

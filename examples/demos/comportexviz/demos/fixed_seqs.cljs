@@ -96,7 +96,7 @@
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-state)]
+  (when-let [htm (viz/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           model-id (::model-id (meta in-value))
           {:keys [patterns mixed? xy?]} (model-info model-id)

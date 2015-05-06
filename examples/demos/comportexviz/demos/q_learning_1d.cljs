@@ -156,7 +156,7 @@
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-state)]
+  (when-let [htm (viz/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           canvas (dom/getElement "comportex-world")]
       (when canvas

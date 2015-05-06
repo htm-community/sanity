@@ -75,8 +75,8 @@
 ;;; # Animation loop
 
 (go (loop [c (tap-c steps-mult)]
-      (when-let [state (<! c)]
-        (let [t (p/timestep state)
+      (when-let [htm (<! c)]
+        (let [t (p/timestep htm)
               n (:anim-every @main-options)]
           (when (and (:anim-go? @main-options)
                      (zero? (mod t n)))
