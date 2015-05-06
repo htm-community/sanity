@@ -871,9 +871,10 @@
 
 (defn draw!
   []
-  (if (nil? (get-in @viz-options [:drawing :height-px]))
-    (on-resize nil) ;; triggers another redraw
-    (when (seq @model-steps)
+  (when (and (seq @model-steps)
+             (dom/getElement "comportex-viz"))
+    (if (nil? (get-in @viz-options [:drawing :height-px]))
+      (on-resize nil) ;; sets values and triggers another redraw
       (let [viz-el (dom/getElement "comportex-viz")
             viz-ctx (c/get-context viz-el "2d")
             tl-el (dom/getElement "comportex-timeline")

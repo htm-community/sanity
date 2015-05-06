@@ -86,7 +86,7 @@
 
 (defn on-resize
   [_]
-  (let [el (dom/getElement "comportex-world")]
+  (when-let [el (dom/getElement "comportex-world")]
     (viz/set-canvas-pixels-from-element-size! el 120)
     (swap! trigger-redraw inc)))
 
