@@ -1,9 +1,7 @@
 (ns comportexviz.details
   (:require [clojure.string :as str]
             [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]
-            [goog.string :as gstring]
-            [goog.string.format]))
+            [org.nfrac.comportex.protocols :as p]))
 
 (defn detail-text
   [htm
@@ -60,8 +58,8 @@
               lc (or (p/learnable-cells p-lyr) #{})
               pcon (:distal-perm-connected (p/params p-lyr))
               ;; TODO
-              bits #{}
-              sig-bits #{}
+              bits (:in-ff-bits (:state lyr))
+              sig-bits (:in-stable-ff-bits (:state lyr))
               ]
           ["__Active cells prev__"
            (str (sort ac))
@@ -86,11 +84,11 @@
            (let [syns (p/in-synapses p-prox-sg col)]
              (for [[id p] (sort syns)]
                (str "  " id " :=> "
-                    (gstring/format "%.2f" p)
-                    (if (sig-bits id) " S")
-                    (if (bits id) (str " A "
-                                       ;(p/source-of-incoming-bit)
-                                       )))))
+                    (.toFixed p 2)
+                    (if (get sig-bits id) " S")
+                    (if (get bits id) (str " A "
+                                        (core/source-of-incoming-bit htm rgn-id id)
+                                        )))))
            "__Cells and their Dendrite segments__"
            (for [ci (range (p/layer-depth lyr))
                  :let [segs (p/cell-segments p-distal-sg [col ci])]]
@@ -103,7 +101,7 @@
                  (for [[id p] (sort syns)]
                    (str "  " id
                         (if (>= p pcon) " :=> " " :.: ")
-                        (gstring/format "%.2f" p)
+                        (.toFixed p 2)
                         (if (lc id) " L"
                             (if (ac id) " A"))))])
               ])

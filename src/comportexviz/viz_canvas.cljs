@@ -61,7 +61,7 @@
   {:background "#eee"
    :inactive "white"
    :inactive-syn "black"
-   :disconnected "#ddd"
+   :disconnected (hsl :red 1.0 0.5)
    :active (hsl :red 1.0 0.5)
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
@@ -270,7 +270,8 @@
                                         :active (select-keys syns in-bits)
                                         :active-predicted (select-keys syns in-sbits)
                                         :inactive-syn (apply dissoc syns in-bits)
-                                        :disconnected (apply dissoc all-syns (keys syns)))
+                                        :disconnected (-> (apply dissoc all-syns (keys syns))
+                                                          (select-keys in-bits)))
                              _ (c/stroke-style ctx (state-colors syn-state))]
                        [i perm] sub-syns]
                    (let [[src-id src-lyr src-i]

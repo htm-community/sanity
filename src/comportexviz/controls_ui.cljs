@@ -4,8 +4,6 @@
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
-            [goog.string :as gstring]
-            [goog.string.format]
             [clojure.string :as str]
             [cljs.reader]
             [comportexviz.plots :as plots]
@@ -137,7 +135,7 @@
             el (dom/getElement el-id)]
         ;; draw!
         (when el
-          (set! (.-width el) (* 0.33 (- (.-innerWidth js/window) 20)))
+          (set! (.-width el) (* 0.28 (- (.-innerWidth js/window) 20)))
           (set! (.-height el) 180)
           (plots/stacked-ts-plot el agg-freqs-ts series-keys series-colors))
         (when-not el
@@ -239,16 +237,16 @@
                 [:option {:key :none} "none"]
                 ]]
               (chbox :ff-synapses.active "Active")
-              (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.disconnected "Disconnected")
+              (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.permanences "Permanences")
               ])
       (group "Distal synapses"
              [:div.panel-body
               [:p.help-block "To distal dendrite segments of cells in the selected column."]
               (chbox :distal-synapses.active "Active")
-              (chbox :distal-synapses.inactive "Inactive")
               (chbox :distal-synapses.disconnected "Disconnected")
+              (chbox :distal-synapses.inactive "Inactive")
               (chbox :distal-synapses.permanences "Permanences")
               ])]
      ]))
@@ -372,8 +370,7 @@
      [:ul.nav.navbar-nav.navbar-right
       ;; sim rate
       [:li (if-not (:sim-go? @main-options) {:class "hidden"})
-       [:p.navbar-text (gstring/format "%.1f/sec."
-                                       (sim-rate @model))]]
+       [:p.navbar-text (str (.toFixed (sim-rate @model) 1) "/sec.")]]
       ;; sim / anim options
       [:li.dropdown
        [:a.dropdown-toggle {:data-toggle "dropdown"

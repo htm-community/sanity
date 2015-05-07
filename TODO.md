@@ -9,3 +9,5 @@
 * show column state freqs in timestep bar
 
 * 'export' model state as edn / transit
+
+* model parameters in url query string - to allow sharing

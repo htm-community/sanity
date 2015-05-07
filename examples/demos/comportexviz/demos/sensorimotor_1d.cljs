@@ -122,7 +122,7 @@
 (defn on-resize
   [_]
   (when-let [el (dom/getElement "comportex-world")]
-    (viz/set-canvas-pixels-from-element-size! el 160)
+    (viz/set-canvas-pixels-from-element-size! el 100)
     (swap! trigger-redraw inc)))
 
 (defn world-pane
