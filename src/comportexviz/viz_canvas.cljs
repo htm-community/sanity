@@ -29,7 +29,7 @@
                       :layer nil
                       :dt 0
                       :col nil
-                      :cell nil}))
+                      :cell-seg nil}))
 
 (def current-cell-segments-layout (clojure.core/atom nil))
 
@@ -109,7 +109,7 @@
                    :cell-r-px 10
                    :seg-w-px 30
                    :seg-h-px 10
-                   :seg-h-space-px 50
+                   :seg-h-space-px 60
                    :h-space-px 60
                    :highlight-color (:highlight state-colors)}
          }))
@@ -340,7 +340,7 @@
   (cell-xy [this ci])
   (col-cell-line [this ctx ci])
   (cell-seg-line [this ctx ci si])
-  (clicked-cell [this x y]))
+  (clicked-seg [this x y]))
 
 (defn all-cell-segments
   [col depth distal-sg]
@@ -364,7 +364,6 @@
         cell-r-px (:cell-r-px d-opts)
         seg-h-px (:seg-h-px d-opts)
         seg-w-px (:seg-w-px d-opts)
-        seg-r-px (* seg-w-px 0.5)
         our-height (:height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px)
         [col-x col-y] (element-xy cols-lay col dt)]
@@ -373,7 +372,7 @@
         [_ ci si]
         (let [i-all (apply + si (take ci nsegbycell-pad))
               frac (/ i-all nseg-pad)]
-          [(+ segs-left seg-r-px)
+          [segs-left
            (+ our-top (* frac our-height))]))
       (cell-xy
         [this ci]
@@ -396,29 +395,27 @@
             (c/move-to sx sy)
             (c/line-to (+ cell-x cell-r-px) cell-y)
             (c/stroke))))
-      (clicked-cell
+      (clicked-seg
         [this x y]
         (when (<= (- cells-left cell-r-px) x
-                  (+ cells-left cell-r-px))
-          (loop [ci 0]
-            (if (== ci (count segs-by-cell))
-              (dec ci)
-              (let [next-cell-y (-> (cell-xy this (inc ci))
-                                    (second)
-                                    (- cell-r-px))]
-                (if (< y next-cell-y)
-                  ci
-                  (recur (inc ci)))))))))))
+                  (+ segs-left seg-w-px 5))
+          (first (for [[ci nsegs] (map-indexed vector nsegbycell)
+                       si (range nsegs)
+                       :let [[_ seg-y] (seg-xy this ci si)]
+                       :when (<= (- seg-y seg-h-px) y
+                                 (+ seg-y seg-h-px 5))]
+                   [ci si])))))))
 
 (defn draw-cell-segments
   [ctx htm prev-htm r-lays i-lays selection opts cells-left]
   (c/save ctx)
-  (let [{dt :dt, sel-rgn :region, sel-lyr :layer, col :col, sel-ci :cell} selection
+  (let [{dt :dt, sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg} selection
         regions (:regions htm)
         lyr (get-in regions [sel-rgn sel-lyr])
         lay (get-in r-lays [sel-rgn sel-lyr])
         spec (p/params lyr)
-        threshold (:seg-stimulus-threshold spec)
+        stimulus-th (:seg-stimulus-threshold spec)
+        learning-th (:seg-learn-threshold spec)
         pcon (:distal-perm-connected spec)
         pinit (:distal-perm-init spec)
         ac (p/active-cells lyr)
@@ -460,9 +457,9 @@
                   use-segs (if (and cell-learning? (>= learn-si (count p-segs)))
                              (take (inc learn-si) (concat p-segs (repeat {})))
                              p-segs)
-                  highlight-cell? (if sel-ci
-                                    (== ci sel-ci)
-                                    cell-learning?)
+                  selected-cell? (if sel-ci-si
+                                   (== ci (first sel-ci-si))
+                                   cell-learning?)
                   cell-state (cond
                               (and cell-active? cell-predictive?) :active-predicted
                               cell-predictive? :predicted
@@ -474,7 +471,7 @@
           (c/stroke-width 2))
         (col-cell-line cslay ctx ci))
       ;; draw the cell itself
-      (when highlight-cell?
+      (when selected-cell?
         (doto ctx
           (c/fill-style (:highlight state-colors))
           (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
@@ -487,14 +484,8 @@
         (c/stroke)
         (c/fill))
       (c/fill-style ctx "black")
-      (c/text ctx {:text (str "cell " ci
-                              (when cell-learning?
-                                (str "   (learning on "
-                                     (if learn-si
-                                       (str "segment " learn-si)
-                                       "new segment")
-                                     ")")))
-                   :x cell-x :y (- cell-y cell-r-px 5)})
+      (c/text ctx {:text (str "cell " ci)
+                   :x (+ cell-x 10) :y (- cell-y cell-r-px 5)})
       ;; draw each segment
       (doseq [[si seg] (map-indexed vector use-segs)
               :let [[sx sy] (seg-xy cslay ci si)
@@ -505,36 +496,47 @@
                     disc-act (count (grouped-syns [:disconnected :active]))
                     disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
                                 disc-act)
-                    z (-> (/ conn-act threshold)
+                    z (-> (/ conn-act stimulus-th)
                           (min 1.0))
-                    learn-seg? (and cell-learning? (= si learn-si))]]
+                    learn-seg? (and cell-learning? (= si learn-si))
+                    selected-seg? (if sel-ci-si
+                                    (= [ci si] sel-ci-si)
+                                    learn-seg?)
+                    scale (/ seg-w-px stimulus-th)]]
         ;; draw segment as a rectangle
-        (let [s (centred-rect sx sy seg-w-px seg-h-px)
-              hs (centred-rect sx sy (+ seg-w-px 8) (+ seg-h-px 8))]
-          (when learn-seg?
+        (let [h2 (/ seg-h-px 2)
+              conn-th-r {:x sx :y (- sy h2) :w (* stimulus-th scale) :h seg-h-px}
+              conn-act-r (assoc conn-th-r :w (* conn-act scale))
+              disc-th-r {:x sx :y (+ sy h2) :w (* learning-th scale) :h seg-h-px}
+              disc-act-r (assoc disc-th-r :w (* disc-act scale))]
+          (when selected-seg?
             (doto ctx
               (c/fill-style (:highlight state-colors))
-              (c/fill-rect hs)))
+              (c/fill-rect {:x (- sx 5) :y (- sy h2 5) :w (+ seg-w-px 5 5) :h (+ (* 2 seg-h-px) 5 5)})))
           (doto ctx
+            (c/fill-style "white")
+            (c/fill-rect conn-th-r)
+            (c/fill-rect disc-th-r)
             (c/stroke-style "black")
             (c/stroke-width 1)
-            (c/stroke-rect s)
-            (c/fill-style "white")
-            (c/fill-rect s)
-            (c/alpha z)
             (c/fill-style (:active state-colors))
-            (c/fill-rect s)
+            (c/fill-rect conn-act-r)
+            (c/stroke-rect conn-th-r)
+            (c/alpha 0.5)
+            (c/fill-rect disc-act-r)
+            (c/stroke-rect disc-th-r)
             (c/alpha 1.0)))
-        (when (>= conn-act threshold)
+        (when (>= conn-act stimulus-th)
           (doto ctx
             (c/stroke-style (:active state-colors))
             (c/stroke-width 2))
           (cell-seg-line cslay ctx ci si))
         (c/fill-style ctx "black")
-        (c/text ctx {:text (str "[" si "],  active " conn-act
-                                " / " conn-tot " conn."
-                                " (" disc-act " / " disc-tot " disconn.)")
-                     :x (+ sx 5 seg-r-px) :y sy})
+        (c/text-align ctx :right)
+        (c/text ctx {:text (str "seg " si "") :x (- sx 3) :y sy})
+        (c/text-align ctx :start)
+        (when learn-seg?
+          (c/text ctx {:text (str "learning") :x (+ sx seg-w-px 10) :y sy}))
         ;; draw distal synapses
         (c/stroke-width ctx 1)
         (let [do-from (get-in opts [:distal-synapses :from])
@@ -556,7 +558,7 @@
                           (assoc grouped-syns
                                  :growing (if learn-seg? (map vector grow-sources (repeat pinit)))))]
           (when (or (= do-from :all)
-                    (and (= do-from :learning) learn-seg?))
+                    (and (= do-from :learning) selected-seg?))
             (doseq [syn-state syn-states
                     :let [source-info (case syn-state
                                         :active (grouped-sourced-syns [:connected :active])
@@ -981,18 +983,18 @@
             :when dt]
       (reset! hit? true)
       (if (== 1 (count (p/dims-of lay)))
-        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell nil
+        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell-seg nil
                :dt (min dt max-dt))
-        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell nil)))
+        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell-seg nil)))
     ;; check cells
     (when (:col @selection)
       (when-let [cslay @current-cell-segments-layout]
-        (when-let [ci (clicked-cell cslay x y)]
+        (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
-          (swap! selection assoc :cell ci))))
+          (swap! selection assoc :cell-seg [ci si]))))
     (when-not @hit?
       ;; checked all, nothing clicked
-      (swap! selection assoc :col nil :cell nil))))
+      (swap! selection assoc :col nil :cell-seg nil))))
 
 (defn oh-look-the-model-changed!
   [htm]
