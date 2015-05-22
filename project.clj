@@ -1,16 +1,16 @@
-(defproject comportexviz "0.0.8-SNAPSHOT"
+(defproject comportexviz "0.0.9-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
   :url "https://github.com/nupic-community/comportexviz"
 
-  :dependencies [[org.clojure/clojure "1.7.0-beta2"]
-                 [org.clojure/clojurescript "0.0-3211"]
+  :dependencies [[org.clojure/clojure "1.7.0-beta3"]
+                 [org.clojure/clojurescript "0.0-3291"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
-                 [org.nfrac/comportex "0.0.8-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.9-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
-                 [reagent-forms "0.5.0"]]
+                 [reagent-forms "0.5.1"]]
 
-  :plugins [[lein-cljsbuild "1.0.5"]
+  :plugins [[lein-cljsbuild "1.0.6"]
             [com.cemerick/austin "0.1.6"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
 

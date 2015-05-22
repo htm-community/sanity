@@ -1,5 +1,7 @@
 # TODO
 
+* draw distal segments as bar charts conn & disconn
+
 * implement encoder options in fixed-seqs demo
 
 * option to avoid calculating predicted inbits (for speed)

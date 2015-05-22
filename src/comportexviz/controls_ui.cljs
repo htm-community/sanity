@@ -164,14 +164,21 @@
   [steps selection]
   [:div
    [:p.text-muted "The details of model state on the selected time step, selected column."]
-   [:pre.pre-scrollable {:style {:resize "both"}}
+   [:pre.pre-scrollable {:style {:height "90vh" :resize "both"}}
     (if (:col @selection)
       (let [dt (:dt @selection)]
         (comportexviz.details/detail-text (nth @steps dt)
                                           (nth @steps (inc dt))
                                           @selection)))
     ]
-   [:p.text-muted [:small "(scrollable)"]]])
+   [:p.text-muted [:small "(scrollable)"]]
+   [:hr]
+   [:p.text-muted "If you're brave:"]
+   [:button.btn.btn-warning.btn-block {:on-click (fn [e]
+                                                   (let [dt (:dt @selection)]
+                                                     (println (nth @steps dt)))
+                                                   (.preventDefault e))}
+    "Dump entire model to console"]])
 
 (def viz-options-template
   (let [chbox (fn [id label]
