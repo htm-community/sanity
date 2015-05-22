@@ -10,6 +10,7 @@ pom.xml
 .lein-plugins
 .lein-cljsbuild-compiler*
 /public/*/out/
+/public/out/
 comportexviz*.js
 *.js.map
 *~

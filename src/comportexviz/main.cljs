@@ -25,9 +25,7 @@
 
 (def main-options
   (atom {:sim-go? false
-         :sim-step-ms 200
-         :anim-go? true
-         :anim-every 1}))
+         :sim-step-ms 200}))
 
 ;;; ## Simulation
 
@@ -58,31 +56,6 @@
                         (not (:sim-go? old)))
                (run-sim))))
 
-;;; ## Visualisation
-
-(defn draw!
-  []
-  (.requestAnimationFrame js/window viz/draw!))
-
-(add-watch viz/viz-options :redraw
-           (fn [_ _ _ _]
-             (draw!)))
-
-(add-watch viz/selection :redraw
-           (fn [_ _ _ _]
-             (draw!)))
-
-;;; # Animation loop
-
-(go (loop [c (tap-c steps-mult)]
-      (when-let [htm (<! c)]
-        (let [t (p/timestep htm)
-              n (:anim-every @main-options)]
-          (when (and (:anim-go? @main-options)
-                     (zero? (mod t n)))
-            (draw!)))
-        (recur c))))
-
 (def controls
   {:step-backward viz/step-backward!
    :step-forward #(viz/step-forward! sim-step!)
@@ -97,11 +70,21 @@
 
 ;;; ## Entry point
 
+(defn main-pane [world-pane]
+  (fn []
+    [:div
+     [viz/viz-timeline]
+     [:div.row
+      [:div.col-sm-3.col-lg-2
+       [world-pane]]
+      [:div.col-sm-9.col-lg-10
+       [viz/viz-canvas {:tabIndex 1} controls]]]]))
+
 (defn comportexviz-app
   [model-tab world-pane]
   (viz/init! (tap-c steps-mult))
-  (cui/comportexviz-app model-tab world-pane model main-options viz/viz-options viz/selection
-                        viz/model-steps viz/viz-click viz/timeline-click controls
+  (cui/comportexviz-app model-tab (main-pane world-pane) model main-options
+                        viz/viz-options viz/selection viz/model-steps controls
                         viz/state-colors))
 
 (defn set-model!
