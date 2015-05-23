@@ -386,26 +386,35 @@
         "Speed" [:span.caret]]
        [:ul.dropdown-menu {:role "menu"}
         [:li [:a {:href "#"
-                  :on-click #(swap! main-options assoc :sim-step-ms 0
-                                    :anim-every 1)}
+                  :on-click (fn []
+                              (swap! main-options assoc :sim-step-ms 0)
+                              (swap! viz-options assoc-in
+                                     [:drawing :anim-every] 1))}
               "max sim speed"]]
         [:li [:a {:href "#"
-                  :on-click #(swap! main-options assoc :sim-step-ms 0
-                                    :anim-every 100)}
+                  :on-click (fn []
+                              (swap! main-options assoc :sim-step-ms 0)
+                              (swap! viz-options assoc-in
+                                     [:drawing :anim-every] 100))}
               "max sim speed, draw every 100 steps"]]
         [:li [:a {:href "#"
-                  :on-click #(swap! main-options assoc :sim-step-ms 250
-                                    :anim-every 1)}
+                  :on-click (fn []
+                              (swap! main-options assoc :sim-step-ms 250)
+                              (swap! viz-options assoc-in
+                                     [:drawing :anim-every] 1))}
               "limit to 4 steps/sec."]]
         [:li [:a {:href "#"
-                  :on-click #(swap! main-options assoc :sim-step-ms 500
-                                    :anim-every 1)}
+                  :on-click (fn []
+                              (swap! main-options assoc :sim-step-ms 500)
+                              (swap! viz-options assoc-in
+                                     [:drawing :anim-every] 1))}
               "limit to 2 steps/sec."]]
         [:li [:a {:href "#"
-                  :on-click #(swap! main-options assoc :sim-step-ms 1000
-                                    :anim-every 1)}
-              "limit to 1 step/sec."]]
-        ]]
+                  :on-click (fn []
+                              (swap! main-options assoc :sim-step-ms 1000)
+                              (swap! viz-options assoc-in
+                                     [:drawing :anim-every] 1))}
+              "limit to 1 step/sec."]]]]
       [:li (if @show-help {:class "active"})
        [:a {:href "#"
             :on-click (fn [e]
@@ -483,35 +492,9 @@
         ]]]
      [:hr]]))
 
-(def code-key
-  {32 :space
-   33 :page-up
-   34 :page-down
-   37 :left
-   38 :up
-   39 :right
-   40 :down})
-
-(def key->control-k
-  {:left :step-backward
-   :right :step-forward
-   :up :column-up
-   :down :column-down
-   :page-up :scroll-up
-   :page-down :scroll-down
-   :space :toggle-run})
-
-(defn viz-key-down
-  [e controls]
-  (if-let [k (code-key (.-keyCode e))]
-    (let [control-fn (-> k key->control-k controls)]
-      (control-fn)
-      (.preventDefault e))
-    true))
-
 (defn comportexviz-app
-  [model-tab world-pane model main-options viz-options selection steps
-   viz-click timeline-click controls series-colors]
+  [model-tab main-pane model main-options viz-options selection steps controls
+   series-colors]
   (let [show-help (atom false)
         viz-expanded (atom false)]
     [:div
@@ -520,19 +503,7 @@
      [:div.container-fluid
       [:div.row
        [:div.col-sm-9.viz-expandable
-        [:canvas#comportex-timeline {:on-click timeline-click
-                                     :style {:width "100%"
-                                             :height "2em"}}]
-        [:div.row
-         [:div.col-sm-3.col-lg-2
-          [world-pane]]
-         [:div.col-sm-9.col-lg-10
-          [:canvas#comportex-viz {:on-click viz-click
-                                  :on-key-down (fn [e] (viz-key-down e controls))
-                                  :tabIndex 1
-                                  :style {:width "100%"
-                                          :height "100vh"}}]]]
-        ]
+        [main-pane]]
        [:div.col-sm-3
         [tabs
          [[:model [model-tab]]

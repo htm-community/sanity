@@ -10,6 +10,7 @@
                      make-layout]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
+            [goog.events :as events]
             [goog.style :as style]
             [monet.canvas :as c]
             [monet.core]
@@ -18,8 +19,8 @@
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.cells :as cells]
             [clojure.set :as set]
-            [cljs.core.async :as async :refer [<!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]
+            [cljs.core.async :as async :refer [<! put! chan]])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [comportexviz.macros :refer [with-cache]]))
 
 (def model-steps (atom []))
@@ -111,8 +112,9 @@
                    :seg-h-px 10
                    :seg-h-space-px 60
                    :h-space-px 60
-                   :highlight-color (:highlight state-colors)}
-         }))
+                   :highlight-color (:highlight state-colors)
+                   :anim-go? true
+                   :anim-every 1}}))
 
 (defn draw-image-dt
   [ctx lay dt img]
@@ -726,6 +728,52 @@
                (n-onscreen lay) -1)
        " of " (p/size-of lay)))
 
+
+(defn on-resize [component width-px height-px resizes]
+  (let [size-px (-> component reagent/dom-node style/getSize)]
+    (reset! width-px (-> (.-width size-px)
+                         (max 300)))
+    (reset! height-px (.-height size-px))
+    (when resizes
+      (put! resizes [(.-width size-px) (.-height size-px)]))))
+
+(defn resizing-canvas [_ _ draw resizes]
+  (let [resize-key (atom nil)
+        width-px (atom nil)
+        height-px (atom nil)]
+    (reagent/create-class
+     {:component-did-mount (fn [component]
+                             (reset! resize-key
+                                     (events/listen js/window "resize"
+                                                    #(on-resize component
+                                                                width-px
+                                                                height-px
+                                                                resizes)))
+
+                             ;; Causes a render + did-update.
+                             (on-resize component width-px height-px resizes))
+
+      :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+      :component-will-unmount #(when @resize-key
+                                 (events/unlistenByKey @resize-key))
+
+      :display-name "resizing-canvas"
+      :reagent-render (fn [props canaries _ _]
+                        ;; Need to deref all atoms consumed by draw function to
+                        ;; subscribe to changes.
+                        (mapv deref canaries)
+                        [:canvas (assoc props
+                                   :width @width-px
+                                   :height @height-px)])})))
+
+(defn should-draw? [steps opts]
+  (let [{:keys [anim-go? anim-every height-px]} (:drawing opts)
+        model (first steps)]
+    (when (and anim-go? model height-px)
+      (let [t (p/timestep model)]
+        (zero? (mod t anim-every))))))
+
 (defn draw-timeline!
   [ctx steps sel-dt opts]
   (let [current-t (p/timestep (first steps))
@@ -767,6 +815,19 @@
     (when (< click-dt (count @model-steps))
       (swap! selection assoc :dt click-dt))
     ))
+
+(defn viz-timeline []
+  [resizing-canvas
+   {:on-click timeline-click
+    :style {:width "100%"
+            :height "2em"}}
+   [selection model-steps]
+   (fn [ctx]
+     (let [steps @model-steps
+           opts @viz-options]
+       (when (should-draw? steps opts)
+         (draw-timeline! ctx steps (:dt @selection) opts))))
+   nil])
 
 (defn draw-viz!
   [ctx steps layouts sel opts]
@@ -898,66 +959,31 @@
       (draw-cell-segments ctx sel-htm sel-prev-htm r-lays i-lays sel opts cells-left)))
   nil)
 
-(defn set-canvas-pixels-from-element-size!
-  [el min-px-width]
-  (let [size-px (style/getSize el)
-        width-px (-> (.-width size-px)
-                     (max min-px-width))
-        height-px (.-height size-px)]
-    (set! (.-width el) width-px)
-    (set! (.-height el) height-px)))
+(def code-key
+  {32 :space
+   33 :page-up
+   34 :page-down
+   37 :left
+   38 :up
+   39 :right
+   40 :down})
 
-(defn on-resize
-  [_]
-  (let [viz-el (dom/getElement "comportex-viz")
-        tl-el (dom/getElement "comportex-timeline")
-        size-px (style/getSize viz-el)
-        width-px (.-width size-px)
-        height-px (.-height size-px)]
-    (set-canvas-pixels-from-element-size! viz-el 300)
-    (set-canvas-pixels-from-element-size! tl-el 300)
-    (swap! viz-options (fn [opts]
-                         (-> opts
-                             (assoc-in [:drawing :height-px] height-px)
-                             (assoc-in [:drawing :width-px] width-px))))))
+(def key->control-k
+  {:left :step-backward
+   :right :step-forward
+   :up :column-up
+   :down :column-down
+   :page-up :scroll-up
+   :page-down :scroll-down
+   :space :toggle-run})
 
-(defn selected-model-step
-  []
-  (nth @model-steps (:dt @selection) nil))
-
-(defn draw!
-  []
-  (when (and (seq @model-steps)
-             (dom/getElement "comportex-viz"))
-    (if (nil? (get-in @viz-options [:drawing :height-px]))
-      (on-resize nil) ;; sets values and triggers another redraw
-      (let [viz-el (dom/getElement "comportex-viz")
-            viz-ctx (c/get-context viz-el "2d")
-            tl-el (dom/getElement "comportex-timeline")
-            tl-ctx (c/get-context tl-el "2d")]
-        (draw-viz! viz-ctx
-                   @model-steps
-                   @viz-layouts
-                   @selection
-                   @viz-options)
-        (draw-timeline! tl-ctx
-                        @model-steps
-                        (:dt @selection)
-                        @viz-options)))))
-
-(defn step-forward!
-  [sim-step!]
-  (if (zero? (:dt @selection))
-    (sim-step!)
-    (swap! selection update-in [:dt]
-           (fn [x] (max (dec x) 0)))))
-
-(defn step-backward!
-  []
-  (let [;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count @model-steps) 2))]
-    (swap! selection update-in [:dt]
-          (fn [x] (min (inc x) max-dt)))))
+(defn viz-key-down
+  [e controls]
+  (if-let [k (code-key (.-keyCode e))]
+    (let [control-fn (-> k key->control-k controls)]
+      (control-fn)
+      (.preventDefault e))
+    true))
 
 (defn viz-click
   [e*]
@@ -996,6 +1022,47 @@
       ;; checked all, nothing clicked
       (swap! selection assoc :col nil :cell-seg nil))))
 
+(defn viz-canvas [props controls]
+  (let [resizes (chan)]
+    (go-loop []
+      (when-let [[width-px height-px] (<! resizes)]
+        (swap! viz-options (fn [opts]
+                             (-> opts
+                                 (assoc-in [:drawing :height-px] height-px)
+                                 (assoc-in [:drawing :width-px] width-px))))
+        (recur)))
+    [resizing-canvas
+     (assoc props
+       :on-click viz-click
+       :on-key-down #(viz-key-down % controls)
+       :style {:width "100%"
+               :height "100vh"})
+     [selection model-steps]
+     (fn [ctx]
+       (let [steps @model-steps
+             opts @viz-options]
+         (when (should-draw? steps opts)
+           (draw-viz! ctx steps @viz-layouts @selection opts))))
+     resizes]))
+
+(defn selected-model-step
+  []
+  (nth @model-steps (:dt @selection) nil))
+
+(defn step-forward!
+  [sim-step!]
+  (if (zero? (:dt @selection))
+    (sim-step!)
+    (swap! selection update-in [:dt]
+           (fn [x] (max (dec x) 0)))))
+
+(defn step-backward!
+  []
+  (let [;; we need to assume there is a previous step, so:
+        max-dt (max 0 (- (count @model-steps) 2))]
+    (swap! selection update-in [:dt]
+          (fn [x] (min (inc x) max-dt)))))
+
 (defn oh-look-the-model-changed!
   [htm]
   (reset! viz-layouts (rebuild-layouts htm @viz-options))
@@ -1006,7 +1073,6 @@
 
 (defn init!
   [steps-c]
-  (.addEventListener js/window "resize" on-resize)
   ;; stream the simulation steps into the sliding history buffer
   (go (loop []
         (when-let [x* (<! steps-c)]
@@ -1015,3 +1081,12 @@
             (swap! model-steps (fn [xs]
                                  (take keep-steps (cons x xs)))))
           (recur)))))
+
+(defn set-canvas-pixels-from-element-size!
+  [el min-px-width]
+  (let [size-px (style/getSize el)
+        width-px (-> (.-width size-px)
+                     (max min-px-width))
+        height-px (.-height size-px)]
+    (set! (.-width el) width-px)
+    (set! (.-height el) height-px)))
