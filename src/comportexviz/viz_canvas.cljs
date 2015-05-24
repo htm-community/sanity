@@ -821,7 +821,7 @@
    {:on-click timeline-click
     :style {:width "100%"
             :height "2em"}}
-   [selection model-steps]
+   [selection model-steps viz-options]
    (fn [ctx]
      (let [steps @model-steps
            opts @viz-options]
@@ -1037,7 +1037,7 @@
        :on-key-down #(viz-key-down % controls)
        :style {:width "100%"
                :height "100vh"})
-     [selection model-steps]
+     [selection model-steps viz-options]
      (fn [ctx]
        (let [steps @model-steps
              opts @viz-options]
