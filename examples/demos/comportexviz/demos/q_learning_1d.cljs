@@ -3,7 +3,7 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
-            [comportexviz.viz-canvas :as viz]
+            [comportexviz.helpers :as h]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -98,7 +98,7 @@
 (defn on-resize
   [_]
   (when-let [el (dom/getElement "comportex-world")]
-    (viz/set-canvas-pixels-from-element-size! el 160)
+    (h/set-canvas-pixels-from-element-size! el 160)
     (swap! trigger-redraw inc)))
 
 (defn signed-str [x] (str (if (neg? x) "" "+") x))
@@ -156,7 +156,7 @@
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-step)]
+  (when-let [htm (main/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           canvas (dom/getElement "comportex-world")]
       (when canvas
@@ -268,7 +268,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-pane)
+  (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
   (.addEventListener js/window "resize" on-resize)
   (reset! main/world world-c)

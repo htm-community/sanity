@@ -145,7 +145,7 @@ fox eat something.
   (let [show-predictions (atom false)
         predictions-cache (atom {})]
     (fn []
-      (when-let [htm (viz/selected-model-step)]
+      (when-let [htm (main/selected-model-step)]
         (let [in-value (:value (first (core/input-seq htm)))]
           [:div
            [:p.muted [:small "Input on selected timestep."]]
@@ -332,8 +332,8 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-pane)
+  (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
-  (swap! viz/viz-options assoc-in [:drawing :display-mode] :two-d)
+  (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (reset! main/world world-c)
   (swap! main/main-options assoc :sim-go? true))

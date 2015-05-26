@@ -5,7 +5,9 @@
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
             [clojure.string :as str]
+            [cljs.core.async :as async :refer [put!]]
             [cljs.reader]
+            [comportexviz.helpers] ;; needed by with-ui-loading-message macro
             [comportexviz.plots :as plots]
             [comportexviz.details]
             [org.nfrac.comportex.core :as core]
@@ -37,7 +39,7 @@
 (defn parameters-tab
   [model selection]
   (let [partypes (cljs.core/atom {})] ;; immutable cache
-    (fn []
+    (fn [_ _]
       [:div
        [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
@@ -50,7 +52,7 @@
                 sel-layer (:layer @selection)
                 rgn (get-in @model [:regions sel-region])
                 lyr (get rgn sel-layer)
-                spec (p/params lyr)]
+                spec (when lyr (p/params lyr))]
             (concat
              (for [[k v] (sort spec)
                    :let [path [:regions sel-region sel-layer :spec k]
@@ -258,8 +260,13 @@
               ])]
      ]))
 
+(defn send-command [ch command & xs]
+  (fn [e]
+    (put! ch (into [command] xs))
+    (.preventDefault e)))
+
 (defn navbar
-  [main-options model show-help controls viz-options viz-expanded]
+  [main-options model show-help viz-options viz-expanded into-viz]
   [:nav.navbar.navbar-default
    [:div.container-fluid
     [:div.navbar-header
@@ -274,10 +281,7 @@
       [:li
        [:button.btn.btn-default.navbar-btn
         {:type :button
-         :on-click (fn [e]
-                     (let [f (:step-backward controls)]
-                       (f))
-                     (.preventDefault e))
+         :on-click (send-command into-viz :step-backward)
          :title "Step backward in time"}
         [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
         [:span.visible-xs-inline "Step backward"]]]
@@ -285,10 +289,7 @@
       [:li
        [:button.btn.btn-default.navbar-btn
         {:type :button
-         :on-click (fn [e]
-                     (let [f (:step-forward controls)]
-                       (f))
-                     (.preventDefault e))
+         :on-click (send-command into-viz :step-forward)
          :title "Step forward in time"}
         [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
         [:span.visible-xs-inline "Step forward"]]]
@@ -326,10 +327,7 @@
       [:li
        [:button.btn.btn-default.navbar-btn
         {:type :button
-         :on-click (fn [e]
-                     (let [f (:scroll-down controls)]
-                       (f))
-                     (.preventDefault e))
+         :on-click (send-command into-viz :scroll-down)
          :title "Scroll down visible columns"}
         [:span.glyphicon.glyphicon-arrow-down {:aria-hidden "true"}]
         [:span.visible-xs-inline "Scroll down"]]]
@@ -337,10 +335,7 @@
       [:li
        [:button.btn.btn-default.navbar-btn
         {:type :button
-         :on-click (fn [e]
-                     (let [f (:scroll-up controls)]
-                       (f))
-                     (.preventDefault e))
+         :on-click (send-command into-viz :scroll-up)
          :title "Scroll down visible columns"}
         [:span.glyphicon.glyphicon-arrow-up {:aria-hidden "true"}]
         [:span.visible-xs-inline "Scroll up"]]]
@@ -493,12 +488,12 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [model-tab main-pane model main-options viz-options selection steps controls
-   series-colors]
+  [model-tab main-pane model main-options viz-options selection steps
+   series-colors into-viz]
   (let [show-help (atom false)
         viz-expanded (atom false)]
     [:div
-     [navbar main-options model show-help controls viz-options viz-expanded]
+     [navbar main-options model show-help viz-options viz-expanded into-viz]
      [help-block show-help]
      [:div.container-fluid
       [:div.row
