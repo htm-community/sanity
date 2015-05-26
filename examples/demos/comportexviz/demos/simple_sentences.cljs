@@ -35,7 +35,7 @@
   []
   (let [show-predictions (atom false)]
     (fn []
-      (when-let [htm (viz/selected-model-step)]
+      (when-let [htm (main/selected-model-step)]
         (let [in-value (:value (first (core/input-seq htm)))]
           [:div
            [:p.muted [:small "Input on selected timestep."]]
@@ -130,7 +130,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-pane)
+  (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
   (reset! main/world world-c)
   (set-model!)

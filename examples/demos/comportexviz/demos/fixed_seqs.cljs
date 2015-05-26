@@ -10,7 +10,7 @@
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [comportexviz.viz-canvas :as viz]
+            [comportexviz.helpers :as h]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [cljs.core.async :as async])
@@ -77,7 +77,7 @@
 (defn on-resize
   [_]
   (when-let [el (dom/getElement "comportex-world")]
-    (viz/set-canvas-pixels-from-element-size! el 160)
+    (h/set-canvas-pixels-from-element-size! el 160)
     (swap! trigger-redraw inc)))
 
 (defn pattern-index-map
@@ -96,7 +96,7 @@
 
 (defn world-pane
   []
-  (when-let [htm (viz/selected-model-step)]
+  (when-let [htm (main/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
           model-id (::model-id (meta in-value))
           {:keys [patterns mixed? xy?]} (model-info model-id)
@@ -139,7 +139,7 @@
         model-id (:input-stream @config)
         {:keys [model-fn world-fn xy?]} (model-info model-id)]
     (async/close! @main/world)
-    (swap! viz/viz-options assoc-in [:drawing :display-mode]
+    (swap! main/viz-options assoc-in [:drawing :display-mode]
            (if (= model-id :isolated-2d) :two-d :one-d))
     (with-ui-loading-message
       (main/set-model! (model-fn n-regions))
@@ -226,7 +226,7 @@
 
 (defn ^:export init
   []
-  (reagent/render (main/comportexviz-app model-tab world-pane)
+  (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
   (.addEventListener js/window "resize" on-resize)
   (swap! main/main-options assoc :sim-go? true))

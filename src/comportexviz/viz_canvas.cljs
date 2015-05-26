@@ -23,16 +23,11 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [comportexviz.macros :refer [with-cache]]))
 
-(def model-steps (atom []))
-(def viz-layouts (atom {:inputs {}
-                        :regions {}}))
-(def selection (atom {:region nil
+(def blank-selection {:region nil
                       :layer nil
                       :dt 0
                       :col nil
-                      :cell-seg nil}))
-
-(def current-cell-segments-layout (clojure.core/atom nil))
+                      :cell-seg nil})
 
 ;;; ## Colours
 
@@ -74,47 +69,47 @@
    :temporal-pooling (hsl :green 1 0.5 0.4)
    })
 
-(def viz-options
-  (atom {:input {:active true
-                 :predicted true
-                 :scroll-counter 0}
-         :columns {:active true
-                   :overlaps nil
-                   :boosts nil
-                   :active-freq nil
-                   :n-segments nil
-                   :predictive true
-                   :temporal-pooling true
-                   :scroll-counter 0}
-         :ff-synapses {:to :selected ;; :selected, :all, :none
-                       :growing true
-                       :inactive nil
-                       :disconnected nil
-                       :permanences true}
-         :distal-synapses {:from :learning ;; :learning, :all, :none
-                           :growing true
-                           :inactive nil
-                           :disconnected nil
-                           :permanences true}
-         :keep-steps 30
-         :drawing {:display-mode :one-d ;; :one-d, :two-d
-                   :draw-steps 20
-                   :height-px nil ;; set on init / resize
-                   :width-px nil ;; set on init / resize
-                   :top-px 30
-                   :bit-w-px 3
-                   :bit-h-px 3
-                   :bit-shrink 0.85
-                   :col-d-px 5
-                   :col-shrink 0.85
-                   :cell-r-px 10
-                   :seg-w-px 30
-                   :seg-h-px 10
-                   :seg-h-space-px 60
-                   :h-space-px 60
-                   :highlight-color (:highlight state-colors)
-                   :anim-go? true
-                   :anim-every 1}}))
+(def default-viz-options
+  {:input {:active true
+           :predicted true
+           :scroll-counter 0}
+   :columns {:active true
+             :overlaps nil
+             :boosts nil
+             :active-freq nil
+             :n-segments nil
+             :predictive true
+             :temporal-pooling true
+             :scroll-counter 0}
+   :ff-synapses {:to :selected ;; :selected, :all, :none
+                 :growing true
+                 :inactive nil
+                 :disconnected nil
+                 :permanences true}
+   :distal-synapses {:from :learning ;; :learning, :all, :none
+                     :growing true
+                     :inactive nil
+                     :disconnected nil
+                     :permanences true}
+   :keep-steps 30
+   :drawing {:display-mode :one-d ;; :one-d, :two-d
+             :draw-steps 20
+             :height-px nil ;; set on resize
+             :width-px nil ;; set on resize
+             :top-px 30
+             :bit-w-px 3
+             :bit-h-px 3
+             :bit-shrink 0.85
+             :col-d-px 5
+             :col-shrink 0.85
+             :cell-r-px 10
+             :seg-w-px 30
+             :seg-h-px 10
+             :seg-h-space-px 60
+             :h-space-px 60
+             :highlight-color (:highlight state-colors)
+             :anim-go? true
+             :anim-every 1}})
 
 (defn draw-image-dt
   [ctx lay dt img]
@@ -176,18 +171,12 @@
      {:inputs i-lays
       :regions r-lays})))
 
-(add-watch viz-options :rebuild-layouts
-           (fn [_ _ old-opts opts]
-             (when (not= (:drawing opts)
-                         (:drawing old-opts))
-               (reset! viz-layouts (rebuild-layouts (first @model-steps) opts)))))
-
 (defn update-dt-offsets!
-  []
+  [viz-layouts selection opts]
   (swap! viz-layouts
          (fn [m]
            (let [sel-dt (:dt @selection)
-                 draw-steps (get-in @viz-options [:drawing :draw-steps])
+                 draw-steps (get-in opts [:drawing :draw-steps])
                  dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
              (-> (reduce (fn [m path]
                            (update-in m path
@@ -195,10 +184,6 @@
                          m
                          (all-layout-paths m))
                  (reset-layout-caches))))))
-
-(add-watch selection :update-dt-offsets
-           (fn [_ _ _ _]
-             (update-dt-offsets!)))
 
 (defn scroll-layout
   [lay down?]
@@ -211,7 +196,7 @@
                    (-> (- x n) (max 0)))))))
 
 (defn scroll!
-  [down?]
+  [viz-options viz-layouts down?]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
@@ -409,7 +394,8 @@
                    [ci si])))))))
 
 (defn draw-cell-segments
-  [ctx htm prev-htm r-lays i-lays selection opts cells-left]
+  [ctx htm prev-htm r-lays i-lays selection opts cells-left
+   current-cell-segments-layout]
   (c/save ctx)
   (let [{dt :dt, sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg} selection
         regions (:regions htm)
@@ -803,25 +789,22 @@
     (c/alpha ctx 1.0)))
 
 (defn timeline-click
-  [e*]
+  [e* steps selection opts]
   (let [e (.-nativeEvent e*)
         x (.-offsetX e)
-        steps @model-steps
-        opts @viz-options
         keep-steps (:keep-steps opts)
         width-px (.-width (.-target e))
         t-width (/ width-px keep-steps)
         click-dt (quot (- (dec width-px) x) t-width)]
-    (when (< click-dt (count @model-steps))
-      (swap! selection assoc :dt click-dt))
-    ))
+    (when (< click-dt (count steps))
+      (swap! selection assoc :dt click-dt))))
 
-(defn viz-timeline []
+(defn viz-timeline [model-steps selection viz-options]
   [resizing-canvas
-   {:on-click timeline-click
+   {:on-click #(timeline-click % @model-steps selection @viz-options)
     :style {:width "100%"
             :height "2em"}}
-   [selection model-steps viz-options]
+   [model-steps selection viz-options]
    (fn [ctx]
      (let [steps @model-steps
            opts @viz-options]
@@ -830,7 +813,7 @@
    nil])
 
 (defn draw-viz!
-  [ctx steps layouts sel opts]
+  [ctx steps layouts sel opts current-cell-segments-layout]
   (let [{sel-dt :dt
          sel-rgn :region
          sel-lyr :layer
@@ -956,7 +939,8 @@
         (draw-ff-synapses ctx sel-htm r-lays i-lays sel opts)))
     ;; draw selected cells and segments
     (when sel-col
-      (draw-cell-segments ctx sel-htm sel-prev-htm r-lays i-lays sel opts cells-left)))
+      (draw-cell-segments ctx sel-htm sel-prev-htm r-lays i-lays sel opts
+                          cells-left current-cell-segments-layout)))
   nil)
 
 (def code-key
@@ -978,22 +962,22 @@
    :space :toggle-run})
 
 (defn viz-key-down
-  [e controls]
+  [e commands-in]
   (if-let [k (code-key (.-keyCode e))]
-    (let [control-fn (-> k key->control-k controls)]
-      (control-fn)
+    (do
+      (put! commands-in [(key->control-k k)])
       (.preventDefault e))
     true))
 
 (defn viz-click
-  [e*]
+  [e* steps selection layouts current-cell-segments-layout]
   (let [e (.-nativeEvent e*)
         x (.-offsetX e)
         y (.-offsetY e)
-        i-lays (:inputs @viz-layouts)
-        r-lays (:regions @viz-layouts)
+        i-lays (:inputs layouts)
+        r-lays (:regions layouts)
         ;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count @model-steps) 2))
+        max-dt (max 0 (- (count steps) 2))
         hit? (atom false)]
     ;; check inputs
     (doseq [[k lay] i-lays
@@ -1022,8 +1006,58 @@
       ;; checked all, nothing clicked
       (swap! selection assoc :col nil :cell-seg nil))))
 
-(defn viz-canvas [props controls]
-  (let [resizes (chan)]
+(defn viz-canvas [_ model-steps selection viz-options commands-in commands-out]
+  (let [viz-layouts (atom {:inputs {}
+                           :regions {}})
+        current-cell-segments-layout (clojure.core/atom nil)
+        resizes (chan)]
+
+    (add-watch viz-options :rebuild-layouts
+               (fn [_ _ old-opts opts]
+                 (when (not= (:drawing opts)
+                             (:drawing old-opts))
+                   (reset! viz-layouts (rebuild-layouts (first @model-steps)
+                                                        opts)))))
+
+    (add-watch selection :update-dt-offsets
+               (fn [_ _ _ _]
+                 (update-dt-offsets! viz-layouts selection @viz-options)))
+
+    (go-loop []
+      (when-let [[command & xs] (<! commands-in)]
+        (case command
+          :step-backward (let [;; we need to assume there is a previous step, so:
+                               max-dt (max 0 (- (count @model-steps) 2))]
+                           (swap! selection update-in [:dt]
+                                  #(min (inc %) max-dt)))
+          :step-forward (if (zero? (:dt @selection))
+                          (when commands-out
+                            (put! commands-out :sim-step))
+                          (swap! selection update-in [:dt]
+                                 #(max (dec %) 0)))
+          :column-up (swap! selection update-in [:col]
+                            #(when (and % (pos? %)) (dec %)))
+          :column-down (swap! selection update-in [:col]
+                              #(if % (inc %) 0))
+          :scroll-up (scroll! viz-options viz-layouts false)
+          :scroll-down (scroll! viz-options viz-layouts true)
+          :toggle-run (when commands-out
+                        (put! commands-out :toggle-run))
+          :on-model-changed (let [[htm] xs
+                                  region-key (first (core/region-keys htm))
+                                  layer-id (-> htm
+                                               (get-in [:regions region-key])
+                                               core/layers
+                                               first)]
+                              (reset! viz-layouts
+                                      (rebuild-layouts htm @viz-options))
+                              (swap! selection assoc
+                                     :region region-key
+                                     :layer layer-id
+                                     :dt 0
+                                     :col nil)))
+        (recur)))
+
     (go-loop []
       (when-let [[width-px height-px] (<! resizes)]
         (swap! viz-options (fn [opts]
@@ -1031,62 +1065,35 @@
                                  (assoc-in [:drawing :height-px] height-px)
                                  (assoc-in [:drawing :width-px] width-px))))
         (recur)))
-    [resizing-canvas
-     (assoc props
-       :on-click viz-click
-       :on-key-down #(viz-key-down % controls)
-       :style {:width "100%"
-               :height "100vh"})
-     [selection model-steps viz-options]
-     (fn [ctx]
-       (let [steps @model-steps
-             opts @viz-options]
-         (when (should-draw? steps opts)
-           (draw-viz! ctx steps @viz-layouts @selection opts))))
-     resizes]))
+
+    (fn [props _ _ _ _ _]
+      [resizing-canvas
+       (assoc props
+         :on-click #(viz-click % @model-steps selection @viz-layouts
+                               current-cell-segments-layout)
+         :on-key-down #(viz-key-down % commands-in)
+         :style {:width "100%"
+                 :height "100vh"})
+       [selection model-steps viz-layouts viz-options]
+       (fn [ctx]
+         (let [steps @model-steps
+               opts @viz-options]
+           (when (should-draw? steps opts)
+             (draw-viz! ctx steps @viz-layouts @selection opts
+                        current-cell-segments-layout))))
+       resizes])))
 
 (defn selected-model-step
-  []
+  [model-steps selection]
   (nth @model-steps (:dt @selection) nil))
 
-(defn step-forward!
-  [sim-step!]
-  (if (zero? (:dt @selection))
-    (sim-step!)
-    (swap! selection update-in [:dt]
-           (fn [x] (max (dec x) 0)))))
-
-(defn step-backward!
-  []
-  (let [;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count @model-steps) 2))]
-    (swap! selection update-in [:dt]
-          (fn [x] (min (inc x) max-dt)))))
-
-(defn oh-look-the-model-changed!
-  [htm]
-  (reset! viz-layouts (rebuild-layouts htm @viz-options))
-  (let [region-key (first (core/region-keys htm))
-        layer-id (first (core/layers (get-in htm [:regions region-key])))]
-    (swap! selection assoc :region region-key :layer layer-id
-           :dt 0 :col nil)))
-
-(defn init!
-  [steps-c]
+(defn record-simulation!
+  [steps-out model-steps viz-options]
   ;; stream the simulation steps into the sliding history buffer
-  (go (loop []
-        (when-let [x* (<! steps-c)]
-          (let [x (vary-meta x* assoc ::cache (atom {}))
-                keep-steps (:keep-steps @viz-options)]
-            (swap! model-steps (fn [xs]
-                                 (take keep-steps (cons x xs)))))
-          (recur)))))
-
-(defn set-canvas-pixels-from-element-size!
-  [el min-px-width]
-  (let [size-px (style/getSize el)
-        width-px (-> (.-width size-px)
-                     (max min-px-width))
-        height-px (.-height size-px)]
-    (set! (.-width el) width-px)
-    (set! (.-height el) height-px)))
+  (go-loop []
+    (when-let [x* (<! steps-out)]
+      (let [x (vary-meta x* assoc ::cache (atom {}))
+            keep-steps (:keep-steps @viz-options)]
+        (swap! model-steps (fn [xs]
+                             (take keep-steps (cons x xs)))))
+      (recur))))

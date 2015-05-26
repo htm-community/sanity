@@ -1,6 +1,7 @@
 (ns comportexviz.helpers
   (:require [goog.dom]
             [goog.dom.classes]
+            [goog.style :as style]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :refer [round]]))
@@ -60,3 +61,12 @@
         pr-votes (core/predicted-bit-votes rgn)
         predictions (p/decode (:encoder inp) pr-votes n-predictions)]
     (predictions-table predictions)))
+
+(defn set-canvas-pixels-from-element-size!
+  [el min-px-width]
+  (let [size-px (style/getSize el)
+        width-px (-> (.-width size-px)
+                     (max min-px-width))
+        height-px (.-height size-px)]
+    (set! (.-width el) width-px)
+    (set! (.-height el) height-px)))
