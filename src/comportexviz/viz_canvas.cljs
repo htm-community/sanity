@@ -1092,13 +1092,6 @@
   [model-steps selection]
   (nth @model-steps (:dt @selection) nil))
 
-(defn record-simulation!
-  [steps-out model-steps viz-options]
-  ;; stream the simulation steps into the sliding history buffer
-  (go-loop []
-    (when-let [x* (<! steps-out)]
-      (let [x (vary-meta x* assoc ::cache (atom {}))
-            keep-steps (:keep-steps @viz-options)]
-        (swap! model-steps (fn [xs]
-                             (take keep-steps (cons x xs)))))
-      (recur))))
+(defn init-caches
+  [htm]
+  (vary-meta htm assoc ::cache (atom {})))
