@@ -73,7 +73,17 @@
       :sim-step (sim-step!))
     (recur)))
 
-(viz/record-simulation! (tap-c steps-mult) model-steps viz-options)
+;; stream the simulation steps into the sliding history buffer
+(let [steps-out (tap-c steps-mult)]
+  (go-loop []
+    (when-let [x* (<! steps-out)]
+      (let [x (-> x*
+                  p/htm-export ;; optional
+                  viz/init-caches)
+            keep-steps (:keep-steps @viz-options)]
+        (swap! model-steps (fn [xs]
+                             (take keep-steps (cons x xs)))))
+      (recur))))
 
 (defn main-pane [world-pane model-steps selection viz-options into-viz from-viz]
   [:div
