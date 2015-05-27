@@ -229,10 +229,10 @@
               ])
       (group "Columns"
              [:div.panel-body
-              (chbox :columns.overlaps "Overlap scores")
-              (chbox :columns.active-freq "Activation freq")
-              (chbox :columns.boosts "Boost factors")
-              (chbox :columns.n-segments "Num segments")
+              (chbox :columns.overlaps "Overlaps")
+              (chbox :columns.active-freq "Active-duty")
+              (chbox :columns.boosts "Boosts")
+              (chbox :columns.n-segments "N.segments")
               (chbox :columns.active "Active columns")
               (chbox :columns.predictive "Predictive columns")
               ])
@@ -245,15 +245,19 @@
                 [:option {:key :selected} "selected column"]
                 [:option {:key :none} "none"]
                 ]]
-              (chbox :ff-synapses.active "Active")
               (chbox :ff-synapses.disconnected "Disconnected")
               (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.permanences "Permanences")
               ])
       (group "Distal synapses"
              [:div.panel-body
-              [:p.help-block "To distal dendrite segments of cells in the selected column."]
-              (chbox :distal-synapses.active "Active")
+              [:div "(selected column) "
+               [:select {:field :list
+                         :id :distal-synapses.from}
+                [:option {:key :all} "all cell segments"]
+                [:option {:key :selected} "selected segment"]
+                [:option {:key :none} "none"]
+                ]]
               (chbox :distal-synapses.disconnected "Disconnected")
               (chbox :distal-synapses.inactive "Inactive")
               (chbox :distal-synapses.permanences "Permanences")

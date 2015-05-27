@@ -86,7 +86,7 @@
                  :inactive nil
                  :disconnected nil
                  :permanences true}
-   :distal-synapses {:from :learning ;; :learning, :all, :none
+   :distal-synapses {:from :selected ;; :selected, :all, :none
                      :growing true
                      :inactive nil
                      :disconnected nil
@@ -252,8 +252,9 @@
               in-sbits (:in-stable-ff-bits (:state lyr))
               sg (:proximal-sg lyr)
               prox-learning (:proximal-learning (:state lyr))
-              [learn-path grow-sources _] (get prox-learning [col])
-              this-seg-path (or learn-path [col 0])
+              seg-up (get prox-learning [col 0])
+              {learn-seg-path :target-id, grow-sources :grow-sources} seg-up
+              this-seg-path (or learn-seg-path [col 0 0])
               all-syns (p/in-synapses sg this-seg-path)
               syns (select-keys all-syns (p/sources-connected-to sg this-seg-path))
               this-lay (get-in r-lays [rgn-id lyr-id])
@@ -412,9 +413,8 @@
         prev-aci (:distal-bits (:prior-distal-state lyr))
         depth (p/layer-depth lyr)
         learning (:distal-learning (:state lyr))
-        [learn-cell [[_ learn-ci learn-si] grow-sources _]]
-        (first (select-keys learning
-                            (for [ci (range depth)] [col ci])))
+        seg-up (first (vals (select-keys learning (for [ci (range depth)] [col ci]))))
+        {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
         segs-by-cell (->> (:distal-sg lyr)
                           (all-cell-segments col depth))
         p-segs-by-cell (->> (get-in prev-htm [:regions sel-rgn sel-lyr :distal-sg])
@@ -440,7 +440,7 @@
                   cell-id [col ci]
                   cell-active? (ac cell-id)
                   cell-predictive? (prev-pc cell-id)
-                  cell-learning? (= cell-id learn-cell)
+                  cell-learning? (= ci learn-ci)
                   ;; need to add an entry for a new segment if just grown
                   use-segs (if (and cell-learning? (>= learn-si (count p-segs)))
                              (take (inc learn-si) (concat p-segs (repeat {})))
@@ -494,17 +494,22 @@
         ;; draw segment as a rectangle
         (let [h2 (/ seg-h-px 2)
               conn-th-r {:x sx :y (- sy h2) :w (* stimulus-th scale) :h seg-h-px}
+              conn-tot-r (assoc conn-th-r :w (* conn-tot scale))
               conn-act-r (assoc conn-th-r :w (* conn-act scale))
               disc-th-r {:x sx :y (+ sy h2) :w (* learning-th scale) :h seg-h-px}
+              disc-tot-r (assoc disc-th-r :w (* disc-tot scale))
               disc-act-r (assoc disc-th-r :w (* disc-act scale))]
           (when selected-seg?
             (doto ctx
               (c/fill-style (:highlight state-colors))
               (c/fill-rect {:x (- sx 5) :y (- sy h2 5) :w (+ seg-w-px 5 5) :h (+ (* 2 seg-h-px) 5 5)})))
           (doto ctx
-            (c/fill-style "white")
+            (c/fill-style "white") ;; overlay on highlight rect
             (c/fill-rect conn-th-r)
             (c/fill-rect disc-th-r)
+            (c/fill-style (:background state-colors))
+            (c/fill-rect conn-tot-r)
+            (c/fill-rect disc-tot-r)
             (c/stroke-style "black")
             (c/stroke-width 1)
             (c/fill-style (:active state-colors))
@@ -546,7 +551,7 @@
                           (assoc grouped-syns
                                  :growing (if learn-seg? (map vector grow-sources (repeat pinit)))))]
           (when (or (= do-from :all)
-                    (and (= do-from :learning) selected-seg?))
+                    (and (= do-from :selected) selected-seg?))
             (doseq [syn-state syn-states
                     :let [source-info (case syn-state
                                         :active (grouped-sourced-syns [:connected :active])
