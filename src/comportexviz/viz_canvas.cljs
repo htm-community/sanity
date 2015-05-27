@@ -652,8 +652,8 @@
   [lay lyr]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        col-m (->> (:overlaps (:state lyr))
-                   (reduce-kv (fn [m col v]
+        col-m (->> (:col-overlaps (:state lyr))
+                   (reduce-kv (fn [m [col _ _] v]
                                 (assoc! m col (max v (get m col 0))))
                               (transient {}))
                    (persistent!)
