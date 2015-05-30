@@ -12,6 +12,7 @@
             [goog.dom :as dom]
             [goog.events :as events]
             [goog.style :as style]
+            [comportexviz.dom :refer [offset-from-target]]
             [monet.canvas :as c]
             [monet.core]
             [org.nfrac.comportex.core :as core]
@@ -794,9 +795,8 @@
     (c/alpha ctx 1.0)))
 
 (defn timeline-click
-  [e* steps selection opts]
-  (let [e (.-nativeEvent e*)
-        x (.-offsetX e)
+  [e steps selection opts]
+  (let [{:keys [x y]} (offset-from-target e)
         keep-steps (:keep-steps opts)
         width-px (.-width (.-target e))
         t-width (/ width-px keep-steps)
@@ -975,10 +975,8 @@
     true))
 
 (defn viz-click
-  [e* steps selection layouts current-cell-segments-layout]
-  (let [e (.-nativeEvent e*)
-        x (.-offsetX e)
-        y (.-offsetY e)
+  [e steps selection layouts current-cell-segments-layout]
+  (let [{:keys [x y]} (offset-from-target e)
         i-lays (:inputs layouts)
         r-lays (:regions layouts)
         ;; we need to assume there is a previous step, so:
