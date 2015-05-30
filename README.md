@@ -3,7 +3,9 @@
 A web-based visualization layer for
 [Comportex](http://github.com/nupic-community/comportex/).
 
-See it in action in [this blog
+See it in action in see [the online demos](https://nupic-community.github.io/comportexviz/).
+
+For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
 ComportexViz runs HTM models in the browser with interactive
@@ -45,7 +47,7 @@ in `examples/demos/comportexviz/demos/`.
 
 ## License
 
-Copyright © 2014 Felix Andrews
+Copyright © 2014-2015 Felix Andrews and contributors.
 
 Distributed under your choice of
 * the Eclipse Public License, the same as Clojure.
