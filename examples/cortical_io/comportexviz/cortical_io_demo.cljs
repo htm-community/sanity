@@ -101,7 +101,7 @@ fox eat something.
    :duty-cycle-period 100000
    :max-boost 2.0
    ;; sequence memory:
-   :depth 8
+   :depth 5
    :max-segments 5
    :seg-max-synapse-count 18
    :seg-new-synapse-count 12
@@ -121,6 +121,10 @@ fox eat something.
     :ff-potential-radius 0.20
     :global-inhibition? false
     :inhibition-base-distance 1))
+
+(def higher-level-spec-diff
+  {:column-dimensions [300]
+   :ff-max-segments 5})
 
 (defn load-predictions
   [in-value htm n-predictions predictions-cache]
@@ -222,8 +226,8 @@ fox eat something.
              (core/sensory-input))]
     (with-ui-loading-message
       (main/set-model!
-       (core/regions-in-series core/sensory-region inp
-                               n-regions spec))
+       (core/regions-in-series core/sensory-region inp n-regions
+                               (list* spec (repeat (merge spec higher-level-spec-diff)))))
       (swap! config assoc :have-model? true))))
 
 (def config-template

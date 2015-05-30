@@ -78,7 +78,6 @@
   (go-loop []
     (when-let [x* (<! steps-out)]
       (let [x (-> x*
-                  p/htm-export ;; optional
                   viz/init-caches)
             keep-steps (:keep-steps @viz-options)]
         (swap! model-steps (fn [xs]

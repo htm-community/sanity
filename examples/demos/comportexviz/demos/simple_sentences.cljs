@@ -58,8 +58,7 @@
                   :random demo/random-encoder)]
     (with-ui-loading-message
       (main/set-model!
-       (core/regions-in-series core/sensory-region (core/sensory-input encoder)
-                               n-regions demo/spec)))))
+       (demo/n-region-model n-regions demo/spec encoder)))))
 
 (defn send-text!
   []
@@ -133,5 +132,4 @@
   (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
   (reset! main/world world-c)
-  (set-model!)
-  (swap! main/main-options assoc :sim-go? true))
+  (set-model!))

@@ -72,8 +72,7 @@ Chifung has a friend."))
                   :random demo/random-encoder)]
     (with-ui-loading-message
       (main/set-model!
-        (core/regions-in-series core/sensory-region (core/sensory-input encoder)
-                                n-regions demo/spec)))))
+       (demo/n-region-model n-regions demo/spec encoder)))))
 
 (defn immediate-key-down!
   [e]
