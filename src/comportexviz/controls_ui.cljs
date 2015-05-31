@@ -233,8 +233,9 @@
               (chbox :columns.active-freq "Active-duty")
               (chbox :columns.boosts "Boosts")
               (chbox :columns.n-segments "N.segments")
-              (chbox :columns.active "Active columns")
-              (chbox :columns.predictive "Predictive columns")
+              (chbox :columns.active "Active")
+              (chbox :columns.predictive "Predictive")
+              (chbox :columns.temporal-pooling "Temporal Pooling")
               ])
       (group "Feed-forward synapses"
              [:div.panel-body
