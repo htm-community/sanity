@@ -418,8 +418,9 @@
         {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
         segs-by-cell (->> (:distal-sg lyr)
                           (all-cell-segments col depth))
-        p-segs-by-cell (->> (get-in prev-htm [:regions sel-rgn sel-lyr :distal-sg])
-                            (all-cell-segments col depth))
+        p-segs-by-cell (when prev-htm
+                         (->> (get-in prev-htm [:regions sel-rgn sel-lyr :distal-sg])
+                              (all-cell-segments col depth)))
         cslay (cells-segments-layout col segs-by-cell lay dt cells-left opts)
         col-d-px (get-in opts [:drawing :col-d-px])
         cell-r-px (get-in opts [:drawing :cell-r-px])
@@ -431,16 +432,12 @@
     ;; draw background lines to cell from column and from segments
     (c/stroke-width ctx col-d-px)
     (c/stroke-style ctx (:background state-colors))
-    (doseq [[ci segs] (map-indexed vector segs-by-cell)]
-      (col-cell-line cslay ctx ci)
-      (doseq [si (range (count segs))]
-        (cell-seg-line cslay ctx ci si)))
-    ;; draw each cell
-    (doseq [[ci p-segs] (map-indexed vector p-segs-by-cell)
-            :let [[cell-x cell-y] (cell-xy cslay ci)
+    (doseq [[ci segs] (map-indexed vector segs-by-cell)
+            :let [p-segs (nth p-segs-by-cell ci)
+                  [cell-x cell-y] (cell-xy cslay ci)
                   cell-id [col ci]
                   cell-active? (ac cell-id)
-                  cell-predictive? (prev-pc cell-id)
+                  cell-predictive? (get prev-pc cell-id)
                   cell-learning? (= ci learn-ci)
                   ;; need to add an entry for a new segment if just grown
                   use-segs (if (and cell-learning? (>= learn-si (count p-segs)))
@@ -454,6 +451,9 @@
                               cell-predictive? :predicted
                               cell-active? :active
                               :else :inactive)]]
+      (col-cell-line cslay ctx ci)
+      (doseq [si (range (count segs))]
+        (cell-seg-line cslay ctx ci si))
       (when cell-active?
         (doto ctx
           (c/stroke-style (:active state-colors))
