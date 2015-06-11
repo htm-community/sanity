@@ -121,33 +121,7 @@
             )))]))
   )
 
-(defn ts-freqs-plot-cmp
-  [steps region-key layer-id series-colors]
-  (let [series-keys [:active :active-predicted :predicted]
-        step-freqs (atom nil)
-        agg-freqs-ts (plots/aggregating-ts step-freqs 200)]
-    (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
-               (fn [_ _ _ v]
-                 (let [htm (first v)
-                       freqs (-> htm :regions region-key
-                                 (core/column-state-freqs layer-id))]
-                   (reset! step-freqs freqs))))
-    (fn [_ _ _ _]
-      (let [el-id (str "comportexviz-plot-" (name region-key) (name layer-id))
-            el (dom/getElement el-id)]
-        ;; draw!
-        (when el
-          (set! (.-width el) (* 0.28 (- (.-innerWidth js/window) 20)))
-          (set! (.-height el) 180)
-          (plots/stacked-ts-plot el agg-freqs-ts series-keys series-colors))
-        (when-not el
-          ;; create data dependency for re-rendering
-          @agg-freqs-ts)
-        [:div
-         [:canvas {:id el-id}]])
-      )))
-
-(defn plots-tab
+(defn ts-plots-tab
   [steps series-colors]
   [:div
    [:p.text-muted "Time series of cortical column activity."]
@@ -158,9 +132,24 @@
         ^{:key [region-key layer-id]}
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
-         [ts-freqs-plot-cmp steps region-key layer-id series-colors]
+         [plots/ts-freqs-plot-cmp steps region-key layer-id series-colors]
          ]))]
    ])
+
+(defn cell-plots-tab
+  [steps selection series-colors]
+  [:div
+   [:p.text-muted "Plots of cell excitation broken down by source."]
+   [:div
+    (when (first @steps)
+      (for [[region-key rgn] (:regions (first @steps))
+            layer-id (core/layers rgn)]
+        ^{:key [region-key layer-id]}
+        [:fieldset
+         [:legend (str (name region-key) " " (name layer-id))]
+         [plots/cell-excitation-plot-cmp steps selection series-colors
+          region-key layer-id]
+         ]))]])
 
 (defn details-tab
   [steps selection]
@@ -509,7 +498,8 @@
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
           [:params [parameters-tab model selection]]
-          [:plots [plots-tab steps series-colors]]
+          [:ts-plots [ts-plots-tab steps series-colors]]
+          [:cell-plots [cell-plots-tab steps selection series-colors]]
           [:details [details-tab steps selection]]]]
         ]]
       [:div#loading-message "loading"]]]))

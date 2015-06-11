@@ -2,7 +2,11 @@
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
-
+            [comportexviz.viz-canvas :refer [canvas]]
+            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.util :as util]
+            [clojure.string :as str]
+            [goog.dom :as dom]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
@@ -120,3 +124,141 @@
                      :y ypx
                      :text y})))
     ))
+
+(defn ts-freqs-plot-cmp
+  [steps region-key layer-id series-colors]
+  (let [series-keys [:active :active-predicted :predicted]
+        step-freqs (atom nil)
+        agg-freqs-ts (aggregating-ts step-freqs 200)]
+    (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
+               (fn [_ _ _ v]
+                 (let [htm (first v)
+                       freqs (-> htm :regions region-key
+                                 (core/column-state-freqs layer-id))]
+                   (reset! step-freqs freqs))))
+    (fn [_ _ _ _]
+      (let [el-id (str "comportexviz-tsplot-" (name region-key) (name layer-id))
+            el (dom/getElement el-id)]
+        ;; draw!
+        (when el
+          (set! (.-width el) (* 0.28 (- (.-innerWidth js/window) 20)))
+          (set! (.-height el) 180)
+          (stacked-ts-plot el agg-freqs-ts series-keys series-colors))
+        (when-not el
+          ;; create data dependency for re-rendering
+          @agg-freqs-ts)
+        [:div
+         [:canvas {:id el-id}]])
+      )))
+
+(def excitation-colors
+  {:proximal-unstable :active
+   :proximal-stable :active-predicted
+   :boost :highlight
+   :temporal-pooling :temporal-pooling
+   :distal :predicted
+   })
+
+(def excitation-order
+  [:proximal-unstable
+   :proximal-stable
+   :boost
+   :temporal-pooling
+   :distal])
+
+(defn viz-rgn-shades
+  [htm]
+  (let [srcs (concat (core/input-keys htm)
+                     (core/region-keys htm))]
+    (zipmap srcs (range -0.3 0.31 (/ 1.0 (count srcs))))))
+
+(defn- abs [x] (if (neg? x) (- x) x))
+
+(defn draw-cell-excitation-plot!
+  [ctx htm prior-htm rgn-id lyr-id series-colors]
+  (let [width-px (.-width (.-canvas ctx))
+        height-px (.-height (.-canvas ctx))
+        plot-size {:w width-px
+                   :h 200}
+        lc (get-in htm [:regions rgn-id lyr-id :state :learn-cells])
+        breakdowns (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id
+                                                    lc)
+        src-shades (viz-rgn-shades htm)
+        y-max (* 1.1 (apply max (map :total (vals breakdowns))))
+        x-lim [-0.5 (+ (count lc) 3)] ;; space for legend
+        y-lim [y-max 0]
+        draw-cell-bar
+        (fn [plot x-coord bd labels?]
+          (let [series (for [k excitation-order
+                             :let [v (get bd k)]
+                             [src x] (if (map? v)
+                                       (sort-by (comp src-shades key) v)
+                                       {nil v})
+                             :when (and x (pos? x))]
+                         [k src x])]
+            (c/stroke-style ctx "black")
+            (reduce (fn [offset [k src x]]
+                      (let [color (excitation-colors k)
+                            shade (if src (src-shades src) 0.0)]
+                        (c/fill-style ctx (get series-colors color))
+                        (plt/rect! plot x-coord offset 0.5 x)
+                        (when-not (zero? shade)
+                          (c/fill-style ctx (if (pos? shade) "white" "black"))
+                          (c/alpha ctx (abs shade))
+                          (plt/rect! plot x-coord offset 0.25 x)
+                          (c/alpha ctx 1.0))
+                        (when labels?
+                          (c/fill-style ctx "black")
+                          (let [labs (concat (str/split (name k) #"-")
+                                             (if src [(str "(" (name src) ")")]))]
+                            (plt/texts! plot x-coord (+ offset (* 0.6 x))
+                                        labs 10)))
+                        (+ offset (or x 0))))
+                    0.0
+                    series)))]
+    (c/save ctx)
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
+      (doseq [[i [cell-id bd]] (->> breakdowns
+                                    (sort-by (comp :total val) >)
+                                    (map-indexed vector))
+              :let [x-coord i
+                    [col _] cell-id
+                    total-exc (:total bd)]]
+        (draw-cell-bar plot x-coord bd false)
+        (c/fill-style ctx "black")
+        (plt/text! plot x-coord (+ total-exc 0.5) total-exc)
+        (plt/text-rotated! plot x-coord -1 col))
+      ;; draw legend
+      (let [leg-x (+ 1 (count lc))
+            sep-x (count lc)
+            agg-bd (->> (vals breakdowns)
+                        (map core/scale-excitation-breakdown)
+                        (apply util/deep-merge-with +)
+                        (core/scale-excitation-breakdown y-max))]
+        (c/fill-style ctx (:background series-colors))
+        (plt/rect! plot sep-x 0 (- (second x-lim) sep-x) y-max)
+        (plt/frame! plot)
+        (c/text-align ctx :center)
+        (draw-cell-bar plot leg-x agg-bd true)
+        (c/fill-style ctx "black")
+        (c/text-align ctx :left)
+        (plt/text-rotated! plot leg-x -1 "KEY")
+        ))
+    (c/restore ctx)))
+
+(defn cell-excitation-plot-cmp
+  [steps selection series-colors region-key layer-id]
+  [canvas
+   {}
+   300
+   240
+   [steps selection]
+   (fn [ctx]
+     (when (:col @selection)
+       (let [dt (:dt @selection)
+             htm (nth @steps dt)
+             prior-htm (nth @steps (inc dt))]
+         (draw-cell-excitation-plot! ctx htm prior-htm region-key layer-id
+                                     series-colors))))
+   nil])

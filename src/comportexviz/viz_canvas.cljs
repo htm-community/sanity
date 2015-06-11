@@ -729,6 +729,21 @@
     (when resizes
       (put! resizes [(.-width size-px) (.-height size-px)]))))
 
+(defn canvas [_ _ _ _ draw]
+  (reagent/create-class
+   {:component-did-mount #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+    :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+    :display-name "canvas"
+    :reagent-render (fn [props width height canaries _]
+                      ;; Need to deref all atoms consumed by draw function to
+                      ;; subscribe to changes.
+                      (mapv deref canaries)
+                      [:canvas (assoc props
+                                      :width width
+                                      :height height)])}))
+
 (defn resizing-canvas [_ _ draw resizes]
   (let [resize-key (atom nil)
         width-px (atom nil)

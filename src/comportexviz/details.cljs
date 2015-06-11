@@ -38,9 +38,6 @@
       "__Learnable cells__"
       (str (sort (p/learnable-cells lyr)))
       ""
-      "__Cell adjustment within column__"
-      (str (sort (:adj-exc (:diagnostics (:state lyr)))))
-      ""
       "__Proximal learning__"
       (str (sort (:proximal-learning (:state lyr))))
       ""
@@ -64,7 +61,7 @@
               sig-bits (:in-stable-ff-bits (:state lyr))
               ]
           ["__Column overlap__"
-           (str (get (:overlaps (:state lyr)) col))
+           (str (get (:col-overlaps (:state lyr)) [col 0]))
            ""
            "__Distal LC bits prev__"
            (str (:distal-lc-bits (:prior-distal-state lyr)))
@@ -74,7 +71,7 @@
            ""
            "__Selected column__"
            "__Connected ff-synapses__"
-           (for [[si syns] (map-indexed vector (p/cell-segments p-prox-sg [col]))
+           (for [[si syns] (map-indexed vector (p/cell-segments p-prox-sg [col 0]))
                  :when (seq syns)]
              [(str "FF segment " si)
               (for [[id p] (sort syns)]

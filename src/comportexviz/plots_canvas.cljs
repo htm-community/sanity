@@ -12,6 +12,9 @@
   (point! [this x y radius-px])
   (rect! [this x y w h])
   (line! [this xys])
+  (text! [this x y txt])
+  (texts! [this x y txts line-height])
+  (text-rotated! [this x y txt])
   (->px [this x y]))
 
 (defn draw-grid
@@ -31,6 +34,14 @@
     (* (- x lo)
        (/ size-px
           (- hi lo)))))
+
+(defn text-rotated
+  [ctx {:keys [x y text]}]
+  (c/save ctx)
+  (c/translate ctx x y)
+  (c/rotate ctx (/ Math/PI 2))
+  (c/text ctx {:x 0 :y 0 :text text})
+  (c/restore ctx))
 
 (defrecord XYPlot
     [ctx plot-size x-lim y-lim x-scale y-scale]
@@ -82,6 +93,19 @@
       (let [f (if (zero? i) c/move-to c/line-to)]
         (f ctx (x-scale x) (y-scale y))))
     (c/stroke ctx))
+
+  (text! [_ x y txt]
+    (c/text ctx {:text txt :x (x-scale x) :y (y-scale y)}))
+
+  (texts! [_ x y txts line-height]
+    (reduce (fn [y-px txt]
+              (c/text ctx {:text txt :x (x-scale x) :y y-px})
+              (+ y-px line-height))
+            (y-scale y)
+            txts))
+
+  (text-rotated! [_ x y txt]
+    (text-rotated ctx {:text txt :x (x-scale x) :y (y-scale y)}))
 
   (->px [_ x y]
     [(x-scale x) (y-scale y)]))

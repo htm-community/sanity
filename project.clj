@@ -2,8 +2,8 @@
   :description "Web visualisation of HTM algorithm as implemented in comportex"
   :url "https://github.com/nupic-community/comportexviz"
 
-  :dependencies [[org.clojure/clojure "1.7.0-beta3"]
-                 [org.clojure/clojurescript "0.0-3291"]
+  :dependencies [[org.clojure/clojure "1.7.0-RC1"]
+                 [org.clojure/clojurescript "0.0-3308"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [org.nfrac/comportex "0.0.9-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
