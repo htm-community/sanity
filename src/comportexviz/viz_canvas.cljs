@@ -430,9 +430,6 @@
         seg-r-px (* seg-w-px 0.5)]
     ;; for the click handler to use
     (reset! current-cell-segments-layout cslay)
-    ;; draw background lines to cell from column and from segments
-    (c/stroke-width ctx col-d-px)
-    (c/stroke-style ctx (:background state-colors))
     (doseq [[ci segs] (map-indexed vector segs-by-cell)
             :let [p-segs (nth p-segs-by-cell ci)
                   [cell-x cell-y] (cell-xy cslay ci)
@@ -452,6 +449,9 @@
                               cell-predictive? :predicted
                               cell-active? :active
                               :else :inactive)]]
+      ;; draw background lines to cell from column and from segments
+      (c/stroke-width ctx col-d-px)
+      (c/stroke-style ctx (:background state-colors))
       (col-cell-line cslay ctx ci)
       (doseq [si (range (count segs))]
         (cell-seg-line cslay ctx ci si))
