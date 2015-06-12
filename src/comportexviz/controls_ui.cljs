@@ -138,18 +138,27 @@
 
 (defn cell-plots-tab
   [steps selection series-colors]
-  [:div
-   [:p.text-muted "Plots of cell excitation broken down by source."]
-   [:div
-    (when (first @steps)
-      (for [[region-key rgn] (:regions (first @steps))
-            layer-id (core/layers rgn)]
-        ^{:key [region-key layer-id]}
-        [:fieldset
-         [:legend (str (name region-key) " " (name layer-id))]
-         [plots/cell-excitation-plot-cmp steps selection series-colors
-          region-key layer-id]
-         ]))]])
+  (let [show? (atom false)]
+    (fn [_ _ _]
+      [:div
+       [:p.text-muted "Plots of cell excitation broken down by source."]
+       [:div.checkbox
+        [:label [:input {:type :checkbox
+                         :checked (when @show? true)
+                         :on-change (fn [e]
+                                     (swap! show? not)
+                                     (.preventDefault e))}]
+         "Show plots"]]
+       [:div
+        (when (and (first @steps) @show?)
+          (for [[region-key rgn] (:regions (first @steps))
+                layer-id (core/layers rgn)]
+            ^{:key [region-key layer-id]}
+            [:fieldset
+             [:legend (str (name region-key) " " (name layer-id))]
+             [plots/cell-excitation-plot-cmp steps selection series-colors
+              region-key layer-id]
+             ]))]])))
 
 (defn details-tab
   [steps selection]

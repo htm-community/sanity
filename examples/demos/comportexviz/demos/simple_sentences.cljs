@@ -41,11 +41,12 @@
            [:p.muted [:small "Input on selected timestep."]]
            [:div {:style {:min-height "40vh"}}
             (helpers/text-world-input-component in-value htm max-shown scroll-every " ")]
-           [:div
-            [:button.btn.btn-default {:class (if @show-predictions "active")
-                                      :on-click (fn [e]
-                                                  (swap! show-predictions not)
-                                                  (.preventDefault e))}
+           [:div.checkbox
+            [:label [:input {:type :checkbox
+                             :checked (when @show-predictions true)
+                             :on-change (fn [e]
+                                          (swap! show-predictions not)
+                                          (.preventDefault e))}]
              "Compute predictions"]]
            (when @show-predictions
              (helpers/text-world-predictions-component in-value htm 8))])))))

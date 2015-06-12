@@ -211,7 +211,7 @@
                           (c/fill-style ctx "black")
                           (let [labs (concat (str/split (name k) #"-")
                                              (if src [(str "(" (name src) ")")]))]
-                            (plt/texts! plot x-coord (+ offset (* 0.6 x))
+                            (plt/texts! plot (+ x-coord 0.5) (+ offset (* 0.5 x))
                                         labs 10)))
                         (+ offset (or x 0))))
                     0.0
@@ -232,19 +232,18 @@
       ;; draw legend
       (let [leg-x (+ 1 (count lc))
             sep-x (count lc)
-            agg-bd (->> (vals breakdowns)
-                        (map core/scale-excitation-breakdown)
-                        (apply util/deep-merge-with +)
-                        (core/scale-excitation-breakdown y-max))]
+            key-bd* (->
+                     (apply util/deep-merge-with + (vals breakdowns))
+                     (core/update-excitation-breakdown #(if (pos? %) 1.0 0.0)))
+            key-bd (core/update-excitation-breakdown key-bd* #(* % (/ y-max (:total key-bd*))))]
         (c/fill-style ctx (:background series-colors))
         (plt/rect! plot sep-x 0 (- (second x-lim) sep-x) y-max)
-        (plt/frame! plot)
         (c/text-align ctx :center)
-        (draw-cell-bar plot leg-x agg-bd true)
+        (draw-cell-bar plot leg-x key-bd true)
         (c/fill-style ctx "black")
         (c/text-align ctx :left)
         (plt/text-rotated! plot leg-x -1 "KEY")
-        ))
+        (plt/frame! plot)))
     (c/restore ctx)))
 
 (defn cell-excitation-plot-cmp
@@ -255,10 +254,9 @@
    240
    [steps selection]
    (fn [ctx]
-     (when (:col @selection)
-       (let [dt (:dt @selection)
-             htm (nth @steps dt)
-             prior-htm (nth @steps (inc dt))]
-         (draw-cell-excitation-plot! ctx htm prior-htm region-key layer-id
-                                     series-colors))))
+     (let [dt (:dt @selection)
+           htm (nth @steps dt)
+           prior-htm (nth @steps (inc dt))]
+       (draw-cell-excitation-plot! ctx htm prior-htm region-key layer-id
+                                   series-colors)))
    nil])
