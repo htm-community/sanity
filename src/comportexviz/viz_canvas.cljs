@@ -1,13 +1,12 @@
 (ns comportexviz.viz-canvas
   (:require [comportexviz.viz-layouts :as lay
              :refer [layout-bounds
-                     n-onscreen
-                     top-id-onscreen
+                     scroll-position
+                     ids-onscreen
                      element-xy
                      fill-element-group
                      fill-elements
-                     centred-rect
-                     make-layout]]
+                     grid-layout]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [goog.events :as events]
@@ -153,7 +152,7 @@
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
                   (let [topo (p/topology (inputs inp-id))
-                        lay (make-layout topo top-px left height-px d-opts
+                        lay (grid-layout topo top-px left height-px d-opts
                                          true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -162,7 +161,7 @@
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
-                        lay (make-layout topo top-px left height-px d-opts
+                        lay (grid-layout topo top-px left height-px d-opts
                                          false display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -188,7 +187,7 @@
 
 (defn scroll-layout
   [lay down?]
-  (let [n (n-onscreen lay)
+  (let [n (count (ids-onscreen lay))
         ncol (p/size-of lay)]
     (update-in lay [:scroll-top]
                (fn [x]
@@ -593,10 +592,9 @@
 (defn bg-image
   [lay]
   (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        j (top-id-onscreen lay)]
+        ctx (c/get-context el "2d")]
     (c/fill-style ctx (:background state-colors))
-    (fill-element-group ctx lay (range j (+ j (n-onscreen lay))))
+    (fill-element-group ctx lay (ids-onscreen lay))
     el))
 
 (defn active-bits-image
@@ -704,8 +702,7 @@
         sg (:distal-sg lyr)
         n-cols (p/size-of lyr)
         depth (p/layer-depth lyr)
-        n-start (top-id-onscreen lay)
-        cols (range n-start (+ n-start (n-onscreen lay)))
+        cols (ids-onscreen lay)
         col-m (->> cols
                    (map #(count-segs-in-column sg depth %))
                    (map #(min 1.0 (/ % 16.0)))
@@ -716,9 +713,9 @@
 
 (defn scroll-status-str
   [lay]
-  (str (top-id-onscreen lay)
-       "--" (+ (top-id-onscreen lay)
-               (n-onscreen lay) -1)
+  (str (scroll-position lay)
+       "--" (+ (scroll-position lay)
+               (count (ids-onscreen lay)) -1)
        " of " (p/size-of lay)))
 
 
@@ -945,13 +942,15 @@
                (with-cache dt-cache [::tpcols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))))
     ;; highlight selection
+    (when-let [lay (get-in r-lays [sel-rgn sel-lyr])]
+      (lay/highlight-layer lay ctx))
     (doseq [lay (vals i-lays)]
       (lay/highlight-dt lay ctx sel-dt))
     (doseq [lay (mapcat vals (vals r-lays))]
       (lay/highlight-dt lay ctx sel-dt))
     (when sel-col
       (let [lay (get-in r-lays [sel-rgn sel-lyr])]
-        (lay/highlight-element lay ctx sel-dt sel-col)))
+        (lay/highlight-element lay ctx sel-dt sel-col sel-col)))
     ;; draw ff synapses
     (let [to (get-in opts [:ff-synapses :to])]
       (when (or (= to :all)

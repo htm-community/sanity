@@ -9,8 +9,7 @@
             [comportexviz.viz-layouts :as lay
              :refer [layout-bounds
                      fill-element-group
-                     fill-elements
-                     columns-2d-layout]]
+                     fill-elements]]
             [reagent.core :as reagent :refer [atom]]))
 
 (def width-px 500)
@@ -110,7 +109,7 @@
   [exc act global-act spec]
   (let [el (dom/getElement "inh2d-viz")
         ctx (c/get-context el "2d")
-        lay (columns-2d-layout topo 0 0 plot-height-px drawing-opts)
+        lay (lay/grid-2d-layout topo 0 0 plot-height-px drawing-opts false)
         exc-img (excitation-image lay exc)
         act-img (activation-image lay act)
         global-act-img (activation-image lay global-act)]

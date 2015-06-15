@@ -3,29 +3,27 @@
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.topology :as topology]))
 
-;;; ## Layouts
-
 (defprotocol PArrayLayout
   (layout-bounds [this]
     "Returns `{:x :y :w :h}` defining bounding box from top left.")
   (origin-px-topleft [this dt]
     "Returns [x y] pixel coordinates for top left of time offset dt.")
+  (local-dt-bounds [this dt]
+    "Returns `{:x :y :w :h}` defining local bounding box relative to dt origin.")
   (local-px-topleft [this id]
     "Returns [x y] pixel coordinates for id relative to the dt origin.")
   (element-size-px [this]
     "The size [w h] in pixels of each drawn array element.")
-  (n-onscreen [this]
-    "Number of elements per timestep visible on the screen, for pagination.")
-  (top-id-onscreen [this]
-    "Current scroll position, giving the first element id visible on screen.")
+  (ids-onscreen [this]
+    "Sequence of element ids per timestep currently drawn in the layout.")
+  (id-onscreen? [this id]
+    "Checks whether the element id is currently drawn in the layout.")
+  (scroll-position [this]
+    "Current scroll position, giving the first element index visible on screen.")
   (clicked-id [this x y]
     "Returns [dt id] for the [x y] pixel coordinates, or null.")
   (draw-element [this ctx id]
-    "Draws the element id in local coordinates. Does not stroke or fill.")
-  (highlight-dt [this ctx dt]
-    "Draws highlight on the time offset dt in global coordinates.")
-  (highlight-element [this ctx dt id]
-    "Draws highlight on the element id in global coordinates."))
+    "Draws the element in dt-local coordinates. Does not stroke or fill."))
 
 (defn right-px
   [this]
@@ -44,17 +42,15 @@
 
 (defn fill-element-group
   "Fills all elements with the given ids (in a single path if
-   possible). For efficiency, skips any ids which are currently
-   offscreen."
+  possible). For efficiency, skips any ids which are currently
+  offscreen."
   [ctx lay ids]
-  (let [j0 (top-id-onscreen lay)
-        j1 (+ j0 (n-onscreen lay) -1)
-        one-d? (== 1 (count (p/dims-of lay)))]
+  (let [one-d? (== 1 (count (p/dims-of lay)))]
     (c/begin-path ctx)
-    (doseq [i ids
-           :when (<= j0 i j1)]
-      (draw-element lay ctx i)
-      (when-not one-d?
+    (doseq [id ids
+            :when (id-onscreen? lay id)]
+      (draw-element lay ctx id)
+      (when-not one-d? ;; single path only works in 1D
         (c/fill ctx)
         (c/begin-path ctx)))
     (when one-d?
@@ -74,8 +70,6 @@
   (c/restore ctx)
   ctx)
 
-;;; ## Grid Layouts support
-
 (defn circle
   [ctx x y r]
   (.arc ctx x y r 0 (* (.-PI js/Math) 2) true))
@@ -85,13 +79,6 @@
   (let [r (* w 0.5)]
     (circle ctx (+ x r) (+ y r) r)))
 
-(defn centred-rect
-  [cx cy w h]
-  {:x (- cx (/ w 2))
-   :y (- cy (/ h 2))
-   :w w
-   :h h})
-
 (defn highlight-rect
   [ctx rect color]
   (doto ctx
@@ -99,8 +86,57 @@
     (c/stroke-width 3)
     (c/stroke-rect rect)
     (c/stroke-style "black")
-    (c/stroke-width 1)
+    (c/stroke-width 0.75)
     (c/stroke-rect rect)))
+
+(defn highlight-layer
+  "Draws highlight around the whole layout in global coordinates."
+  [lay ctx]
+  (let [bb (layout-bounds lay)
+        color (:highlight-color lay)]
+    (highlight-rect ctx {:x (- (:x bb) 1)
+                         :y (- (:y bb) 1)
+                         :w (+ (:w bb) 2)
+                         :h (+ (:h bb) 2)}
+                    color)))
+
+(defn highlight-dt
+  "Draws highlight on the time offset dt in global coordinates. Only
+  draws if multiple time steps are shown."
+  [lay ctx dt]
+  (when (> (:draw-steps lay 1) 1)
+    (let [[x y] (origin-px-topleft lay dt)
+          bb (local-dt-bounds lay dt)
+          color (:highlight-color lay)]
+      (highlight-rect ctx {:x (- x 1)
+                           :y (- y 1)
+                           :w (+ (:w bb) 2)
+                           :h (+ (:h bb) 2)}
+                      color))))
+
+(defn highlight-element
+  "Draw highlight bar horizontally to left axis from element."
+  [lay ctx dt id label]
+  (let [[x y] (origin-px-topleft lay dt)
+        [lx ly] (local-px-topleft lay id)
+        bb (layout-bounds lay)
+        [element-w element-h] (element-size-px lay)
+        color (:highlight-color lay)
+        rect {:x (- (:x bb) 1)
+              :y (- (+ y ly) 1)
+              :w (+ (- x (:x bb)) lx element-w 2)
+              :h (+ element-h 2)}]
+    (highlight-rect ctx rect
+                    color)
+    (when label
+      (c/save ctx)
+      (c/text-align ctx :right)
+      (c/text-baseline ctx :middle)
+      (c/fill-style ctx "black")
+      (c/text ctx {:x (- (:x rect) 1)
+                   :y (+ (:y rect) (/ element-h 2))
+                   :text label})
+      (c/restore ctx))))
 
 (defrecord Grid1dLayout
     [topo
@@ -130,18 +166,31 @@
           x-px (- right off-x-px)]
       [x-px top-px]))
 
+  (local-dt-bounds [lay dt]
+    (assoc (layout-bounds lay)
+           :x 0 :y 0
+           :w element-w))
+
   (local-px-topleft [_ id]
     [0 (* (- id scroll-top) element-h)])
 
   (element-size-px [_]
     [element-w element-h])
 
-  (n-onscreen [_]
-    (min (p/size topo)
-         (quot (- height-px top-px) element-h)))
-
-  (top-id-onscreen [_]
+  (scroll-position [_]
     scroll-top)
+
+  (ids-onscreen [this]
+    (let [n (min (p/size topo)
+                 (quot height-px element-h))
+          n0 scroll-top]
+      (range n0 (+ n0 n))))
+
+  (id-onscreen? [this id]
+    (let [n (min (p/size topo)
+                 (quot height-px element-h))
+          n0 scroll-top]
+      (<= n0 id (+ n0 n -1))))
 
   (clicked-id [this x y]
     (let [right (+ left-px (* draw-steps element-w))
@@ -150,7 +199,7 @@
           id (+ id* scroll-top)
           dt (+ dt* dt-offset)]
       (when (and (<= 0 dt* draw-steps)
-                 (<= 0 id* (n-onscreen this)))
+                 (id-onscreen? this id))
         [dt id])))
 
   (draw-element [this ctx id]
@@ -160,32 +209,13 @@
                             (* element-w shrink))
         (.rect ctx x y
                (* element-w shrink)
-               (* element-h shrink)))))
+               (* element-h shrink))))))
 
-  (highlight-dt [this ctx dt]
-    ;; draw vertical axis on selected dt
-    (let [[x y] (origin-px-topleft this dt)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x x
-                           :y (- y 5)
-                           :w (+ element-w 1)
-                           :h (+ 10 (:h bb))}
-                      highlight-color)))
-
-  (highlight-element [this ctx dt id]
-    ;; draw horizontal axis on selected id
-    (let [[x y] (origin-px-topleft this dt)
-          [lx ly] (local-px-topleft this id)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x (- (:x bb) 5)
-                           :y (+ y ly)
-                           :w (+ (:w bb) 10)
-                           :h (+ element-h 1)}
-                      highlight-color))))
-
-(defn inbits-1d-layout
-  [topo top left height opts]
+(defn grid-1d-layout
+  [topo top left height opts inbits?]
   (let [{:keys [draw-steps
+                col-d-px
+                col-shrink
                 bit-w-px
                 bit-h-px
                 bit-shrink
@@ -195,33 +225,13 @@
       :scroll-top 0
       :dt-offset 0
       :draw-steps draw-steps
-      :element-w bit-w-px
-      :element-h bit-h-px
-      :shrink bit-shrink
-      :left-px left
-      :top-px top
-      :height-px height
-      :circles? false
-      :highlight-color highlight-color})))
-
-(defn columns-1d-layout
-  [topo top left height opts]
-  (let [{:keys [draw-steps
-                col-d-px
-                col-shrink
-                highlight-color]} opts]
-    (map->Grid1dLayout
-     {:topo topo
-      :scroll-top 0
-      :dt-offset 0
-      :draw-steps draw-steps
-      :element-w col-d-px
-      :element-h col-d-px
-      :shrink col-shrink
+      :element-w (if inbits? bit-w-px col-d-px)
+      :element-h (if inbits? bit-h-px col-d-px)
+      :shrink (if inbits? bit-shrink col-shrink)
       :top-px top
       :left-px left
       :height-px height
-      :circles? true
+      :circles? (if inbits? false true)
       :highlight-color highlight-color})))
 
 (defrecord Grid2dLayout
@@ -248,6 +258,10 @@
   (origin-px-topleft [_ dt]
     [left-px top-px])
 
+  (local-dt-bounds [lay dt]
+    (assoc (layout-bounds lay)
+           :x 0 :y 0))
+
   (local-px-topleft [_ id]
     (let [[x y] (p/coordinates-of-index topo (+ id scroll-top))]
       [(* x element-w)
@@ -256,13 +270,20 @@
   (element-size-px [_]
     [element-w element-h])
 
-  (n-onscreen [_]
-    (let [[w h] (p/dimensions topo)]
-      (* w (min h
-                (quot (- height-px top-px) element-h)))))
-
-  (top-id-onscreen [_]
+  (scroll-position [_]
     scroll-top)
+
+  (ids-onscreen [this]
+    (let [[w h] (p/dimensions topo)
+          n (* w (min h (quot height-px element-h)))
+          n0 scroll-top]
+      (range n0 (+ n0 n -1))))
+
+  (id-onscreen? [this id]
+    (let [[w h] (p/dimensions topo)
+          n (* w (min h (quot height-px element-h)))
+          n0 scroll-top]
+      (<= n0 id (+ n0 n -1))))
 
   (clicked-id [this x y]
     (let [[w h] (p/dimensions topo)
@@ -281,65 +302,29 @@
                             (* element-w shrink))
         (.rect ctx x y
                (* element-w shrink)
-               (* element-h shrink)))))
+               (* element-h shrink))))))
 
-  (highlight-dt [this ctx dt]
-    ;; draw vertical axis on selected dt
-    (let [[x y] (origin-px-topleft this dt)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x (- x 5)
-                           :y (- y 5)
-                           :w (+ 10 (:w bb))
-                           :h (+ 10 (:h bb))}
-                      highlight-color)))
-
-  (highlight-element [this ctx dt id]
-    ;; draw horizontal axis on selected id
-    (let [[x y] (origin-px-topleft this dt)
-          [lx ly] (local-px-topleft this id)
-          bb (layout-bounds this)]
-      (highlight-rect ctx {:x (+ x lx)
-                           :y (+ y ly)
-                           :w (+ element-w 1)
-                           :h (+ element-h 1)}
-                      highlight-color))))
-
-(defn inbits-2d-layout
-  [topo top left height opts]
-  (let [{:keys [bit-w-px
+(defn grid-2d-layout
+  [topo top left height opts inbits?]
+  (let [{:keys [col-d-px
+                col-shrink
+                bit-w-px
                 bit-h-px
                 bit-shrink
                 highlight-color]} opts]
     (map->Grid2dLayout
      {:topo topo
       :scroll-top 0
-      :element-w bit-w-px
-      :element-h bit-h-px
-      :shrink bit-shrink
-      :left-px left
-      :top-px top
-      :height-px height
-      :circles? false
-      :highlight-color highlight-color})))
-
-(defn columns-2d-layout
-  [topo top left height opts]
-  (let [{:keys [col-d-px
-                col-shrink
-                highlight-color]} opts]
-    (map->Grid2dLayout
-     {:topo topo
-      :scroll-top 0
-      :element-w col-d-px
-      :element-h col-d-px
-      :shrink col-shrink
+      :element-w (if inbits? bit-w-px col-d-px)
+      :element-h (if inbits? bit-h-px col-d-px)
+      :shrink (if inbits? bit-shrink col-shrink)
       :top-px top
       :left-px left
       :height-px height
-      :circles? true
+      :circles? (if inbits? false true)
       :highlight-color highlight-color})))
 
-(defn make-layout
+(defn grid-layout
   [topo top left height opts inbits? display-mode]
   (let [ndim (count (p/dimensions topo))
         lay-topo (case display-mode
@@ -348,10 +333,6 @@
                             topo ;; keep actual topology if possible
                             (topology/two-d-topology 20 (quot (p/size topo) 20))))
         lay-ndim (count (p/dimensions lay-topo))]
-    (if inbits?
-      (case lay-ndim
-        1 (inbits-1d-layout lay-topo top left height opts)
-        2 (inbits-2d-layout lay-topo top left height opts))
-      (case lay-ndim
-        1 (columns-1d-layout lay-topo top left height opts)
-        2 (columns-2d-layout lay-topo top left height opts)))))
+    (case lay-ndim
+      1 (grid-1d-layout lay-topo top left height opts inbits?)
+      2 (grid-2d-layout lay-topo top left height opts inbits?))))
