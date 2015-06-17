@@ -5,6 +5,7 @@
   :dependencies [[org.clojure/clojure "1.7.0-RC1"]
                  [org.clojure/clojurescript "0.0-3308"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [tailrecursion/cljs-priority-map "1.1.0"]
                  [org.nfrac/comportex "0.0.9-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]

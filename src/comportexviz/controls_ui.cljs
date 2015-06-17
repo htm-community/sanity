@@ -270,158 +270,223 @@
 
 (defn navbar
   [main-options model show-help viz-options viz-expanded into-viz]
-  [:nav.navbar.navbar-default
-   [:div.container-fluid
-    [:div.navbar-header
-     [:button.navbar-toggle.collpased {:data-toggle "collapse"
-                                       :data-target "#comportex-navbar-collapse"}
-      [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
-     [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
-      "ComportexViz"]]
-    [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
-     [:ul.nav.navbar-nav
-      ;; step back
-      [:li
-       [:button.btn.btn-default.navbar-btn
-        {:type :button
-         :on-click (send-command into-viz :step-backward)
-         :title "Step backward in time"}
-        [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
-        [:span.visible-xs-inline "Step backward"]]]
-      ;; step forward
-      [:li
-       [:button.btn.btn-default.navbar-btn
-        {:type :button
-         :on-click (send-command into-viz :step-forward)
-         :title "Step forward in time"}
-        [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
-        [:span.visible-xs-inline "Step forward"]]]
-      ;; pause button
-      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
-       [:button.btn.btn-default.navbar-btn
-        {:type :button
-         :on-click #(swap! main-options assoc :sim-go? false)
-         :style {:width "5em"}}
-        "Pause"]]
-      ;; run button
-      [:li (if (:sim-go? @main-options) {:class "hidden"})
-       [:button.btn.btn-primary.navbar-btn
-        {:type :button
-         :on-click #(swap! main-options assoc :sim-go? true)
-         :style {:width "5em"}}
-        "Run"]]
-      ;; display mode
-      [:li.dropdown
-       [:a.dropdown-toggle {:data-toggle "dropdown"
-                            :role "button"
-                            :href "#"}
-        "Display" [:span.caret]]
-       [:ul.dropdown-menu {:role "menu"}
-        [:li [:a {:href "#"
-                  :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
-                                    :one-d)}
-              "column states over time (1D)"]]
-        [:li [:a {:href "#"
-                  :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
-                                    :two-d)}
-              "column states over space (2D)"]]
-        ]]
-      ;; scroll down
-      [:li
-       [:button.btn.btn-default.navbar-btn
-        {:type :button
-         :on-click (send-command into-viz :scroll-down)
-         :title "Scroll down visible columns"}
-        [:span.glyphicon.glyphicon-arrow-down {:aria-hidden "true"}]
-        [:span.visible-xs-inline "Scroll down"]]]
-      ;; scroll up
-      [:li
-       [:button.btn.btn-default.navbar-btn
-        {:type :button
-         :on-click (send-command into-viz :scroll-up)
-         :title "Scroll down visible columns"}
-        [:span.glyphicon.glyphicon-arrow-up {:aria-hidden "true"}]
-        [:span.visible-xs-inline "Scroll up"]]]
-      ;; expand canvas
-      (when-not @viz-expanded
-        [:li.hidden-xs
-         [:button.btn.btn-default.navbar-btn
-          {:type :button
-           :on-click (fn [e]
-                       (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
-                         (classes/swap el "col-sm-9" "col-sm-12"))
-                       (reset! viz-expanded true)
-                       (.dispatchEvent js/window (js/Event. "resize"))
-                       (.preventDefault e))
-           :title "Expand visualisation"}
-          [:span.glyphicon.glyphicon-resize-full {:aria-hidden "true"}]
-          [:span.sr-only "Expand"]]])
-      ;; un-expand canvas
-      (when @viz-expanded
-        [:li.hidden-xs
-         [:button.btn.btn-default.navbar-btn
-          {:type :button
-           :on-click (fn [e]
-                       (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
-                         (classes/swap el "col-sm-12" "col-sm-9"))
-                       (reset! viz-expanded false)
-                       (.dispatchEvent js/window (js/Event. "resize"))
-                       (.preventDefault e))
-           :title "Un-expand visualisation"}
-          [:span.glyphicon.glyphicon-resize-small {:aria-hidden "true"}]
-          [:span.sr-only "Un-expand"]]])
-      ]
-     ;; right-aligned items
-     [:ul.nav.navbar-nav.navbar-right
-      ;; sim rate
-      [:li (if-not (:sim-go? @main-options) {:class "hidden"})
-       [:p.navbar-text (str (.toFixed (sim-rate @model) 1) "/sec.")]]
-      ;; sim / anim options
-      [:li.dropdown
-       [:a.dropdown-toggle {:data-toggle "dropdown"
-                            :role "button"
-                            :href "#"}
-        "Speed" [:span.caret]]
-       [:ul.dropdown-menu {:role "menu"}
-        [:li [:a {:href "#"
-                  :on-click (fn []
-                              (swap! main-options assoc :sim-step-ms 0)
-                              (swap! viz-options assoc-in
-                                     [:drawing :anim-every] 1))}
-              "max sim speed"]]
-        [:li [:a {:href "#"
-                  :on-click (fn []
-                              (swap! main-options assoc :sim-step-ms 0)
-                              (swap! viz-options assoc-in
-                                     [:drawing :anim-every] 100))}
-              "max sim speed, draw every 100 steps"]]
-        [:li [:a {:href "#"
-                  :on-click (fn []
-                              (swap! main-options assoc :sim-step-ms 250)
-                              (swap! viz-options assoc-in
-                                     [:drawing :anim-every] 1))}
-              "limit to 4 steps/sec."]]
-        [:li [:a {:href "#"
-                  :on-click (fn []
-                              (swap! main-options assoc :sim-step-ms 500)
-                              (swap! viz-options assoc-in
-                                     [:drawing :anim-every] 1))}
-              "limit to 2 steps/sec."]]
-        [:li [:a {:href "#"
-                  :on-click (fn []
-                              (swap! main-options assoc :sim-step-ms 1000)
-                              (swap! viz-options assoc-in
-                                     [:drawing :anim-every] 1))}
-              "limit to 1 step/sec."]]]]
-      [:li (if @show-help {:class "active"})
-       [:a {:href "#"
-            :on-click (fn [e]
-                        (swap! show-help not)
-                        (.preventDefault e))}
-        "Help"]]
-      ]
-     ]
-    ]])
+  ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
+  ;; but that is tricky. An easier option is to hide those until the
+  ;; first time they are possible, then always show them. We keep track here:
+  (let [has-scrolled? (atom false)
+        has-sorted? (atom false)
+        has-watched? (atom false)
+        apply-to-all? (atom false)]
+    (fn [_ _ _ _ _ _]
+      [:nav.navbar.navbar-default
+       [:div.container-fluid
+        [:div.navbar-header
+         [:button.navbar-toggle.collpased {:data-toggle "collapse"
+                                           :data-target "#comportex-navbar-collapse"}
+          [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
+         [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
+          "ComportexViz"]]
+        [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
+         [:ul.nav.navbar-nav
+          ;; step back
+          [:li
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click (send-command into-viz :step-backward)
+             :title "Step backward in time"}
+            [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Step backward"]]]
+          ;; step forward
+          [:li
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click (send-command into-viz :step-forward)
+             :title "Step forward in time"}
+            [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Step forward"]]]
+          ;; pause button
+          [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click #(swap! main-options assoc :sim-go? false)
+             :style {:width "5em"}}
+            "Pause"]]
+          ;; run button
+          [:li (if (:sim-go? @main-options) {:class "hidden"})
+           [:button.btn.btn-primary.navbar-btn
+            {:type :button
+             :on-click #(swap! main-options assoc :sim-go? true)
+             :style {:width "5em"}}
+            "Run"]]
+          ;; display mode
+          [:li.dropdown
+           [:a.dropdown-toggle {:data-toggle "dropdown"
+                                :role "button"
+                                :href "#"}
+            "Display" [:span.caret]]
+           [:ul.dropdown-menu {:role "menu"}
+            [:li [:a {:href "#"
+                      :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
+                                        :one-d)}
+                  "column states over time (1D)"]]
+            [:li [:a {:href "#"
+                      :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
+                                        :two-d)}
+                  "column states over space (2D)"]]
+            ]]
+          ;; expand canvas
+          (when-not @viz-expanded
+            [:li.hidden-xs
+             [:button.btn.btn-default.navbar-btn
+              {:type :button
+               :on-click (fn [e]
+                           (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
+                             (classes/swap el "col-sm-9" "col-sm-12"))
+                           (reset! viz-expanded true)
+                           (.dispatchEvent js/window (js/Event. "resize"))
+                           (.preventDefault e))
+               :title "Expand visualisation"}
+              [:span.glyphicon.glyphicon-resize-full {:aria-hidden "true"}]
+              [:span.sr-only "Expand"]]])
+          ;; un-expand canvas
+          (when @viz-expanded
+            [:li.hidden-xs
+             [:button.btn.btn-default.navbar-btn
+              {:type :button
+               :on-click (fn [e]
+                           (doseq [el (prim-seq (dom/getElementsByClass "viz-expandable"))]
+                             (classes/swap el "col-sm-12" "col-sm-9"))
+                           (reset! viz-expanded false)
+                           (.dispatchEvent js/window (js/Event. "resize"))
+                           (.preventDefault e))
+               :title "Un-expand visualisation"}
+              [:span.glyphicon.glyphicon-resize-small {:aria-hidden "true"}]
+              [:span.sr-only "Un-expand"]]])
+          ;; sort/watch/scroll and all-layers option
+          [:li
+           [:p.navbar-text "Sort/Watch/Scroll:"]]
+          ;; sort selected layer
+          [:li
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click (comp (fn [_] (reset! has-sorted? true))
+                             (send-command into-viz :sort @apply-to-all?))
+             :title "Sort the columns by order of recent activity"}
+            [:span.glyphicon.glyphicon-sort-by-attributes-alt {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Sort by recent active columns"]]]
+          ;; clear sorting
+          (when @has-sorted?
+            [:li
+             [:button.btn.btn-default.navbar-btn
+              {:type :button
+               :on-click (comp (fn [_] (when @apply-to-all? (reset! has-sorted? false)))
+                               (send-command into-viz :clear-sort @apply-to-all?))
+               :title "Clear all sorting - revert to actual column order"}
+              [:span.glyphicon.glyphicon-sort-by-order {:aria-hidden "true"}]
+              [:span.visible-xs-inline " Clear sorting"]]])
+          ;; watch - add facet
+          [:li {:style {:margin-left "1ex"}}
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click (comp (fn [_] (reset! has-watched? true))
+                             (send-command into-viz :add-facet @apply-to-all?))
+             :title "Add a facet to watch the current active set of columns"}
+            [:span.glyphicon.glyphicon-eye-open {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Add facet, watching active set"]]]
+          ;; unwatch - clear facets
+          (when @has-watched?
+            [:li
+             [:button.btn.btn-default.navbar-btn
+              {:type :button
+               :on-click (comp (fn [_] (when @apply-to-all? (reset! has-watched? false)))
+                               (send-command into-viz :clear-facets @apply-to-all?))
+               :title "Clear all facets (watching sets of columns)"}
+              [:span.glyphicon.glyphicon-eye-close {:aria-hidden "true"}]
+              [:span.visible-xs-inline " Clear all facets"]]])
+          ;; scroll down
+          [:li {:style {:margin-left "1ex"}}
+           [:button.btn.btn-default.navbar-btn
+            {:type :button
+             :on-click (comp (fn [_] (reset! has-scrolled? true))
+                             (send-command into-viz :scroll-down @apply-to-all?))
+             :title "Scroll down visible columns"}
+            [:span.glyphicon.glyphicon-arrow-down {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Scroll down"]]]
+          ;; scroll up
+          (when @has-scrolled?
+            [:li
+             [:button.btn.btn-default.navbar-btn
+              {:type :button
+               :on-click (send-command into-viz :scroll-up @apply-to-all?)
+               :title "Scroll up visible columns"}
+              [:span.glyphicon.glyphicon-arrow-up {:aria-hidden "true"}]
+              [:span.visible-xs-inline " Scroll up"]]])
+          [:li
+           [:div.navbar-form
+            [:div.form-group
+             [:div.checkbox
+              [:label.small
+               {:title (str "Apply scroll/sort/watch actions to all layers; "
+                            "otherwise only the selected layer.")}
+               [:input
+                {:type :checkbox
+                 :checked (when @apply-to-all? true)
+                 :on-change (fn [e]
+                              (swap! apply-to-all? not)
+                              (.preventDefault e))}]
+               " all layers"]]]]]
+          ]
+         ;; right-aligned items
+         [:ul.nav.navbar-nav.navbar-right
+          ;; sim rate
+          [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+           [:p.navbar-text (str (.toFixed (sim-rate @model) 1) "/sec.")]]
+          ;; sim / anim options
+          [:li.dropdown
+           [:a.dropdown-toggle {:data-toggle "dropdown"
+                                :role "button"
+                                :href "#"}
+            "Speed" [:span.caret]]
+           [:ul.dropdown-menu {:role "menu"}
+            [:li [:a {:href "#"
+                      :on-click (fn []
+                                  (swap! main-options assoc :sim-step-ms 0)
+                                  (swap! viz-options assoc-in
+                                         [:drawing :anim-every] 1))}
+                  "max sim speed"]]
+            [:li [:a {:href "#"
+                      :on-click (fn []
+                                  (swap! main-options assoc :sim-step-ms 0)
+                                  (swap! viz-options assoc-in
+                                         [:drawing :anim-every] 100))}
+                  "max sim speed, draw every 100 steps"]]
+            [:li [:a {:href "#"
+                      :on-click (fn []
+                                  (swap! main-options assoc :sim-step-ms 250)
+                                  (swap! viz-options assoc-in
+                                         [:drawing :anim-every] 1))}
+                  "limit to 4 steps/sec."]]
+            [:li [:a {:href "#"
+                      :on-click (fn []
+                                  (swap! main-options assoc :sim-step-ms 500)
+                                  (swap! viz-options assoc-in
+                                         [:drawing :anim-every] 1))}
+                  "limit to 2 steps/sec."]]
+            [:li [:a {:href "#"
+                      :on-click (fn []
+                                  (swap! main-options assoc :sim-step-ms 1000)
+                                  (swap! viz-options assoc-in
+                                         [:drawing :anim-every] 1))}
+                  "limit to 1 step/sec."]]]]
+          [:li (if @show-help {:class "active"})
+           [:a {:href "#"
+                :on-click (fn [e]
+                            (swap! show-help not)
+                            (.preventDefault e))}
+            "Help"]]
+          ]
+         ]
+        ]])))
 
 (defn tabs
   [tab-cmps]

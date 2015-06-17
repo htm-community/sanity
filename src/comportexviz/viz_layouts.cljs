@@ -1,5 +1,6 @@
 (ns comportexviz.viz-layouts
   (:require [monet.canvas :as c]
+            [tailrecursion.priority-map :refer [priority-map]]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.topology :as topology]))
 
@@ -14,12 +15,14 @@
     "Returns [x y] pixel coordinates for id relative to the dt origin.")
   (element-size-px [this]
     "The size [w h] in pixels of each drawn array element.")
+  (scroll-position [this]
+    "Current scroll position, giving the first element index visible on screen.")
+  (scroll [this down?]
+    "Updates the layout with scroll position adjusted up or down one page.")
   (ids-onscreen [this]
     "Sequence of element ids per timestep currently drawn in the layout.")
   (id-onscreen? [this id]
     "Checks whether the element id is currently drawn in the layout.")
-  (scroll-position [this]
-    "Current scroll position, giving the first element index visible on screen.")
   (clicked-id [this x y]
     "Returns [dt id] for the [x y] pixel coordinates, or null.")
   (draw-element [this ctx id]
@@ -40,11 +43,11 @@
     [(+ x lx (* w 0.5))
      (+ y ly (* h 0.5))]))
 
-(defn fill-element-group
+(defn fill-elements
   "Fills all elements with the given ids (in a single path if
   possible). For efficiency, skips any ids which are currently
   offscreen."
-  [ctx lay ids]
+  [lay ctx ids]
   (let [one-d? (== 1 (count (p/dims-of lay)))]
     (c/begin-path ctx)
     (doseq [id ids
@@ -57,15 +60,15 @@
       (c/fill ctx))
     ctx))
 
-(defn fill-elements
+(defn group-and-fill-elements
   "Groups the map `id-styles` by key, each key being a style value.
    For each such group, calls `set-style` with the value and then
    fills the group of elements."
-  [ctx lay id-styles set-style]
+  [lay ctx id-styles set-style]
   (c/save ctx)
   (doseq [[style ids] (group-by id-styles (keys id-styles))]
     (set-style ctx style)
-    (fill-element-group ctx lay ids)
+    (fill-elements lay ctx ids)
     (c/fill ctx))
   (c/restore ctx)
   ctx)
@@ -91,43 +94,39 @@
 
 (defn highlight-layer
   "Draws highlight around the whole layout in global coordinates."
-  [lay ctx]
+  [lay ctx color]
   (let [bb (layout-bounds lay)
-        color (:highlight-color lay)]
+        scroll-off (if (pos? (scroll-position lay)) 50 0)]
     (highlight-rect ctx {:x (- (:x bb) 1)
-                         :y (- (:y bb) 1)
+                         :y (- (:y bb) 1 scroll-off)
                          :w (+ (:w bb) 2)
-                         :h (+ (:h bb) 2)}
+                         :h (+ (:h bb) 2 scroll-off)}
                     color)))
 
 (defn highlight-dt
-  "Draws highlight on the time offset dt in global coordinates. Only
-  draws if multiple time steps are shown."
-  [lay ctx dt]
-  (when (> (:draw-steps lay 1) 1)
-    (let [[x y] (origin-px-topleft lay dt)
-          bb (local-dt-bounds lay dt)
-          color (:highlight-color lay)]
-      (highlight-rect ctx {:x (- x 1)
-                           :y (- y 1)
-                           :w (+ (:w bb) 2)
-                           :h (+ (:h bb) 2)}
-                      color))))
+  "Draws highlight on the time offset dt in global coordinates."
+  [lay ctx dt color]
+  (let [[x y] (origin-px-topleft lay dt)
+        bb (local-dt-bounds lay dt)
+        scroll-off (if (pos? (scroll-position lay)) 50 0)]
+    (highlight-rect ctx {:x (- x 1)
+                         :y (- y 1 scroll-off)
+                         :w (+ (:w bb) 2)
+                         :h (+ (:h bb) 2 scroll-off)}
+                    color)))
 
 (defn highlight-element
   "Draw highlight bar horizontally to left axis from element."
-  [lay ctx dt id label]
+  [lay ctx dt id label color]
   (let [[x y] (origin-px-topleft lay dt)
         [lx ly] (local-px-topleft lay id)
         bb (layout-bounds lay)
         [element-w element-h] (element-size-px lay)
-        color (:highlight-color lay)
         rect {:x (- (:x bb) 1)
               :y (- (+ y ly) 1)
               :w (+ (- x (:x bb)) lx element-w 2)
               :h (+ element-h 2)}]
-    (highlight-rect ctx rect
-                    color)
+    (highlight-rect ctx rect color)
     (when label
       (c/save ctx)
       (c/text-align ctx :right)
@@ -149,8 +148,7 @@
      left-px
      top-px
      height-px
-     circles?
-     highlight-color]
+     circles?]
   p/PTopological
   (topology [_]
     topo)
@@ -166,8 +164,8 @@
           x-px (- right off-x-px)]
       [x-px top-px]))
 
-  (local-dt-bounds [lay dt]
-    (assoc (layout-bounds lay)
+  (local-dt-bounds [this dt]
+    (assoc (layout-bounds this)
            :x 0 :y 0
            :w element-w))
 
@@ -180,13 +178,23 @@
   (scroll-position [_]
     scroll-top)
 
-  (ids-onscreen [this]
+  (scroll [this down?]
+    (let [page-n (count (ids-onscreen this))
+          n-ids (p/size topo)]
+      (assoc this :scroll-top
+             (if down?
+               (if (< scroll-top (- n-ids page-n))
+                 (+ scroll-top page-n)
+                 scroll-top)
+               (max 0 (- scroll-top page-n))))))
+
+  (ids-onscreen [_]
     (let [n (min (p/size topo)
                  (quot height-px element-h))
           n0 scroll-top]
       (range n0 (+ n0 n))))
 
-  (id-onscreen? [this id]
+  (id-onscreen? [_ id]
     (let [n (min (p/size topo)
                  (quot height-px element-h))
           n0 scroll-top]
@@ -218,8 +226,7 @@
                 col-shrink
                 bit-w-px
                 bit-h-px
-                bit-shrink
-                highlight-color]} opts]
+                bit-shrink]} opts]
     (map->Grid1dLayout
      {:topo topo
       :scroll-top 0
@@ -231,8 +238,7 @@
       :top-px top
       :left-px left
       :height-px height
-      :circles? (if inbits? false true)
-      :highlight-color highlight-color})))
+      :circles? (if inbits? false true)})))
 
 (defrecord Grid2dLayout
     [topo
@@ -243,8 +249,7 @@
      left-px
      top-px
      height-px
-     circles?
-     highlight-color]
+     circles?]
   p/PTopological
   (topology [_]
     topo)
@@ -258,8 +263,8 @@
   (origin-px-topleft [_ dt]
     [left-px top-px])
 
-  (local-dt-bounds [lay dt]
-    (assoc (layout-bounds lay)
+  (local-dt-bounds [this dt]
+    (assoc (layout-bounds this)
            :x 0 :y 0))
 
   (local-px-topleft [_ id]
@@ -273,19 +278,29 @@
   (scroll-position [_]
     scroll-top)
 
-  (ids-onscreen [this]
+  (scroll [this down?]
+    (let [page-n (count (ids-onscreen this))
+          n-ids (p/size topo)]
+      (assoc this :scroll-top
+             (if down?
+               (if (< scroll-top (- n-ids page-n))
+                 (+ scroll-top page-n)
+                 scroll-top)
+               (max 0 (- scroll-top page-n))))))
+
+  (ids-onscreen [_]
     (let [[w h] (p/dimensions topo)
           n (* w (min h (quot height-px element-h)))
           n0 scroll-top]
       (range n0 (+ n0 n -1))))
 
-  (id-onscreen? [this id]
+  (id-onscreen? [_ id]
     (let [[w h] (p/dimensions topo)
           n (* w (min h (quot height-px element-h)))
           n0 scroll-top]
       (<= n0 id (+ n0 n -1))))
 
-  (clicked-id [this x y]
+  (clicked-id [_ x y]
     (let [[w h] (p/dimensions topo)
           xi (Math/floor (/ (- x left-px) element-w))
           yi (Math/floor (/ (- y top-px) element-h))]
@@ -310,8 +325,7 @@
                 col-shrink
                 bit-w-px
                 bit-h-px
-                bit-shrink
-                highlight-color]} opts]
+                bit-shrink]} opts]
     (map->Grid2dLayout
      {:topo topo
       :scroll-top 0
@@ -321,8 +335,7 @@
       :top-px top
       :left-px left
       :height-px height
-      :circles? (if inbits? false true)
-      :highlight-color highlight-color})))
+      :circles? (if inbits? false true)})))
 
 (defn grid-layout
   [topo top left height opts inbits? display-mode]
@@ -336,3 +349,139 @@
     (case lay-ndim
       1 (grid-1d-layout lay-topo top left height opts inbits?)
       2 (grid-2d-layout lay-topo top left height opts inbits?))))
+
+
+;;; # Orderable layouts
+
+(defprotocol POrderable
+  (reorder [this ordered-ids]))
+
+(defprotocol PTemporalSortableWatchable
+  (sort-by-recent-activity [this ids-ts])
+  (clear-sort [this])
+  (add-facet [this ids])
+  (clear-facets [this])
+  (draw-facets [this ctx]))
+
+(defrecord OrderableLayout
+    ;; `order` is a priority-map. keys are column ids, vals are layout indices.
+    [layout order facet-lengths]
+  p/PTopological
+  (topology [_]
+    (p/topology layout))
+  PArrayLayout
+  (local-px-topleft [_ id]
+    (let [idx (order id)]
+      (local-px-topleft layout idx)))
+
+  (scroll [this down?]
+    (update this :layout scroll down?))
+
+  (ids-onscreen [_]
+    (let [n0 (scroll-position layout)
+          n (count (ids-onscreen layout))]
+      (->> (subseq order >= n0 < (+ n0 n))
+           (map key))))
+
+  (id-onscreen? [_ id]
+    (let [idx (order id)]
+      (id-onscreen? layout idx)))
+
+  (clicked-id [this x y]
+    (when-let [[dt idx] (clicked-id layout x y)]
+      (let [id (key (first (subseq order >= idx <= idx)))]
+        [dt id])))
+
+  (draw-element [this ctx id]
+    (let [idx (order id)]
+      (draw-element layout ctx idx)))
+
+  ;; the rest are identical to underlying layout methods
+  (layout-bounds [_]
+    (layout-bounds layout))
+  (origin-px-topleft [_ dt]
+    (origin-px-topleft layout dt))
+  (local-dt-bounds [_ dt]
+    (local-dt-bounds layout dt))
+  (element-size-px [_]
+    (element-size-px layout))
+  (scroll-position [_]
+    (scroll-position layout))
+
+  POrderable
+  (reorder [this ordered-ids]
+    (assert (= (count ordered-ids) (count order)))
+    (assoc this :order
+           (apply priority-map (interleave ordered-ids (range)))))
+
+  PTemporalSortableWatchable
+  (sort-by-recent-activity [this ids-ts]
+    (let [ftotal (reduce + facet-lengths)
+          faceted (take ftotal (keys order))
+          ord-ids (loop [ids-ts ids-ts
+                         ord (transient (vec faceted))
+                         ord-set (transient (set faceted))]
+                    (if-let [ids (first ids-ts)]
+                      (let [new-ids (remove ord-set ids)]
+                        (recur (next ids-ts)
+                               (reduce conj! ord new-ids)
+                               (reduce conj! ord-set new-ids)))
+                      ;; finished -- complete the order with all column ids
+                      (-> (reduce conj! ord
+                                  (remove ord-set (range (count order))))
+                          (persistent!))))]
+      (reorder this ord-ids)))
+
+  (clear-sort [this]
+    (let [ftotal (reduce + facet-lengths)
+          faceted (take ftotal (keys order))
+          ord-ids (concat faceted
+                          (remove (set faceted)
+                                  (range (count order))))]
+      (reorder this ord-ids)))
+
+  (add-facet [this ids]
+    (let [ftotal (reduce + facet-lengths)
+          old-faceted (take ftotal (keys order))
+          new-faceted (distinct (concat old-faceted ids))
+          new-length (- (count new-faceted) (count old-faceted))]
+      (if (zero? new-length)
+        this
+        (let [ord-ids (concat new-faceted
+                              (remove (set ids)
+                                      (drop ftotal (keys order))))]
+          (-> (reorder this ord-ids)
+              (assoc :facet-lengths (conj facet-lengths new-length)))))))
+
+  (clear-facets [this]
+    (assoc this :facet-lengths []))
+
+  (draw-facets [this ctx]
+    (when (seq facet-lengths)
+      (let [bb (layout-bounds this)
+            [x y] (origin-px-topleft this 0)]
+        (c/stroke-style ctx "black")
+        (c/fill-style ctx "black")
+        (c/text-baseline ctx :bottom)
+        (reduce (fn [offset [i length]]
+                  (let [idx (+ offset length)
+                        [lx ly] (local-px-topleft layout idx)
+                        y-px (+ y ly)]
+                    (c/begin-path ctx)
+                    (c/move-to ctx (:x bb) y-px)
+                    (c/line-to ctx (+ (:x bb) (:w bb) 16) y-px)
+                    (c/stroke ctx)
+                    (c/text ctx {:x (+ (:x bb) (:w bb) 3)
+                                 :y y-px
+                                 :text (str "#" (inc i))})
+                    (+ offset length)))
+                0
+                (map-indexed vector facet-lengths))))))
+
+(defn orderable-layout
+  [lay n-ids]
+  (let [order (apply priority-map (interleave (range n-ids) (range)))]
+    (map->OrderableLayout
+     {:layout lay
+      :order order
+      :facet-lengths []})))
