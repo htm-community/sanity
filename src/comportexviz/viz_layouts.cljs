@@ -359,13 +359,14 @@
 (defprotocol PTemporalSortableWatchable
   (sort-by-recent-activity [this ids-ts])
   (clear-sort [this])
-  (add-facet [this ids])
+  (add-facet [this ids label])
   (clear-facets [this])
   (draw-facets [this ctx]))
 
 (defrecord OrderableLayout
     ;; `order` is a priority-map. keys are column ids, vals are layout indices.
-    [layout order facet-lengths]
+    ;; `facets` is a vector of [label length] tuples.
+    [layout order facets]
   p/PTopological
   (topology [_]
     (p/topology layout))
@@ -416,7 +417,7 @@
 
   PTemporalSortableWatchable
   (sort-by-recent-activity [this ids-ts]
-    (let [ftotal (reduce + facet-lengths)
+    (let [ftotal (reduce + (map second facets))
           faceted (take ftotal (keys order))
           ord-ids (loop [ids-ts ids-ts
                          ord (transient (vec faceted))
@@ -433,15 +434,15 @@
       (reorder this ord-ids)))
 
   (clear-sort [this]
-    (let [ftotal (reduce + facet-lengths)
+    (let [ftotal (reduce + (map second facets))
           faceted (take ftotal (keys order))
           ord-ids (concat faceted
                           (remove (set faceted)
                                   (range (count order))))]
       (reorder this ord-ids)))
 
-  (add-facet [this ids]
-    (let [ftotal (reduce + facet-lengths)
+  (add-facet [this ids label]
+    (let [ftotal (reduce + (map second facets))
           old-faceted (take ftotal (keys order))
           new-faceted (distinct (concat old-faceted ids))
           new-length (- (count new-faceted) (count old-faceted))]
@@ -451,19 +452,19 @@
                               (remove (set ids)
                                       (drop ftotal (keys order))))]
           (-> (reorder this ord-ids)
-              (assoc :facet-lengths (conj facet-lengths new-length)))))))
+              (assoc :facets (conj facets [label new-length])))))))
 
   (clear-facets [this]
-    (assoc this :facet-lengths []))
+    (assoc this :facets []))
 
   (draw-facets [this ctx]
-    (when (seq facet-lengths)
+    (when (seq facets)
       (let [bb (layout-bounds this)
             [x y] (origin-px-topleft this 0)]
         (c/stroke-style ctx "black")
         (c/fill-style ctx "black")
         (c/text-baseline ctx :bottom)
-        (reduce (fn [offset [i length]]
+        (reduce (fn [offset [label length]]
                   (let [idx (+ offset length)
                         [lx ly] (local-px-topleft layout idx)
                         y-px (+ y ly)]
@@ -473,10 +474,10 @@
                     (c/stroke ctx)
                     (c/text ctx {:x (+ (:x bb) (:w bb) 3)
                                  :y y-px
-                                 :text (str "#" (inc i))})
+                                 :text label})
                     (+ offset length)))
                 0
-                (map-indexed vector facet-lengths))))))
+                facets)))))
 
 (defn orderable-layout
   [lay n-ids]
@@ -484,4 +485,4 @@
     (map->OrderableLayout
      {:layout lay
       :order order
-      :facet-lengths []})))
+      :facets []})))

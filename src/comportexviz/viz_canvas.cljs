@@ -243,8 +243,9 @@
   (swap! viz-layouts
          update-in [:regions rgn-id lyr-id]
          (fn [lay]
-           (let [lyr (get-in htm [:regions rgn-id lyr-id])]
-             (lay/add-facet lay (p/active-columns lyr)))))
+           (let [lyr (get-in htm [:regions rgn-id lyr-id])
+                 ids (sort (p/active-columns lyr))]
+             (lay/add-facet lay ids (p/timestep htm)))))
   ;; need this to invalidate the drawing cache
   (swap! viz-options update-in [:columns :refresh-index] inc))
 
@@ -259,8 +260,9 @@
                                         get-active (case lyr-type
                                                      :regions p/active-columns
                                                      :inputs active-bits)
-                                        lyr (get-in htm path)]
-                                    (lay/add-facet lay (get-active lyr))))))
+                                        lyr (get-in htm path)
+                                        ids (sort (get-active lyr))]
+                                    (lay/add-facet lay ids (p/timestep htm))))))
                    m
                    (all-layout-paths m))))
   ;; need this to invalidate the drawing cache
@@ -294,7 +296,8 @@
            (fn [lay]
              (let [ids-ts (for [htm model-steps]
                             (-> (get-in htm [:regions rgn-id lyr-id])
-                                (p/active-columns)))]
+                                (p/active-columns)
+                                (sort)))]
                (lay/sort-by-recent-activity lay ids-ts)))))
   ;; need this to invalidate the drawing cache
   (swap! viz-options update-in [:columns :refresh-index] inc))
@@ -314,7 +317,8 @@
                                                        :inputs active-bits)
                                           ids-ts (for [htm model-steps]
                                                    (-> (get-in htm path)
-                                                       (get-active)))]
+                                                       (get-active)
+                                                       (sort)))]
                                       (lay/sort-by-recent-activity lay ids-ts)))))
                      m
                      (all-layout-paths m)))))
