@@ -3,13 +3,12 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :as h]
+            [comportexviz.helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
-            [goog.dom.forms :as forms]
             [goog.string :as gstr]
             [goog.string.format]
             [cljs.core.async :as async])
@@ -84,22 +83,10 @@
           hist-lim [0 (inc (apply max (vals freqs)))]
           histogram (plt/xy-plot ctx plot-size x-lim hist-lim)]
       ;; draw the plot
-                                        ;(plt/frame! histogram)
       (c/stroke-style ctx "black")
       (doseq [[x f] freqs]
         (plt/line! histogram [[x 0] [x f]])))
-    (c/restore ctx)
-    ))
-
-;; fluid canvas - resizes drawing area as element stretches
-
-(def trigger-redraw (atom 0))
-
-(defn on-resize
-  [_]
-  (when-let [el (dom/getElement "comportex-world")]
-    (h/set-canvas-pixels-from-element-size! el 160)
-    (swap! trigger-redraw inc)))
+    (c/restore ctx)))
 
 (defn signed-str [x] (str (if (neg? x) "" "+") x))
 
@@ -158,49 +145,49 @@
   []
   (when-let [htm (main/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
-          canvas (dom/getElement "comportex-world")]
-      (when canvas
-        (when (zero? @trigger-redraw)
-          (on-resize nil))
-        (let [ctx (c/get-context canvas "2d")]
-          (draw-world ctx in-value htm)))
-      (let [DELTA (gstr/unescapeEntities "&Delta;")
-            TIMES (gstr/unescapeEntities "&times;")]
-        [:div
-         [:p.muted [:small "Input on selected timestep."]]
-         [:table.table.table-condensed
-          [:tr
-           [:th "x"]
-           [:td [:small "position"]]
-           [:td (:x in-value)]]
-          [:tr
-           [:th "y"]
-           [:td [:small "objective"]]
-           [:td (-> (:y in-value) (.toFixed 1))]]
-          [:tr
-           [:th (str DELTA "x")]
-           [:td [:small "action"]]
-           [:td (signed-str (:dx in-value))]]
-          [:tr
-           [:th (str DELTA "y")]
-           [:td [:small "~reward"]]
-           [:td (signed-str (:dy in-value))]]
-          [:tr
-           [:td {:colSpan 3}
-            [:small DELTA "y " TIMES " 0.5 = " [:var "R"]]]]]
-         (q-learning-sub-pane htm)
-         ;; plot
-         [:canvas#comportex-world {:style {:width "100%"
-                                           :height "240px"}}]
-         [:small
-          [:p [:b "top: "]
-           "Approx Q values for each position/action combination,
+          DELTA (gstr/unescapeEntities "&Delta;")
+          TIMES (gstr/unescapeEntities "&times;")]
+      [:div
+       [:p.muted [:small "Input on selected timestep."]]
+       [:table.table.table-condensed
+        [:tr
+         [:th "x"]
+         [:td [:small "position"]]
+         [:td (:x in-value)]]
+        [:tr
+         [:th "y"]
+         [:td [:small "objective"]]
+         [:td (-> (:y in-value) (.toFixed 1))]]
+        [:tr
+         [:th (str DELTA "x")]
+         [:td [:small "action"]]
+         [:td (signed-str (:dx in-value))]]
+        [:tr
+         [:th (str DELTA "y")]
+         [:td [:small "~reward"]]
+         [:td (signed-str (:dy in-value))]]
+        [:tr
+         [:td {:colSpan 3}
+          [:small DELTA "y " TIMES " 0.5 = " [:var "R"]]]]]
+       (q-learning-sub-pane htm)
+       ;; plot
+       [resizing-canvas {:style {:width "100%"
+                                 :height "240px"}}
+        [main/model-steps main/selection]
+        (fn [ctx]
+          (let [htm (main/selected-model-step)
+                in-value (:value (first (core/input-seq htm)))]
+            (draw-world ctx in-value htm)))
+        nil]
+       [:small
+        [:p [:b "top: "]
+         "Approx Q values for each position/action combination,
             where green is positive and red is negative.
             These are the last seen Q values including last adjustments."]
-          [:p [:b "middle: "]
-           "Current position on the objective function surface."]
-          [:p [:b "bottom: "]
-           "Frequencies of being at each position."]]]))))
+        [:p [:b "middle: "]
+         "Current position on the objective function surface."]
+        [:p [:b "bottom: "]
+         "Frequencies of being at each position."]]])))
 
 (defn set-model!
   []
@@ -270,7 +257,6 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
-  (.addEventListener js/window "resize" on-resize)
   (reset! main/world world-c)
   (set-model!)
   (feed-world!))

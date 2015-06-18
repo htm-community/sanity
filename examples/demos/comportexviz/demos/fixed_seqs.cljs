@@ -6,13 +6,12 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
+            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.plots-canvas :as plt]
+            [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
-            [goog.dom.forms :as forms]
-            [comportexviz.helpers :as h]
-            [comportexviz.plots-canvas :as plt]
-            [monet.canvas :as c]
             [cljs.core.async :as async])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
@@ -70,16 +69,6 @@
         (c/fill-style ctx (if (== i index) "red" "lightgrey"))
         (plt/point! plot x y 4)))))
 
-;; fluid canvas - resizes drawing area as element stretches
-
-(def trigger-redraw (atom 0))
-
-(defn on-resize
-  [_]
-  (when-let [el (dom/getElement "comportex-world")]
-    (h/set-canvas-pixels-from-element-size! el 160)
-    (swap! trigger-redraw inc)))
-
 (defn pattern-index-map
   [in-value mixed? model-id]
   (case model-id
@@ -100,14 +89,7 @@
     (let [in-value (:value (first (core/input-seq htm)))
           model-id (::model-id (meta in-value))
           {:keys [patterns mixed? xy?]} (model-info model-id)
-          currs (pattern-index-map in-value mixed? model-id)
-          canvas (dom/getElement "comportex-world")]
-      (when canvas
-        (when (zero? @trigger-redraw)
-          (on-resize nil))
-        (let [ctx (c/get-context canvas "2d")]
-          (draw-world ctx currs patterns xy?)
-          ))
+          currs (pattern-index-map in-value mixed? model-id)]
       [:div
        [:p.muted [:small "Input on selected timestep."]]
        [:table.table
@@ -123,8 +105,17 @@
              (when (and (= model-id :directional-steps-1d)
                         (= patt-id :dir))
                (str " (" (first in-value) ")"))]])]]
-       [:canvas#comportex-world {:style {:width "100%"
-                                         :height "300px"}}]])))
+       [resizing-canvas {:style {:width "100%"
+                                 :height "300px"}}
+        [main/model-steps main/selection]
+        (fn [ctx]
+          (let [htm (main/selected-model-step)
+                in-value (:value (first (core/input-seq htm)))
+                model-id (::model-id (meta in-value))
+                {:keys [patterns mixed? xy?]} (model-info model-id)
+                currs (pattern-index-map in-value mixed? model-id)]
+            (draw-world ctx currs patterns xy?)))
+        nil]])))
 
 (defn make-world-chan
   [world-seq-fn model-id]
@@ -228,5 +219,4 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
-  (.addEventListener js/window "resize" on-resize)
   (swap! main/main-options assoc :sim-go? true))

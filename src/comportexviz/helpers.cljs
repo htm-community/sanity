@@ -2,9 +2,12 @@
   (:require [goog.dom]
             [goog.dom.classes]
             [goog.style :as style]
+            [goog.events :as events]
+            [reagent.core :as reagent :refer [atom]]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.util :refer [round]]))
+            [org.nfrac.comportex.util :refer [round]]
+            [cljs.core.async :as async :refer [put!]]))
 
 (defn with-ui-loading-message
   [f]
@@ -62,11 +65,56 @@
         predictions (p/decode (:encoder inp) pr-votes n-predictions)]
     (predictions-table predictions)))
 
-(defn set-canvas-pixels-from-element-size!
-  [el min-px-width]
-  (let [size-px (style/getSize el)
-        width-px (-> (.-width size-px)
-                     (max min-px-width))
-        height-px (.-height size-px)]
-    (set! (.-width el) width-px)
-    (set! (.-height el) height-px)))
+;;; canvas
+
+(defn on-resize [component width-px height-px resizes]
+  (let [size-px (-> component reagent/dom-node style/getSize)]
+    (reset! width-px (.-width size-px))
+    (reset! height-px (.-height size-px))
+    (when resizes
+      (put! resizes [(.-width size-px) (.-height size-px)]))))
+
+(defn canvas [_ _ _ _ draw]
+  (reagent/create-class
+   {:component-did-mount #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+    :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+    :display-name "canvas"
+    :reagent-render (fn [props width height canaries _]
+                      ;; Need to deref all atoms consumed by draw function to
+                      ;; subscribe to changes.
+                      (mapv deref canaries)
+                      [:canvas (assoc props
+                                      :width width
+                                      :height height)])}))
+
+(defn resizing-canvas [_ _ draw resizes]
+  (let [resize-key (atom nil)
+        width-px (atom nil)
+        height-px (atom nil)]
+    (reagent/create-class
+     {:component-did-mount (fn [component]
+                             (reset! resize-key
+                                     (events/listen js/window "resize"
+                                                    #(on-resize component
+                                                                width-px
+                                                                height-px
+                                                                resizes)))
+
+                             ;; Causes a render + did-update.
+                             (on-resize component width-px height-px resizes))
+
+      :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+
+      :component-will-unmount #(when @resize-key
+                                 (events/unlistenByKey @resize-key))
+
+      :display-name "resizing-canvas"
+      :reagent-render (fn [props canaries _ _]
+                        ;; Need to deref all atoms consumed by draw function to
+                        ;; subscribe to changes.
+                        (mapv deref canaries)
+                        [:canvas (assoc props
+                                   :width @width-px
+                                   :height @height-px)])})))

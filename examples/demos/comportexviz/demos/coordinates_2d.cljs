@@ -3,13 +3,12 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :as h]
+            [comportexviz.helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
+            [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
-            [goog.dom.forms :as forms]
-            [monet.canvas :as c]
             [cljs.core.async :as async])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
@@ -101,36 +100,26 @@
                        :angle (Math/atan2 vy vx)}))
     ))
 
-;; fluid canvas - resizes drawing area as element stretches
-
-(def trigger-redraw (atom 0))
-
-(defn on-resize
-  [_]
-  (when-let [el (dom/getElement "comportex-world")]
-    (h/set-canvas-pixels-from-element-size! el 160)
-    (swap! trigger-redraw inc)))
-
 (defn world-pane
   []
   (when-let [htm (main/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
-          canvas (dom/getElement "comportex-world")]
-      (when canvas
-        (when (zero? @trigger-redraw)
-          (on-resize nil))
-        (let [ctx (c/get-context canvas "2d")]
-          (draw-world ctx in-value)))
-      (let [{:keys [x y vx vy]} in-value]
-        [:div
-         [:p.muted [:small "Input on selected timestep."]]
-         [:table.table
-          [:tr [:th "x"]
-           [:td x]]
-          [:tr [:th "y"]
-           [:td y]]]
-         [:canvas#comportex-world {:style {:width "100%"
-                                           :height "300px"}}]]))))
+          {:keys [x y vx vy]} in-value]
+      [:div
+       [:p.muted [:small "Input on selected timestep."]]
+       [:table.table
+        [:tr [:th "x"]
+         [:td x]]
+        [:tr [:th "y"]
+         [:td y]]]
+       [resizing-canvas {:style {:width "100%"
+                                 :height "300px"}}
+        [main/model-steps main/selection]
+        (fn [ctx]
+          (let [htm (main/selected-model-step)
+                in-value (:value (first (core/input-seq htm)))]
+            (draw-world ctx in-value)))
+        nil]])))
 
 (defn set-model!
   []
@@ -193,7 +182,6 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
-  (.addEventListener js/window "resize" on-resize)
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (reset! main/world world-c)
   (feed-world!)

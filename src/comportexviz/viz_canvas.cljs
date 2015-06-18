@@ -6,11 +6,9 @@
                      group-and-fill-elements]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
-            [goog.events :as events]
-            [goog.style :as style]
             [comportexviz.dom :refer [offset-from-target]]
+            [comportexviz.helpers :refer [resizing-canvas]]
             [monet.canvas :as c]
-            [monet.core]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
@@ -865,59 +863,6 @@
                 (long (* 100 (/ idx (- n-ids page-n))))
                 "%")
            ""))))
-
-(defn on-resize [component width-px height-px resizes]
-  (let [size-px (-> component reagent/dom-node style/getSize)]
-    (reset! width-px (-> (.-width size-px)
-                         (max 300)))
-    (reset! height-px (.-height size-px))
-    (when resizes
-      (put! resizes [(.-width size-px) (.-height size-px)]))))
-
-(defn canvas [_ _ _ _ draw]
-  (reagent/create-class
-   {:component-did-mount #(draw (-> % reagent/dom-node (.getContext "2d")))
-
-    :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
-
-    :display-name "canvas"
-    :reagent-render (fn [props width height canaries _]
-                      ;; Need to deref all atoms consumed by draw function to
-                      ;; subscribe to changes.
-                      (mapv deref canaries)
-                      [:canvas (assoc props
-                                      :width width
-                                      :height height)])}))
-
-(defn resizing-canvas [_ _ draw resizes]
-  (let [resize-key (atom nil)
-        width-px (atom nil)
-        height-px (atom nil)]
-    (reagent/create-class
-     {:component-did-mount (fn [component]
-                             (reset! resize-key
-                                     (events/listen js/window "resize"
-                                                    #(on-resize component
-                                                                width-px
-                                                                height-px
-                                                                resizes)))
-
-                             ;; Causes a render + did-update.
-                             (on-resize component width-px height-px resizes))
-
-      :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
-
-      :component-will-unmount #(when @resize-key
-                                 (events/unlistenByKey @resize-key))
-
-      :display-name "resizing-canvas"
-      :reagent-render (fn [props canaries _ _]
-                        ;; Need to deref all atoms consumed by draw function to
-                        ;; subscribe to changes.
-                        (mapv deref canaries)
-                        [:canvas (assoc props
-                                   :width @width-px
-                                   :height @height-px)])})))
 
 (defn should-draw? [steps opts]
   (let [{:keys [anim-go? anim-every height-px]} (:drawing opts)

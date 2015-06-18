@@ -4,13 +4,12 @@
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.demos.q-learning-1d :refer [q-learning-sub-pane]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :as h]
+            [comportexviz.helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
-            [goog.dom.forms :as forms]
             [goog.string :as gstr]
             [goog.string.format]
             [cljs.core.async :as async])
@@ -80,62 +79,51 @@
     (c/stroke-style ctx "black")
     (plt/grid! plot {})))
 
-;; fluid canvas - resizes drawing area as element stretches
-
-(def trigger-redraw (atom 0))
-
-(defn on-resize
-  [_]
-  (when-let [el (dom/getElement "comportex-world")]
-    (h/set-canvas-pixels-from-element-size! el 120)
-    (swap! trigger-redraw inc)))
-
 (defn signed-str [x] (str (if (neg? x) "" "+") x))
 
 (defn world-pane
   []
   (when-let [htm (main/selected-model-step)]
     (let [in-value (:value (first (core/input-seq htm)))
-          canvas (dom/getElement "comportex-world")]
-      (when canvas
-        (when (zero? @trigger-redraw)
-          (on-resize nil))
-        (let [ctx (c/get-context canvas "2d")]
-          (draw-world ctx in-value htm)))
-      (let [DELTA (gstr/unescapeEntities "&Delta;")
-            TIMES (gstr/unescapeEntities "&times;")
-            ]
-        [:div
-         [:p.muted [:small "Input on selected timestep."]]
-         [:table.table.table-condensed
-          [:tr
-           [:th "x,y"]
-           [:td [:small "position"]]
-           [:td (:x in-value) "," (:y in-value)]]
-          [:tr
-           [:th (str DELTA "x," DELTA "y")]
-           [:td [:small "action"]]
-           [:td (str (signed-str (:dx in-value))
-                     ","
-                     (signed-str (:dy in-value)))]]
-          [:tr
-           [:th [:var "z"]]
-           [:td [:small "~reward"]]
-           [:td (signed-str (:z in-value))]]
-          [:tr
-           [:td {:colSpan 3}
-            [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
-         (q-learning-sub-pane htm)
-         ;; plot
-         [:canvas#comportex-world {:style {:width "100%"
-                                           :height "240px"}}]
-         [:small
-          [:p
-           "Current position on the objective function surface. "
-           "Also shows approx Q values for each position/action combination,
+          DELTA (gstr/unescapeEntities "&Delta;")
+          TIMES (gstr/unescapeEntities "&times;")]
+      [:div
+       [:p.muted [:small "Input on selected timestep."]]
+       [:table.table.table-condensed
+        [:tr
+         [:th "x,y"]
+         [:td [:small "position"]]
+         [:td (:x in-value) "," (:y in-value)]]
+        [:tr
+         [:th (str DELTA "x," DELTA "y")]
+         [:td [:small "action"]]
+         [:td (str (signed-str (:dx in-value))
+                   ","
+                   (signed-str (:dy in-value)))]]
+        [:tr
+         [:th [:var "z"]]
+         [:td [:small "~reward"]]
+         [:td (signed-str (:z in-value))]]
+        [:tr
+         [:td {:colSpan 3}
+          [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
+       (q-learning-sub-pane htm)
+       ;; plot
+       [resizing-canvas {:style {:width "100%"
+                                 :height "240px"}}
+        [main/model-steps main/selection]
+        (fn [ctx]
+          (let [htm (main/selected-model-step)
+                in-value (:value (first (core/input-seq htm)))]
+            (draw-world ctx in-value htm)))
+        nil]
+       [:small
+        [:p
+         "Current position on the objective function surface. "
+         "Also shows approx Q values for each position/action combination,
             where green is positive and red is negative.
             These are the last seen Q values including last adjustments."]
-          ]]))))
+        ]])))
 
 (defn set-model!
   []
@@ -207,7 +195,6 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane]
                   (dom/getElement "comportexviz-app"))
-  (.addEventListener js/window "resize" on-resize)
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!)
   (reset! main/world world-c)

@@ -2,7 +2,7 @@
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.viz-canvas :refer [canvas]]
+            [comportexviz.helpers :refer [canvas]]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [clojure.string :as str]
