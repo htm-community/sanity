@@ -93,7 +93,7 @@
 (defn q-learning-sub-pane
   [htm]
   (let [alyr (get-in htm [:regions :action :layer-3])
-        qinfo (get-in alyr [:prior-state :Q-info])
+        qinfo (:Q-info alyr)
         {:keys [q-alpha q-discount]} (:spec alyr)
         Q_T [:var "Q" [:sub "t"]]
         Q_T+1 [:var.text-nowrap "Q" [:sub "t+1"]]
@@ -104,8 +104,12 @@
      [:small.text-muted
       "This is from 2 time steps back "
       [:abbr {:title
-              (str "1. We wait one step (+1) to see the reward and Q value resulting from an action. "
-                   "2. This display shows on the following step (+2) for technical reasons.")}
+              (str "1. We wait one step (+1) to see the reward and Q
+              value resulting from an action. "
+                   "2. This display shows on the following step (+2)
+                   ... because the Q-learning algorithm is applied
+                   only after the time step has already been recorded
+                   for display.")}
        "(why?)"]]
      [:table.table.table-condensed
       [:tr
@@ -115,11 +119,11 @@
       [:tr
        [:th Q_T+1]
        [:td [:small "goodness"]]
-       [:td (-> (:Qt qinfo 0) (.toFixed 3))]]
+       [:td (-> (:Q-prev qinfo 0) (.toFixed 3))]]
       [:tr
        [:th Q_T]
        [:td [:small "current"]]
-       [:td (-> (:Q-val (:prior-state alyr) 0) (.toFixed 3))]]
+       [:td (-> (:Q-val qinfo 0) (.toFixed 3))]]
       [:tr
        [:th [:var "n"]]
        [:td [:small "active synapses"]]

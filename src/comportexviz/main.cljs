@@ -108,4 +108,4 @@
 
 (defn selected-model-step
   []
-  (viz/selected-model-step model-steps selection))
+  (nth @model-steps (:dt @selection) nil))

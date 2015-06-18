@@ -1254,10 +1254,6 @@
                         current-cell-segments-layout))))
        resizes])))
 
-(defn selected-model-step
-  [model-steps selection]
-  (nth @model-steps (:dt @selection) nil))
-
 (defn init-caches
   [htm]
   (vary-meta htm assoc ::cache (atom {})))
