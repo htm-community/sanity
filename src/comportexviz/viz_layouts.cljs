@@ -356,7 +356,7 @@
 (defprotocol POrderable
   (reorder [this ordered-ids]))
 
-(defprotocol PTemporalSortableWatchable
+(defprotocol PTemporalSortable
   (sort-by-recent-activity [this ids-ts])
   (clear-sort [this])
   (add-facet [this ids label])
@@ -415,7 +415,7 @@
     (assoc this :order
            (apply priority-map (interleave ordered-ids (range)))))
 
-  PTemporalSortableWatchable
+  PTemporalSortable
   (sort-by-recent-activity [this ids-ts]
     (let [ftotal (reduce + (map second facets))
           faceted (take ftotal (keys order))
@@ -423,7 +423,7 @@
                          ord (transient (vec faceted))
                          ord-set (transient (set faceted))]
                     (if-let [ids (first ids-ts)]
-                      (let [new-ids (remove ord-set ids)]
+                      (let [new-ids (doall (remove ord-set ids))]
                         (recur (next ids-ts)
                                (reduce conj! ord new-ids)
                                (reduce conj! ord-set new-ids)))

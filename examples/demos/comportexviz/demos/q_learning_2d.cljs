@@ -176,7 +176,7 @@
         and +200 on the goal square. These are divided by 100 for
         comparison to Q values on the synaptic permanence scale."]
    [:p "The action layer columns are interpreted to produce an
-        action. 100 columns are allocated to each of the four
+        action. 10 columns are allocated to each of the four
         directions of movement, and the direction with most active
         columns is used to move the agent."]
    [:p "The input is the location of the agent via coordinate

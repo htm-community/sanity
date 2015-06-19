@@ -242,9 +242,8 @@
         reward is proportional to the change in y value after
         moving (dy)."]
    [:p "The action layer columns are interpreted to produce an
-        action. 120 columns are allocated to each of the two
-        directions of movement, where 40 are inhibitory and 80 are
-        excitatory, and the direction with most overall excitation is
+        action. 15 columns are allocated to each of the two directions
+        of movement, and the direction with most active columns is
         used to move the agent."]
    [:p "The input is the location of the agent via coordinate
         encoder, plus the last movement as distal input."]
