@@ -276,7 +276,7 @@
   (let [has-scrolled? (atom false)
         has-sorted? (atom false)
         has-watched? (atom false)
-        apply-to-all? (atom false)]
+        apply-to-all? (atom true)]
     (fn [_ _ _ _ _ _]
       [:nav.navbar.navbar-default
        [:div.container-fluid

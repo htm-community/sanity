@@ -25,7 +25,7 @@
 
 (def main-options
   (atom {:sim-go? false
-         :sim-step-ms 200}))
+         :sim-step-ms 20}))
 
 ;;; ## Viz data
 

@@ -86,10 +86,10 @@
                      :inactive nil
                      :disconnected nil
                      :permanences true}
-   :keep-steps 30
+   :keep-steps 32
    ;; triggers a rebuild & redraw of the layouts when changed:
    :drawing {:display-mode :one-d ;; :one-d, :two-d
-             :draw-steps 20
+             :draw-steps 16
              :height-px nil ;; set on resize
              :width-px nil ;; set on resize
              :top-px 30
@@ -100,9 +100,9 @@
              :col-shrink 0.85
              :cell-r-px 10
              :seg-w-px 30
-             :seg-h-px 10
-             :seg-h-space-px 60
-             :h-space-px 60
+             :seg-h-px 8
+             :seg-h-space-px 55
+             :h-space-px 45
              :anim-go? true
              :anim-every 1}})
 
@@ -141,8 +141,8 @@
         d-opts (:drawing opts)
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
-        height-px (:height-px d-opts)
         top-px (:top-px d-opts)
+        height-px (- (:height-px d-opts) top-px)
         ;; for now draw inputs and layers in a horizontal stack
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
@@ -631,11 +631,11 @@
                                     learn-seg?)
                     scale (/ seg-w-px stimulus-th)]]
         ;; draw segment as a rectangle
-        (let [h2 (/ seg-h-px 2)
-              conn-th-r {:x sx :y (- sy h2) :w (* stimulus-th scale) :h seg-h-px}
+        (let [h2 (int (/ seg-h-px 2))
+              conn-th-r {:x sx :y (- sy h2) :w (int (* stimulus-th scale)) :h seg-h-px}
               conn-tot-r (assoc conn-th-r :w (* conn-tot scale))
               conn-act-r (assoc conn-th-r :w (* conn-act scale))
-              disc-th-r {:x sx :y (+ sy h2) :w (* learning-th scale) :h seg-h-px}
+              disc-th-r {:x sx :y (+ sy h2) :w (int (* learning-th scale)) :h seg-h-px}
               disc-tot-r (assoc disc-th-r :w (* disc-tot scale))
               disc-act-r (assoc disc-th-r :w (* disc-act scale))]
           (when selected-seg?
@@ -945,7 +945,7 @@
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
                         (apply max)
-                        (+ (:h-space-px d-opts)))
+                        (+ (:seg-h-space-px d-opts)))
         label-top-px 0
         width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))]
