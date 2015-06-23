@@ -206,9 +206,12 @@
           id* (Math/floor (/ (- y top-px) element-h))
           id (+ id* scroll-top)
           dt (+ dt* dt-offset)]
-      (when (and (<= 0 dt* draw-steps)
-                 (id-onscreen? this id))
-        [dt id])))
+      (when (<= 0 dt* draw-steps)
+        (if (id-onscreen? this id)
+          [dt id]
+          ;; check for click on header
+          (when (<= y top-px)
+            [dt nil])))))
 
   (draw-element [this ctx id]
     (let [[x y] (local-px-topleft this id)]
@@ -305,10 +308,13 @@
           xi (Math/floor (/ (- x left-px) element-w))
           yi (Math/floor (/ (- y top-px) element-h))]
       (when (and (<= 0 xi (dec w))
-                 (<= 0 yi (dec h)))
-        (let [id* (p/index-of-coordinates topo [xi yi])
-              id (- id* scroll-top)]
-          [0 id]))))
+                 (<= yi (dec h)))
+        (if (>= y 0)
+          (let [id* (p/index-of-coordinates topo [xi yi])
+                id (- id* scroll-top)]
+            [0 id])
+          ;; check for click on header
+          [0 nil]))))
 
   (draw-element [this ctx id]
     (let [[x y] (local-px-topleft this id)]
@@ -390,8 +396,10 @@
 
   (clicked-id [this x y]
     (when-let [[dt idx] (clicked-id layout x y)]
-      (let [id (key (first (subseq order >= idx <= idx)))]
-        [dt id])))
+      (if idx
+        (let [id (key (first (subseq order >= idx <= idx)))]
+          [dt id])
+        [dt nil])))
 
   (draw-element [this ctx id]
     (let [idx (order id)]
