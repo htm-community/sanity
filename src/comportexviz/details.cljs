@@ -39,13 +39,12 @@
       (str (sort (p/learnable-cells lyr)))
       ""
       "__Proximal learning__"
-      (str (sort (:proximal-learning (:state lyr))))
+      (for [seg-up (sort-by :target-id (vals (:proximal-learning (:state lyr))))]
+        (str (:target-id seg-up) " " (dissoc seg-up :target-id :operation)))
       ""
       "__Distal learning__"
-      (str (sort (:distal-learning (:state lyr))))
-      ""
-      "__TP cells__"
-      (str (sort (p/temporal-pooling-cells lyr)))
+      (for [seg-up (sort-by :target-id (vals (:distal-learning (:state lyr))))]
+        (str (:target-id seg-up) " " (dissoc seg-up :target-id :operation)))
       ""
       "__TP excitation__"
       (str (sort (:temporal-pooling-exc (:state lyr))))
@@ -54,20 +53,15 @@
         (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
               p-prox-sg (:proximal-sg p-lyr)
               p-distal-sg (:distal-sg p-lyr)
-              ac (p/active-cells p-lyr)
-              lc (or (p/learnable-cells p-lyr) #{})
-              pcon (:distal-perm-connected (p/params p-lyr))
+              d-pcon (:distal-perm-connected (p/params p-lyr))
+              ff-pcon (:ff-perm-connected (p/params p-lyr))
               bits (:in-ff-bits (:state lyr))
               sig-bits (:in-stable-ff-bits (:state lyr))
+              d-bits (:distal-bits (:prior-distal-state lyr))
+              d-lc-bits (:distal-lc-bits (:prior-distal-state lyr))
               ]
           ["__Column overlap__"
            (str (get (:col-overlaps (:state lyr)) [col 0]))
-           ""
-           "__Distal LC bits prev__"
-           (str (:distal-lc-bits (:prior-distal-state lyr)))
-           ""
-           "__Distal exc prev__"
-           (str (sort (:distal-exc (:prior-distal-state lyr))))
            ""
            "__Selected column__"
            "__Connected ff-synapses__"
@@ -75,12 +69,18 @@
                  :when (seq syns)]
              [(str "FF segment " si)
               (for [[id p] (sort syns)]
-                (str "  " id " :=> "
+                (str "  " id
+                     (if (>= p ff-pcon) " :=> " " :.: ")
                      (.toFixed p 2)
                      (if (get sig-bits id) " S")
-                     (if (get bits id) (str " A "
-                                            (core/source-of-incoming-bit htm rgn-id id)
-                                            ))))])
+                     (if (get bits id)
+                       (str " A "
+                            (let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id)
+                                  src-rgn (get-in htm [:regions src-k])]
+                              (if src-rgn
+                                (let [src-cell (p/source-of-bit src-rgn src-i)]
+                                  (str src-k " " src-cell))
+                                (str src-k " " src-i)))))))])
            "__Cells and their Dendrite segments__"
            (for [ci (range (p/layer-depth lyr))
                  :let [segs (p/cell-segments p-distal-sg [col ci])]]
@@ -92,10 +92,10 @@
                 [(str "  SEGMENT " si)
                  (for [[id p] (sort syns)]
                    (str "  " id
-                        (if (>= p pcon) " :=> " " :.: ")
+                        (if (>= p d-pcon) " :=> " " :.: ")
                         (.toFixed p 2)
-                        (if (lc id) " L"
-                            (if (ac id) " A"))))])
+                        (if (d-lc-bits id) " L"
+                            (if (d-bits id) " A"))))])
               ])
            ]))
       ""
