@@ -175,18 +175,27 @@
 (defn- abs [x] (if (neg? x) (- x) x))
 
 (defn draw-cell-excitation-plot!
-  [ctx htm prior-htm rgn-id lyr-id series-colors]
+  [ctx htm prior-htm rgn-id lyr-id sel-col series-colors]
   (let [width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
         plot-size {:w width-px
                    :h 200}
         lc (get-in htm [:regions rgn-id lyr-id :state :learn-cells])
+        lc+ (if sel-col
+              (let [prior-lc (get-in prior-htm [:regions rgn-id lyr-id :state :learn-cells])
+                    sel-cell (or (first (filter (fn [[col _]]
+                                                  (= col sel-col))
+                                                (concat prior-lc lc)))
+                                 [sel-col 0])]
+                (conj lc sel-cell))
+              lc)
         breakdowns (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id
-                                                    lc)
+                                                    lc+)
         src-shades (viz-rgn-shades htm)
         y-max (* 1.1 (apply max (map :total (vals breakdowns))))
-        x-lim [-0.5 (+ (count lc) 3)] ;; space for legend
+        x-lim [-0.5 (+ (count lc+) 3)] ;; space for legend
         y-lim [y-max 0]
+        bot-lab-y (- (* y-max 0.02))
         draw-cell-bar
         (fn [plot x-coord bd labels?]
           (let [series (for [k excitation-order
@@ -220,18 +229,22 @@
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
       (doseq [[i [cell-id bd]] (->> breakdowns
+                                    (sort-by key)
                                     (sort-by (comp :total val) >)
                                     (map-indexed vector))
               :let [x-coord i
                     [col _] cell-id
                     total-exc (:total bd)]]
         (draw-cell-bar plot x-coord bd false)
+        (when (= col sel-col)
+          (c/fill-style ctx (:highlight series-colors))
+          (plt/rect! plot (- x-coord 0.25) -100 1.0 100))
         (c/fill-style ctx "black")
         (plt/text! plot x-coord (+ total-exc 0.5) total-exc)
-        (plt/text-rotated! plot x-coord -1 col))
+        (plt/text-rotated! plot x-coord bot-lab-y (if (= col sel-col) cell-id col)))
       ;; draw legend
-      (let [leg-x (+ 1 (count lc))
-            sep-x (count lc)
+      (let [sep-x (count lc+)
+            leg-x (inc sep-x)
             key-bd* (->
                      (apply util/deep-merge-with + (vals breakdowns))
                      (core/update-excitation-breakdown #(if (pos? %) 1.0 0.0)))
@@ -242,7 +255,7 @@
         (draw-cell-bar plot leg-x key-bd true)
         (c/fill-style ctx "black")
         (c/text-align ctx :left)
-        (plt/text-rotated! plot leg-x -1 "KEY")
+        (plt/text-rotated! plot leg-x bot-lab-y "KEY")
         (plt/frame! plot)))
     (c/restore ctx)))
 
@@ -256,7 +269,10 @@
    (fn [ctx]
      (let [dt (:dt @selection)
            htm (nth @steps dt)
-           prior-htm (nth @steps (inc dt))]
+           prior-htm (nth @steps (inc dt))
+           sel-col (when (and (= region-key (:region @selection))
+                              (= layer-id (:layer @selection)))
+                     (:col @selection))]
        (draw-cell-excitation-plot! ctx htm prior-htm region-key layer-id
-                                   series-colors)))
+                                   sel-col series-colors)))
    nil])
