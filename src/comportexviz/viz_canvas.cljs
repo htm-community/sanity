@@ -86,7 +86,7 @@
                      :inactive nil
                      :disconnected nil
                      :permanences true}
-   :keep-steps 32
+   :keep-steps 50
    ;; triggers a rebuild & redraw of the layouts when changed:
    :drawing {:display-mode :one-d ;; :one-d, :two-d
              :draw-steps 16
@@ -287,7 +287,7 @@
 
 (defn sort-sel-layer!
   [viz-layouts viz-options model-steps sel-dt rgn-id lyr-id]
-  (let [use-steps 10
+  (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
         model-steps (take use-steps (drop sel-dt model-steps))]
     (swap! viz-layouts
            update-in [:regions rgn-id lyr-id]
@@ -302,7 +302,7 @@
 
 (defn sort-all-layers!
   [viz-layouts viz-options model-steps sel-dt]
-  (let [use-steps 10
+  (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
         model-steps (take use-steps (drop sel-dt model-steps))]
     (swap! viz-layouts
            (fn [m]
