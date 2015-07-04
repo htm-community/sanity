@@ -26,7 +26,7 @@
   state of model itself."
   []
   (let [step-c (main/tap-c main/steps-mult)]
-    (demo/feed-world-c-with-actions! step-c control-c world-c)))
+    (demo/feed-world-c-with-actions! step-c control-c world-c main/model)))
 
 (defn draw-world
   [ctx in-value]
@@ -103,7 +103,7 @@
       [:div
        [:p.muted [:small "Input on selected timestep."]]
        [:table.table
-        [:tr [:th "val"]
+        [:tr [:th "value"]
          [:td (str (get-in sentences position))]]
         [:tr [:th "next move"]
          [:td (cond
@@ -111,7 +111,8 @@
                 (not (zero? word-sacc)) "word"
                 (not (zero? letter-sacc)) "letter")]]
         [:tr [:th "direction"]
-         [:td (signed-str (+ sentence-sacc word-sacc letter-sacc))]]]
+         [:td (if (pos? (+ sentence-sacc word-sacc letter-sacc))
+                "fwd" "back")]]]
        [:pre
         (->> (take i sentences)
              (map sentence-string)
@@ -182,17 +183,18 @@
     [:code "letter-motor"] " and " [:code "word-motor"]
     ". The former is distal input to the first level region, while the
     latter is distal input to the second-level region."]
-   [:p "Letter saccades always move forward one letter within a
-   word. At the end of a word, we check whether the first region's
+   [:p "Within a word, letter saccades always move forward one
+   letter. At the end of a word, we check whether the first region's
    columns are bursting (indicating it has not yet learned the word's
    letter sequence). If it is bursting, a letter saccade moves back to
-   the start of the same word. Otherwise, a word saccade is generated."]
-   [:p "Word saccades always move forward one word within a
-   sentence. At the end of a sentence, we check whether the second region's
-   columns are bursting (indicating it has not yet learned the sentence's
-   word sequence). If it is bursting, a word saccade moves back to
-   the start of the same sentence."]
-   [:p "And similarly with sentence saccades."]
+   the start of the same word. Otherwise, a word saccade is
+   generated."]
+   [:p "Within a sentence, word saccades always move forward one
+   word. At the end of a sentence, we check whether the second
+   region's columns are bursting (indicating it has not yet learned
+   the sentence's word sequence). If it is bursting, a word saccade
+   moves back to the start of the same sentence."]
+   [:p "And similarly for sentence saccades."]
    [bind-fields config-template config]
    ]
   )
