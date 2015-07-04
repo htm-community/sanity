@@ -93,7 +93,7 @@
              :height-px nil ;; set on resize
              :width-px nil ;; set on resize
              :top-px 30
-             :bit-w-px 3
+             :bit-w-px 4
              :bit-h-px 3
              :bit-shrink 0.85
              :col-d-px 5
@@ -774,6 +774,16 @@
                   (distinct))]
     (c/fill-style ctx (:predicted state-colors))
     (fill-elements lay ctx cols)
+    ;; also draw breaks - these interrupt prediction & TP
+    (when (empty? (:distal-bits (:prior-distal-state lyr)))
+      (doto ctx
+        (c/stroke-style "black")
+        (c/stroke-width 2)
+        (c/begin-path)
+        (c/move-to 0.5 0)
+        (c/line-to 0.5 (.-height el))
+        (c/stroke)
+        (c/stroke-width 1)))
     el))
 
 (defn tp-columns-image

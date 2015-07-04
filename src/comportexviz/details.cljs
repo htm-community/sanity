@@ -72,8 +72,8 @@
                 (str "  " id
                      (if (>= p ff-pcon) " :=> " " :.: ")
                      (.toFixed p 2)
-                     (if (get sig-bits id) " S")
-                     (if (get bits id)
+                     (if (contains? sig-bits id) " S")
+                     (if (contains? bits id)
                        (str " A "
                             (let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id)
                                   src-rgn (get-in htm [:regions src-k])]
@@ -94,8 +94,8 @@
                    (str "  " id
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (.toFixed p 2)
-                        (if (d-lc-bits id) " L"
-                            (if (d-bits id) " A"))))])
+                        (if (contains? d-lc-bits id) " L"
+                            (if (contains? d-bits id) " A"))))])
               ])
            ]))
       ""

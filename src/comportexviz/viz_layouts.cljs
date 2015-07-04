@@ -109,9 +109,9 @@
   (let [[x y] (origin-px-topleft lay dt)
         bb (local-dt-bounds lay dt)
         scroll-off (if (pos? (scroll-position lay)) 50 0)]
-    (highlight-rect ctx {:x (- x 1)
+    (highlight-rect ctx {:x (- x 0)
                          :y (- y 1 scroll-off)
-                         :w (+ (:w bb) 2)
+                         :w (+ (:w bb) 0)
                          :h (+ (:h bb) 2 scroll-off)}
                     color)))
 

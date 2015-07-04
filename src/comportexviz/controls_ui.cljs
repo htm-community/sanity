@@ -111,7 +111,7 @@
                  ]
                 [:button.btn.btn-warning.btn-block
                  {:on-click #(with-ui-loading-message
-                               (swap! model p/reset))}
+                               (swap! model p/restart))}
                  "Rebuild model"]
                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
                ]
