@@ -6,20 +6,37 @@
             [reagent.core :as reagent :refer [atom]]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.util :refer [round]]
-            [cljs.core.async :as async :refer [put!]]))
+            [org.nfrac.comportex.util :as util :refer [round]]
+            [cljs.core.async :as async :refer [put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go]]))
+
+(defn- loading-message-element []
+  (goog.dom/getElement "loading-message"))
+
+(defn- show [el]
+  (goog.dom.classes/add el "show"))
+
+(defn- hide [el]
+  (goog.dom.classes/remove el "show"))
 
 (defn with-ui-loading-message
   [f]
-  (let [el (goog.dom/getElement "loading-message")]
-     (goog.dom.classes/add el "show")
+  (let [el (loading-message-element)]
+     (show el)
      ;; need a timeout to allow redraw to show loading message
      (js/setTimeout (fn []
                       (try
                         (f)
                         (finally
-                          (goog.dom.classes/remove el "show"))))
+                          (hide el))))
                     100)))
+
+(defn ui-loading-message-until
+  [finished-c]
+  (let [el (loading-message-element)]
+    (show el)
+    (go (<! finished-c)
+        (hide el))))
 
 (defn text-world-input-component
   [in-value htm max-shown scroll-every separator]
@@ -118,3 +135,49 @@
                         [:canvas (assoc props
                                    :width @width-px
                                    :height @height-px)])})))
+(defn tap-c
+  [mult]
+  (let [c (async/chan)]
+    (async/tap mult c)
+    c))
+
+(defn- merge-non-maps [& xs]
+  (if (apply (every-pred coll? (complement map?)) xs)
+    (apply concat xs)
+    (last xs)))
+
+(defn- child-route [route k]
+  (not-empty
+   (util/deep-merge-with merge-non-maps
+                         (get-in route [:children k] {})
+                         (get route :all-children {}))))
+
+(defn update-routed
+  "Traverse map `m` using the specified route, applying `node-fn` at each point.
+  `route` is a map which specifies which children to traverse and which route to
+  use for each child. `node-fn` consumes the current node and the current route.
+  This function consumes :children and :all-children fields of each route, and
+  passes the others through to `node-fn`.
+
+  For example, you might traverse the map
+    {:sharks {:bernardo {}
+              :chino {}}
+     :jets {:tony {}
+            :riff {}}}
+  with route
+    {:children {:sharks {:children {:bernardo {}}}
+                :jets {:all-children {}}}}
+  to apply `node-fn` to every map except for Chino's."
+  [m route node-fn]
+  (reduce (fn [new-m k]
+            (if-let [r (child-route route k)]
+              (assoc new-m
+                     k (update-routed (get m k) r node-fn))
+              new-m))
+          (node-fn m route) (keys m)))
+
+(defn close-and-reset! [chan-atom v]
+  (swap! chan-atom (fn [c]
+                     (when c
+                       (async/close! c))
+                     v)))

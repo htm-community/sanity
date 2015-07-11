@@ -9,7 +9,7 @@
             [clojure.string :as str]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
-            [comportexviz.viz-canvas :as viz]
+            [comportexviz.simulation.browser :as simulation]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
@@ -80,7 +80,13 @@ fox eat something.
   (async/chan world-buffer
               (map (util/keep-history-middleware 100 :word :history))))
 
-(add-watch main/model ::count-world-buffer
+(def into-sim
+  (atom nil))
+
+(def model
+  (atom nil))
+
+(add-watch model ::count-world-buffer
            (fn [_ _ _ _]
              (swap! config assoc :world-buffer-count (count world-buffer))))
 
@@ -209,6 +215,9 @@ fox eat something.
 
 (defn set-model!
   []
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c (async/chan))
+
   (let [n-regions (:n-regions @config)
         spec (case (:spec-choice @config)
                :a spec-global
@@ -225,9 +234,14 @@ fox eat something.
              (enc/pre-transform :word)
              (core/sensory-input))]
     (with-ui-loading-message
-      (main/set-model!
-       (core/regions-in-series core/sensory-region inp n-regions
-                               (list* spec (repeat (merge spec higher-level-spec-diff)))))
+      (reset! model (core/regions-in-series
+                     core/sensory-region inp n-regions
+                     (list* spec (repeat (merge spec higher-level-spec-diff)))))
+      (simulation/simulate-onto-chan! @main/steps-c
+                                      model
+                                      world-c
+                                      main/sim-options
+                                      @into-sim)
       (swap! config assoc :have-model? true))))
 
 (def config-template
@@ -336,8 +350,7 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (reset! main/world world-c)
-  (swap! main/main-options assoc :sim-go? true))
+  (swap! main/sim-options assoc :go? true))

@@ -7,12 +7,11 @@
             [clojure.string :as str]
             [cljs.core.async :as async :refer [put!]]
             [cljs.reader]
-            [comportexviz.helpers] ;; needed by with-ui-loading-message macro
+            [comportexviz.helpers :as helpers]
             [comportexviz.plots :as plots]
             [comportexviz.details]
             [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+            [org.nfrac.comportex.protocols :as p]))
 
 (defn now [] (.getTime (js/Date.)))
 
@@ -37,9 +36,24 @@
     :else :number))
 
 (defn parameters-tab
-  [model selection]
-  (let [partypes (cljs.core/atom {})] ;; immutable cache
-    (fn [_ _]
+  [_ _ into-sim]
+  (let [partypes (cljs.core/atom {}) ;; immutable cache
+
+        ;; The UI shows the most recent value. The model may live on another
+        ;; server so this code only has access to its most recent snapshot via
+        ;; `steps`. Even after the model is updated, this code won't see it
+        ;; until another step is simulated, so keep track of timesteps to decide
+        ;; which values to show.
+        edited-specs (atom {})
+        last-rendered-timestep (cljs.core/atom -1)]
+
+    (add-watch edited-specs :push-to-simulation
+               (fn [_ _ _ v]
+                 (doseq [[path {:keys [timestep spec]}] v]
+                   (when (>= timestep @last-rendered-timestep)
+                     (put! @into-sim [:set-spec path spec])))))
+
+    (fn [steps selection _]
       [:div
        [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
@@ -47,18 +61,27 @@
                                       (some-> (:layer @selection) name))]
        (into
         [:div.form-horizontal]
-        (when @model
+        (when (not-empty @steps)
           (let [sel-region (:region @selection)
                 sel-layer (:layer @selection)
-                rgn (get-in @model [:regions sel-region])
-                lyr (get rgn sel-layer)
-                spec (when lyr (p/params lyr))]
+                spec-path [:regions sel-region sel-layer :spec]
+                spec (let [model (first @steps)
+                           edited (get @edited-specs spec-path)]
+                       (reset! last-rendered-timestep (p/timestep model))
+                       (if (and edited
+                                (>= (:timestep edited) @last-rendered-timestep))
+                         (:spec edited)
+                         (let [rgn (get-in model [:regions sel-region])
+                               lyr (get rgn sel-layer)]
+                           (when lyr (p/params lyr)))))]
             (concat
              (for [[k v] (sort spec)
-                   :let [path [:regions sel-region sel-layer :spec k]
-                         typ (or (get @partypes k)
+                   :let [typ (or (get @partypes k)
                                  (get (swap! partypes assoc k (param-type v))
-                                      k))]]
+                                      k))
+                         setv! #(swap! edited-specs assoc spec-path
+                                       {:timestep @last-rendered-timestep
+                                        :spec (assoc spec k %)})]]
                [:div.row {:class (when (or (nil? v) (string? v))
                                    "has-error")}
                 [:div.col-sm-8
@@ -70,7 +93,7 @@
                    [:input.form-control.input-sm
                     {:type :checkbox
                      :checked (if v true)
-                     :on-change #(swap! model update-in path not)}]
+                     :on-change #(setv! (not v))}]
                    ;; vector
                    :vector
                    [:input.form-control.input-sm
@@ -81,7 +104,7 @@
                                                (catch :default _ s))
                                         newval (if (and (vector? x) (every? integer? x))
                                                  x s)]
-                                    (swap! model assoc-in path newval)))}]
+                                    (setv! newval)))}]
                    ;; number
                    :number
                    [:input.form-control.input-sm
@@ -95,9 +118,7 @@
                                                  (->> (if (not= s (str parsed))
                                                         s
                                                         parsed)))]
-                                    (swap! model assoc-in path newval))
-                                  )}])]
-                ])
+                                    (setv! newval)))}])]])
              [
               [:div.panel.panel-default
                [:div.panel-heading [:h4.panel-title "Note"]]
@@ -110,8 +131,9 @@
                  (obviously losing any learned connections in the process):"
                  ]
                 [:button.btn.btn-warning.btn-block
-                 {:on-click #(with-ui-loading-message
-                               (swap! model p/restart))}
+                 {:on-click #(let [finished (async/chan)]
+                               (put! @into-sim [:restart finished])
+                               (helpers/ui-loading-message-until finished))}
                  "Rebuild model"]
                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
                ]
@@ -269,7 +291,7 @@
     (.preventDefault e)))
 
 (defn navbar
-  [main-options model show-help viz-options viz-expanded into-viz]
+  [sim-options steps show-help viz-options viz-expanded into-viz]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -305,17 +327,17 @@
             [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step forward"]]]
           ;; pause button
-          [:li (if-not (:sim-go? @main-options) {:class "hidden"})
+          [:li (if-not (:go? @sim-options) {:class "hidden"})
            [:button.btn.btn-default.navbar-btn
             {:type :button
-             :on-click #(swap! main-options assoc :sim-go? false)
+             :on-click #(swap! sim-options assoc :go? false)
              :style {:width "5em"}}
             "Pause"]]
           ;; run button
-          [:li (if (:sim-go? @main-options) {:class "hidden"})
+          [:li (if (:go? @sim-options) {:class "hidden"})
            [:button.btn.btn-primary.navbar-btn
             {:type :button
-             :on-click #(swap! main-options assoc :sim-go? true)
+             :on-click #(swap! sim-options assoc :go? true)
              :style {:width "5em"}}
             "Run"]]
           ;; display mode
@@ -439,8 +461,8 @@
          ;; right-aligned items
          [:ul.nav.navbar-nav.navbar-right
           ;; sim rate
-          [:li (if-not (:sim-go? @main-options) {:class "hidden"})
-           [:p.navbar-text (str (.toFixed (sim-rate @model) 1) "/sec.")]]
+          [:li (if-not (:go? @sim-options) {:class "hidden"})
+           [:p.navbar-text (str (.toFixed (sim-rate (first @steps)) 1) "/sec.")]]
           ;; sim / anim options
           [:li.dropdown
            [:a.dropdown-toggle {:data-toggle "dropdown"
@@ -450,31 +472,31 @@
            [:ul.dropdown-menu {:role "menu"}
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! main-options assoc :sim-step-ms 0)
+                                  (swap! sim-options assoc :step-ms 0)
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "max sim speed"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! main-options assoc :sim-step-ms 0)
+                                  (swap! sim-options assoc :step-ms 0)
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 100))}
                   "max sim speed, draw every 100 steps"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! main-options assoc :sim-step-ms 250)
+                                  (swap! sim-options assoc :step-ms 250)
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 4 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! main-options assoc :sim-step-ms 500)
+                                  (swap! sim-options assoc :step-ms 500)
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 2 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! main-options assoc :sim-step-ms 1000)
+                                  (swap! sim-options assoc :step-ms 1000)
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 1 step/sec."]]]]
@@ -556,12 +578,12 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [model-tab main-pane model main-options viz-options selection steps
-   series-colors into-viz]
+  [model-tab main-pane sim-options viz-options selection steps series-colors
+   into-viz into-sim]
   (let [show-help (atom false)
         viz-expanded (atom false)]
     [:div
-     [navbar main-options model show-help viz-options viz-expanded into-viz]
+     [navbar sim-options steps show-help viz-options viz-expanded into-viz]
      [help-block show-help]
      [:div.container-fluid
       [:div.row
@@ -571,7 +593,7 @@
         [tabs
          [[:model [model-tab]]
           [:drawing [bind-fields viz-options-template viz-options]]
-          [:params [parameters-tab model selection]]
+          [:params [parameters-tab steps selection into-sim]]
           [:ts-plots [ts-plots-tab steps series-colors]]
           [:cell-plots [cell-plots-tab steps selection series-colors]]
           [:details [details-tab steps selection]]]]

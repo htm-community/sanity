@@ -132,10 +132,10 @@
         agg-freqs-ts (aggregating-ts step-freqs 200)]
     (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
                (fn [_ _ _ v]
-                 (let [htm (first v)
-                       freqs (-> htm :regions region-key
-                                 (core/column-state-freqs layer-id))]
-                   (reset! step-freqs freqs))))
+                 (when-let [htm (first v)]
+                   (let [freqs (-> htm :regions region-key
+                                   (core/column-state-freqs layer-id))]
+                     (reset! step-freqs freqs)))))
     (fn [_ _ _ _]
       (let [el-id (str "comportexviz-tsplot-" (name region-key) (name layer-id))
             el (dom/getElement el-id)]

@@ -4,7 +4,7 @@
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
-            [comportexviz.viz-canvas :as viz]
+            [comportexviz.simulation.browser :as simulation]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
@@ -24,7 +24,13 @@
   (async/chan world-buffer
               (map (util/keep-history-middleware 100 :word :history))))
 
-(add-watch main/model ::count-world-buffer
+(def into-sim
+  (atom nil))
+
+(def model
+  (atom nil))
+
+(add-watch model ::count-world-buffer
            (fn [_ _ _ _]
              (swap! config assoc :world-buffer-count (count world-buffer))))
 
@@ -53,13 +59,20 @@
 
 (defn set-model!
   []
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c (async/chan))
+
   (let [n-regions (:n-regions @config)
         encoder (case (:encoder @config)
                   :block (demo/make-block-encoder (:text @config))
                   :random demo/random-encoder)]
     (with-ui-loading-message
-      (main/set-model!
-       (demo/n-region-model n-regions demo/spec encoder)))))
+      (reset! model (demo/n-region-model n-regions demo/spec encoder))
+      (simulation/simulate-onto-chan! @main/steps-c
+                                      model
+                                      world-c
+                                      main/sim-options
+                                      @into-sim))))
 
 (defn send-text!
   []
@@ -130,7 +143,6 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (reset! main/world world-c)
   (set-model!))

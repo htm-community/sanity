@@ -3,8 +3,9 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
+            [comportexviz.simulation.browser :as simulation]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -21,6 +22,9 @@
               (map (util/keep-history-middleware
                     50 #(select-keys % [:x :y :vx :vy])
                     :history))))
+
+(def into-sim
+  (atom nil))
 
 (def control-c (async/chan))
 
@@ -123,10 +127,14 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @config)]
-    (with-ui-loading-message
-      (main/set-model!
-       (demo/n-region-model n-regions)))))
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c (async/chan))
+  (with-ui-loading-message
+    (simulation/simulate-onto-chan! @main/steps-c
+                                    (demo/n-region-model (:n-regions @config))
+                                    world-c
+                                    main/sim-options
+                                    @into-sim)))
 
 (def config-template
   [:div.form-horizontal
@@ -180,9 +188,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (reset! main/world world-c)
   (feed-world!)
   (set-model!))
