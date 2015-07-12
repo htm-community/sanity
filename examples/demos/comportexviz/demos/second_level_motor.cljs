@@ -2,9 +2,10 @@
   (:require [org.nfrac.comportex.demos.second-level-motor :as demo]
             [org.nfrac.comportex.core :as core]
             [comportexviz.main :as main]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.demos.sensorimotor-1d :refer [draw-eye]]
+            [comportexviz.simulation.browser :as simulation]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -21,12 +22,21 @@
 
 (def control-c (async/chan))
 
+(def into-sim (atom nil))
+
+(def model (atom nil))
+
+(def raw-models-c
+  (async/chan))
+(def raw-models-mult
+  (async/mult raw-models-c))
+
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
   state of model itself."
   []
-  (let [step-c (main/tap-c main/steps-mult)]
-    (demo/feed-world-c-with-actions! step-c control-c world-c main/model)))
+  (let [step-c (tap-c raw-models-mult)]
+    (demo/feed-world-c-with-actions! step-c control-c world-c model)))
 
 (defn draw-world
   [ctx in-value]
@@ -133,8 +143,20 @@
 (defn set-model!
   []
   (let [] ;; TODO: config
+    (helpers/close-and-reset! into-sim (async/chan))
+    (helpers/close-and-reset! main/steps-c
+                              (async/chan
+                               100 (map simulation/browser-instance-proxy)))
+
+    (async/tap raw-models-mult @main/steps-c)
+
     (with-ui-loading-message
-      (main/set-model! (demo/two-region-model)))))
+      (reset! model (demo/two-region-model))
+      (simulation/simulate-raw-models-onto-chan! raw-models-c
+                                                 model
+                                                 world-c
+                                                 main/sim-options
+                                                 @into-sim))))
 
 (defn set-text!
   []
@@ -201,8 +223,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
+
   (set-model!)
-  (reset! main/world world-c)
   (feed-world!))

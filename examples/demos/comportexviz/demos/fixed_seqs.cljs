@@ -6,8 +6,9 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
+            [comportexviz.simulation.browser :as simulation]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -17,8 +18,13 @@
 
 (def config
   (atom {:input-stream :directional-steps-1d
-         :encoder :block
          :n-regions 1}))
+
+(def into-sim
+  (atom nil))
+
+(def world-c
+  (atom nil))
 
 (def model-info
   {:directional-steps-1d {:model-fn demo-dir/n-region-model
@@ -126,16 +132,20 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @config)
-        model-id (:input-stream @config)
-        {:keys [model-fn world-fn xy?]} (model-info model-id)]
-    (async/close! @main/world)
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c (async/chan))
+
+  (let [{:keys [input-stream n-regions]} @config
+        {:keys [model-fn world-fn xy?]} (model-info input-stream)]
+    (helpers/close-and-reset! world-c (make-world-chan world-fn input-stream))
     (swap! main/viz-options assoc-in [:drawing :display-mode]
-           (if (= model-id :isolated-2d) :two-d :one-d))
+           (if (= input-stream :isolated-2d) :two-d :one-d))
     (with-ui-loading-message
-      (main/set-model! (model-fn n-regions))
-      (reset! main/world (make-world-chan world-fn (:input-stream @config)))
-      )))
+      (simulation/simulate-onto-chan! @main/steps-c
+                                      (model-fn n-regions)
+                                      @world-c
+                                      main/sim-options
+                                      @into-sim))))
 
 (def config-template
   [:div.form-horizontal
@@ -217,6 +227,6 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (swap! main/main-options assoc :sim-go? true))
+  (swap! main/sim-options assoc :go? true))

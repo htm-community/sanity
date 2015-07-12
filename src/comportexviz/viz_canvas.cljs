@@ -7,7 +7,8 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
+            [comportexviz.proxies :as proxy]
             [monet.canvas :as c]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
@@ -200,8 +201,7 @@
                  draw-steps (get-in opts [:drawing :draw-steps])
                  dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
              (-> (reduce (fn [m path]
-                           (update-in m path
-                                      (fn [lay] (assoc-in lay [:layout :dt-offset] dt0))))
+                           (update-in m path assoc-in [:layout :dt-offset] dt0))
                          m
                          (all-layout-paths m))
                  (reset-layout-caches))))))
@@ -739,9 +739,7 @@
   [lay inp]
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")
-        inbits (if (:encoder inp)
-                 (p/bits-value inp)
-                 (p/motor-bits-value inp))]
+        inbits (active-bits inp)]
     (c/fill-style ctx (:active state-colors))
     (fill-elements lay ctx inbits)
     el))
@@ -1133,12 +1131,29 @@
       ;; checked all, nothing clicked
       (swap! selection assoc :col nil :cell-seg nil))))
 
-(defn viz-canvas
-  [_ model-steps selection viz-options commands-in commands-out]
-  (let [viz-layouts (atom {:inputs {}
-                           :regions {}})
+(defn absorb-changed-model [htm selection viz-options viz-layouts]
+  (let [region-key (first (core/region-keys htm))
+        layer-id (-> htm
+                     (get-in [:regions region-key])
+                     core/layers
+                     first)]
+    (reset! viz-layouts
+            (init-layouts htm @viz-options))
+    (swap! selection assoc
+           :region region-key
+           :layer layer-id
+           :dt 0
+           :col nil)))
+
+(defn viz-canvas [_ model-steps selection viz-options commands-in-mult commands-out]
+  (let [viz-layouts (atom nil)
         current-cell-segments-layout (clojure.core/atom nil)
-        resizes (chan)]
+        resizes (chan)
+
+        ;; Use a mult for commands-in to avoid scenarios where there's a race
+        ;; between two components, mounting and unmounting, competing for values
+        ;; on the channel.
+        commands-in (tap-c commands-in-mult)]
 
     (add-watch viz-options :rebuild-layouts
                (fn [_ _ old-opts opts]
@@ -1224,19 +1239,18 @@
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
           :toggle-run (when commands-out
                         (put! commands-out :toggle-run))
-          :on-model-changed (let [[htm] xs
-                                  region-key (first (core/region-keys htm))
-                                  layer-id (-> htm
-                                               (get-in [:regions region-key])
-                                               core/layers
-                                               first)]
-                              (reset! viz-layouts
-                                      (init-layouts htm @viz-options))
-                              (swap! selection assoc
-                                     :region region-key
-                                     :layer layer-id
-                                     :dt 0
-                                     :col nil)))
+          :on-model-changed (if (not-empty @model-steps)
+                              (absorb-changed-model (first @model-steps) selection
+                                                    viz-options viz-layouts)
+                              (add-watch model-steps :absorb-changed-model
+                                         (fn [_ _ _ v]
+                                           (when (not-empty v)
+                                             (remove-watch model-steps
+                                                           :absorb-changed-model)
+                                             (absorb-changed-model (first v)
+                                                                   selection
+                                                                   viz-options
+                                                                   viz-layouts))))))
         (recur)))
 
     (go-loop []
@@ -1247,22 +1261,25 @@
                                  (assoc-in [:drawing :width-px] width-px))))
         (recur)))
 
-    (fn [props _ _ _ _ _]
-      [resizing-canvas
-       (assoc props
-         :on-click #(viz-click % @model-steps selection @viz-layouts
-                               current-cell-segments-layout)
-         :on-key-down #(viz-key-down % commands-in)
-         :style {:width "100%"
-                 :height "100vh"})
-       [selection model-steps viz-layouts viz-options]
-       (fn [ctx]
-         (let [steps @model-steps
-               opts @viz-options]
-           (when (should-draw? steps opts)
-             (draw-viz! ctx steps @viz-layouts @selection opts
-                        current-cell-segments-layout))))
-       resizes])))
+    (reagent/create-class
+     {:component-will-unmount #(async/close! commands-in)
+      :display-name "viz-canvas"
+      :reagent-render (fn [props _ _ _ _ _]
+                        [resizing-canvas
+                         (assoc props
+                                :on-click #(viz-click % @model-steps selection @viz-layouts
+                                                      current-cell-segments-layout)
+                                :on-key-down #(viz-key-down % commands-in)
+                                :style {:width "100%"
+                                        :height "100vh"})
+                         [selection model-steps viz-layouts viz-options]
+                         (fn [ctx]
+                           (let [steps @model-steps
+                                 opts @viz-options]
+                             (when (should-draw? steps opts)
+                               (draw-viz! ctx steps @viz-layouts @selection opts
+                                          current-cell-segments-layout))))
+                         resizes])})))
 
 (defn init-caches
   [htm]

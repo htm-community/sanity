@@ -3,8 +3,9 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
             [comportexviz.plots-canvas :as plt]
+            [comportexviz.simulation.browser :as simulation]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -21,12 +22,23 @@
   (async/chan (async/buffer 1)
               (map (util/frequencies-middleware :x :freqs))))
 
+(def into-sim
+  (atom nil))
+
+(def model
+  (atom nil))
+
+(def raw-models-c
+  (async/chan))
+(def raw-models-mult
+  (async/mult raw-models-c))
+
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
   state of model itself."
   []
-  (let [step-c (main/tap-c main/steps-mult)]
-    (demo/feed-world-c-with-actions! step-c world-c main/model)))
+  (let [step-c (tap-c raw-models-mult)]
+    (demo/feed-world-c-with-actions! step-c world-c model)))
 
 (defn draw-world
   [ctx in-value htm]
@@ -195,9 +207,20 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @config)]
-    (with-ui-loading-message
-      (main/set-model! (demo/make-model)))))
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c
+                            (async/chan
+                             100 (map simulation/browser-instance-proxy)))
+
+  (async/tap raw-models-mult @main/steps-c)
+
+  (with-ui-loading-message
+    (reset! model (demo/make-model))
+    (simulation/simulate-raw-models-onto-chan! raw-models-c
+                                               model
+                                               world-c
+                                               main/sim-options
+                                               @into-sim)))
 
 (def config-template
   [:div.form-horizontal
@@ -258,8 +281,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (reset! main/world world-c)
   (set-model!)
   (feed-world!))

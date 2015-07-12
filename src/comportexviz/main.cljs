@@ -2,6 +2,8 @@
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
+            [comportexviz.helpers :refer [tap-c]]
+            [comportexviz.proxies :as proxy]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -9,23 +11,14 @@
 
 (enable-console-print!)
 
-(defn- tap-c
-  [mult]
-  (let [c (chan)]
-    (async/tap mult c)
-    c))
-
 ;;; ## Simulation data
 
-(def model (atom nil))
-(def world (atom (chan)))
+(def steps-c (atom nil))
 
-(def steps-c (chan))
-(def steps-mult (async/mult steps-c))
-
-(def main-options
-  (atom {:sim-go? false
-         :sim-step-ms 20}))
+(def sim-options
+  (atom {:go? false
+         :step-ms 20
+         :force-n-steps 0}))
 
 ;;; ## Viz data
 
@@ -33,58 +26,33 @@
 (def selection (atom viz/blank-selection))
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
+(def into-viz-mult (async/mult into-viz))
 (def from-viz (chan))
-
-;;; ## Simulation
-
-(defn sim-step!
-  []
-  (go
-   (when-let [in-value (<! @world)]
-     (->> (swap! model p/htm-step in-value)
-          (put! steps-c)))))
-
-(defn now [] (.getTime (js/Date.)))
-
-(defn run-sim
-  []
-  (when @model
-    (swap! model assoc
-           :run-start {:time (now)
-                       :timestep (p/timestep @model)}))
-  (go
-   (while (:sim-go? @main-options)
-     (let [tc (async/timeout (:sim-step-ms @main-options))]
-       (<! (sim-step!))
-       (<! tc)))))
-
-(add-watch main-options :run-sim
-           (fn [_ _ old v]
-             (when (and (:sim-go? v)
-                        (not (:sim-go? old)))
-               (run-sim))))
 
 ;;; ## Entry point
 
 (go-loop []
   (when-let [command (<! from-viz)]
     (case command
-      :toggle-run (swap! main-options update-in [:sim-go?] not)
-      :sim-step (sim-step!))
+      :toggle-run (swap! sim-options update :go? not)
+      :sim-step (swap! sim-options update :force-n-steps inc))
     (recur)))
 
-;; stream the simulation steps into the sliding history buffer
-(let [steps-out (tap-c steps-mult)]
-  (go-loop []
-    (when-let [x* (<! steps-out)]
-      (let [x (-> x*
-                  viz/init-caches)
-            keep-steps (:keep-steps @viz-options)]
-        (swap! model-steps (fn [xs]
-                             (take keep-steps (cons x xs)))))
-      (recur))))
+(add-watch steps-c :simulation-change
+           (fn [_ _ _ ch] ;; stream the simulation steps into the sliding history buffer
+             (put! into-viz [:on-model-changed])
+             (go-loop []
+               (when-let [x* (<! ch)]
+                 (let [x (-> (<! (proxy/model-proxy x*))
+                             viz/init-caches)
+                       keep-steps (:keep-steps @viz-options)
+                       [kept dropped] (split-at keep-steps (cons x @model-steps))]
+                   (reset! model-steps kept)
+                   (mapv proxy/release! dropped))
+                 (recur)))))
 
-(defn main-pane [world-pane model-steps selection viz-options into-viz from-viz]
+(defn main-pane [world-pane model-steps selection viz-options into-viz-mult
+                 from-viz]
   [:div
    [viz/viz-timeline model-steps selection viz-options]
    [:div.row
@@ -92,19 +60,14 @@
      [world-pane]]
     [:div.col-sm-9.col-lg-10
      [viz/viz-canvas {:tabIndex 1} model-steps selection viz-options
-      into-viz from-viz]]]])
+      into-viz-mult from-viz]]]])
 
 (defn comportexviz-app
-  [model-tab world-pane]
+  [model-tab world-pane into-sim]
   (let [m (fn [] [main-pane world-pane model-steps selection viz-options
-                  into-viz from-viz])]
-    (cui/comportexviz-app model-tab m model main-options viz-options
-                          selection model-steps viz/state-colors into-viz)))
-
-(defn set-model!
-  [x]
-  (reset! model x)
-  (put! into-viz [:on-model-changed x]))
+                  into-viz-mult from-viz])]
+    [cui/comportexviz-app model-tab m sim-options viz-options selection
+     model-steps viz/state-colors into-viz into-sim]))
 
 (defn selected-model-step
   []

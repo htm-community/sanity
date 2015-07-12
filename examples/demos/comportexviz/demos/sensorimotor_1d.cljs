@@ -2,8 +2,9 @@
   (:require [org.nfrac.comportex.demos.sensorimotor-1d :as demo]
             [org.nfrac.comportex.core :as core]
             [comportexviz.main :as main]
-            [comportexviz.helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
+            [comportexviz.simulation.browser :as simulation]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -21,7 +22,13 @@
 (def world-buffer (async/buffer 5000))
 (def world-c (async/chan world-buffer))
 
-(add-watch main/model ::count-world-buffer
+(def into-sim
+  (atom nil))
+
+(def model
+  (atom nil))
+
+(add-watch model ::count-world-buffer
            (fn [_ _ _ _]
              (swap! config assoc :world-buffer-count (count world-buffer))))
 
@@ -151,9 +158,16 @@
 
 (defn set-model!
   []
-  (let [n-regions (:n-regions @config)]
-    (with-ui-loading-message
-      (main/set-model! (demo/n-region-model n-regions)))))
+  (helpers/close-and-reset! into-sim (async/chan))
+  (helpers/close-and-reset! main/steps-c (async/chan))
+
+  (with-ui-loading-message
+    (reset! model (demo/n-region-model (:n-regions @config)))
+    (simulation/simulate-onto-chan! @main/steps-c
+                                    model
+                                    world-c
+                                    main/sim-options
+                                    @into-sim)))
 
 (def config-template
   [:div
@@ -209,8 +223,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (reset! main/world world-c)
   (set-model!)
-  (swap! main/main-options assoc :sim-go? true))
+  (swap! main/sim-options assoc :go? true))
