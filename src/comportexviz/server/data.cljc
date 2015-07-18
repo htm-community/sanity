@@ -1,11 +1,10 @@
 (ns comportexviz.server.data
-  (:require [cljs.core.async :as async :refer [chan put! <!]]
-            [comportexviz.details]
-            [comportexviz.helpers :as helpers]
+  (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
+               :cljs [cljs.core.async :as async :refer [put! <!]])
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util])
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
 (defn all-cell-segments
   [col depth distal-sg]
