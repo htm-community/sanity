@@ -5,7 +5,8 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -22,6 +23,9 @@
               (map (util/keep-history-middleware
                     50 #(select-keys % [:x :y :vx :vy])
                     :history))))
+
+(def sim-options
+  (atom default-sim-options))
 
 (def into-sim
   (atom nil))
@@ -106,8 +110,8 @@
 
 (defn world-pane
   []
-  (when-let [htm (main/selected-model-step)]
-    (let [in-value (:value (first (core/input-seq htm)))
+  (when-let [step (main/selected-step)]
+    (let [in-value (first (:input-values step))
           {:keys [x y vx vy]} in-value]
       [:div
        [:p.muted [:small "Input on selected timestep."]]
@@ -118,23 +122,23 @@
          [:td y]]]
        [resizing-canvas {:style {:width "100%"
                                  :height "300px"}}
-        [main/model-steps main/selection]
+        [main/selection]
         (fn [ctx]
-          (let [htm (main/selected-model-step)
-                in-value (:value (first (core/input-seq htm)))]
+          (let [step (main/selected-step)
+                in-value (first (:input-values step))]
             (draw-world ctx in-value)))
         nil]])))
 
 (defn set-model!
   []
   (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/steps-c (async/chan))
+  (helpers/close-and-reset! main/into-journal (async/chan))
   (with-ui-loading-message
-    (simulation/simulate-onto-chan! @main/steps-c
-                                    (demo/n-region-model (:n-regions @config))
-                                    world-c
-                                    main/sim-options
-                                    @into-sim)))
+    (server/init (demo/n-region-model (:n-regions @config))
+                 world-c
+                 @main/into-journal
+                 @into-sim
+                 sim-options)))
 
 (def config-template
   [:div.form-horizontal
@@ -188,7 +192,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (feed-world!)

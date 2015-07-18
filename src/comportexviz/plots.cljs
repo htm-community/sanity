@@ -126,16 +126,18 @@
     ))
 
 (defn ts-freqs-plot-cmp
-  [steps region-key layer-id series-colors]
+  [steps region-key layer-id series-colors into-journal]
   (let [series-keys [:active :active-predicted :predicted]
         step-freqs (atom nil)
         agg-freqs-ts (aggregating-ts step-freqs 200)]
     (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
                (fn [_ _ _ v]
-                 (when-let [htm (first v)]
-                   (let [freqs (-> htm :regions region-key
-                                   (core/column-state-freqs layer-id))]
-                     (reset! step-freqs freqs)))))
+                 (when-let [model-id (:model-id (first v))]
+                   (let [response-c (async/chan)]
+                     (put! @into-journal [:get-column-state-freqs model-id
+                                          region-key layer-id response-c])
+                     (go
+                       (reset! step-freqs (<! response-c)))))))
     (fn [_ _ _ _]
       (let [el-id (str "comportexviz-tsplot-" (name region-key) (name layer-id))
             el (dom/getElement el-id)]
@@ -167,33 +169,23 @@
    :distal])
 
 (defn viz-rgn-shades
-  [htm]
-  (let [srcs (concat (core/input-keys htm)
-                     (core/region-keys htm))]
+  [step-template]
+  (let [srcs (concat (keys (:inputs @step-template))
+                     (keys (:regions @step-template)))]
     (zipmap srcs (range -0.3 0.31 (/ 1.0 (count srcs))))))
 
 (defn- abs [x] (if (neg? x) (- x) x))
 
 (defn draw-cell-excitation-plot!
-  [ctx htm prior-htm rgn-id lyr-id sel-col series-colors]
+  [ctx breakdowns step-template sel-col series-colors]
   (let [width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
         plot-size {:w width-px
                    :h 200}
-        lc (get-in htm [:regions rgn-id lyr-id :state :learn-cells])
-        lc+ (if sel-col
-              (let [prior-lc (get-in prior-htm [:regions rgn-id lyr-id :state :learn-cells])
-                    sel-cell (or (first (filter (fn [[col _]]
-                                                  (= col sel-col))
-                                                (concat prior-lc lc)))
-                                 [sel-col 0])]
-                (conj lc sel-cell))
-              lc)
-        breakdowns (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id
-                                                    lc+)
-        src-shades (viz-rgn-shades htm)
+
+        src-shades (viz-rgn-shades step-template)
         y-max (* 1.1 (apply max (map :total (vals breakdowns))))
-        x-lim [-0.5 (+ (count lc+) 3)] ;; space for legend
+        x-lim [-0.5 (+ (count breakdowns) 3)] ;; space for legend
         y-lim [y-max 0]
         bot-lab-y (- (* y-max 0.02))
         draw-cell-bar
@@ -243,7 +235,7 @@
         (plt/text! plot x-coord (+ total-exc 0.5) total-exc)
         (plt/text-rotated! plot x-coord bot-lab-y (if (= col sel-col) cell-id col)))
       ;; draw legend
-      (let [sep-x (count lc+)
+      (let [sep-x (count breakdowns)
             leg-x (inc sep-x)
             key-bd* (->
                      (apply util/deep-merge-with + (vals breakdowns))
@@ -260,19 +252,28 @@
     (c/restore ctx)))
 
 (defn cell-excitation-plot-cmp
-  [steps selection series-colors region-key layer-id]
-  [canvas
-   {}
-   300
-   240
-   [steps selection]
-   (fn [ctx]
-     (let [dt (:dt @selection)
-           htm (nth @steps dt)
-           prior-htm (nth @steps (inc dt))
-           sel-col (when (and (= region-key (:region @selection))
-                              (= layer-id (:layer @selection)))
-                     (:col @selection))]
-       (draw-cell-excitation-plot! ctx htm prior-htm region-key layer-id
-                                   sel-col series-colors)))
-   nil])
+  [_ selection _ _ _ into-journal]
+  (let [excitation-data (atom {})]
+    (add-watch selection :fetch-excitation-data
+               (fn [_ _ _ sel]
+                 (let [{:keys [model-id region layer col]} sel
+                       response-c (async/chan)]
+                   (put! @into-journal [:get-cell-excitation-data
+                                        model-id region layer col response-c])
+                   (go
+                     (reset! excitation-data (<! response-c))))))
+
+    (fn [step-template _ series-colors region-key layer-id _]
+      [canvas
+       {}
+       300
+       240
+       [excitation-data]
+       (fn [ctx]
+         (let [dt (:dt @selection)
+               sel-col (when (and (= region-key (:region @selection))
+                                  (= layer-id (:layer @selection)))
+                         (:col @selection))]
+           (draw-cell-excitation-plot! ctx @excitation-data step-template
+                                       sel-col series-colors)))
+       nil])))

@@ -5,27 +5,24 @@
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
             [clojure.string :as str]
-            [cljs.core.async :as async :refer [put!]]
+            [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
             [comportexviz.helpers :as helpers]
             [comportexviz.plots :as plots]
-            [comportexviz.details]
-            [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]))
+            [org.nfrac.comportex.protocols :as p])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn now [] (.getTime (js/Date.)))
 
 (defn sim-rate
   "Returns the simulation rate in timesteps per second for current
    run."
-  [model]
-  (if (:time (:run-start model))
-    (let [m (:run-start model)
-          dur-ms (- (now)
-                    (:time m))
-          steps (- (p/timestep model)
-                   (:timestep m))]
-      (-> (/ steps dur-ms)
+  [step run-start]
+  (if-let [time-start (:time run-start)]
+    (let [dur-ms (- (now) time-start)]
+      (-> (- (:timestep step)
+             (:timestep run-start))
+          (/ dur-ms)
           (* 1000)))
     0))
 
@@ -36,24 +33,23 @@
     :else :number))
 
 (defn parameters-tab
-  [_ _ into-sim]
-  (let [partypes (cljs.core/atom {}) ;; immutable cache
+  [step-template _ into-sim]
 
-        ;; The UI shows the most recent value. The model may live on another
-        ;; server so this code only has access to its most recent snapshot via
-        ;; `steps`. Even after the model is updated, this code won't see it
-        ;; until another step is simulated, so keep track of timesteps to decide
-        ;; which values to show.
-        edited-specs (atom {})
-        last-rendered-timestep (cljs.core/atom -1)]
+  (add-watch step-template ::push-to-server
+             (fn [_ _ oldv newv]
+               (when-not (nil? oldv) ;; don't push when getting initial template
+                 (fn [_ _ prev-st st]
+                   (assert @into-sim)
+                   (doseq [path (for [[r-id rgn] (:regions st)
+                                      l-id (keys rgn)]
+                                  [:regions r-id l-id :spec])
+                           :let [old-spec (get-in prev-st path)
+                                 new-spec (get-in st path)]]
+                     (when (not= old-spec new-spec)
+                       (put! @into-sim [:set-spec path new-spec])))))))
 
-    (add-watch edited-specs :push-to-simulation
-               (fn [_ _ _ v]
-                 (doseq [[path {:keys [timestep spec]}] v]
-                   (when (>= timestep @last-rendered-timestep)
-                     (put! @into-sim [:set-spec path spec])))))
-
-    (fn [steps selection _]
+  (let [partypes (cljs.core/atom {})] ;; immutable cache
+    (fn [step-template selection into-sim]
       [:div
        [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
@@ -61,27 +57,20 @@
                                       (some-> (:layer @selection) name))]
        (into
         [:div.form-horizontal]
-        (when (not-empty @steps)
+        (when @step-template
           (let [sel-region (:region @selection)
                 sel-layer (:layer @selection)
                 spec-path [:regions sel-region sel-layer :spec]
-                spec (let [model (first @steps)
-                           edited (get @edited-specs spec-path)]
-                       (reset! last-rendered-timestep (p/timestep model))
-                       (if (and edited
-                                (>= (:timestep edited) @last-rendered-timestep))
-                         (:spec edited)
-                         (let [rgn (get-in model [:regions sel-region])
-                               lyr (get rgn sel-layer)]
-                           (when lyr (p/params lyr)))))]
+                spec (get-in @step-template spec-path)]
             (concat
              (for [[k v] (sort spec)
                    :let [typ (or (get @partypes k)
                                  (get (swap! partypes assoc k (param-type v))
                                       k))
-                         setv! #(swap! edited-specs assoc spec-path
-                                       {:timestep @last-rendered-timestep
-                                        :spec (assoc spec k %)})]]
+                         setv! (if @into-sim
+                                 #(swap! step-template assoc-in spec-path
+                                         (assoc spec k %))
+                                 identity)]]
                [:div.row {:class (when (or (nil? v) (string? v))
                                    "has-error")}
                 [:div.col-sm-8
@@ -131,9 +120,12 @@
                  (obviously losing any learned connections in the process):"
                  ]
                 [:button.btn.btn-warning.btn-block
-                 {:on-click #(let [finished (async/chan)]
-                               (put! @into-sim [:restart finished])
-                               (helpers/ui-loading-message-until finished))}
+
+                 (if @into-sim
+                   {:on-click #(let [finished (async/chan)]
+                                 (put! @into-sim [:restart finished])
+                                 (helpers/ui-loading-message-until finished))}
+                   {:disabled "disabled"})
                  "Rebuild model"]
                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
                ]
@@ -144,22 +136,23 @@
   )
 
 (defn ts-plots-tab
-  [steps series-colors]
+  [steps step-template series-colors into-journal]
   [:div
    [:p.text-muted "Time series of cortical column activity."]
    [:div
-    (when (first @steps)
-      (for [[region-key rgn] (:regions (first @steps))
-            layer-id (core/layers rgn)]
+    (when @step-template
+      (for [[region-key rgn] (:regions @step-template)
+            layer-id (keys rgn)]
         ^{:key [region-key layer-id]}
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
-         [plots/ts-freqs-plot-cmp steps region-key layer-id series-colors]
+         [plots/ts-freqs-plot-cmp steps region-key layer-id series-colors
+          into-journal]
          ]))]
    ])
 
 (defn cell-plots-tab
-  [steps selection series-colors]
+  [step-template selection series-colors into-journal]
   (let [show? (atom false)]
     (fn [_ _ _]
       [:div
@@ -172,35 +165,63 @@
                                      (.preventDefault e))}]
          "Show plots"]]
        [:div
-        (when (and (first @steps) @show?)
-          (for [[region-key rgn] (:regions (first @steps))
-                layer-id (core/layers rgn)]
+        (when (and @step-template @show?)
+          (for [[region-key rgn] (:regions @step-template)
+                layer-id (keys rgn)]
             ^{:key [region-key layer-id]}
             [:fieldset
              [:legend (str (name region-key) " " (name layer-id))]
-             [plots/cell-excitation-plot-cmp steps selection series-colors
-              region-key layer-id]
+             [plots/cell-excitation-plot-cmp step-template selection series-colors
+              region-key layer-id into-journal]
              ]))]])))
 
+(defn fetch-details-text!
+  [into-journal text-response sel]
+  (when (:col sel)
+    (let [response-c (async/chan)]
+      (put! @into-journal
+            [:get-details-text sel response-c])
+      (go
+        (reset! text-response [sel (<! response-c)])))))
+
 (defn details-tab
-  [steps selection]
-  [:div
-   [:p.text-muted "The details of model state on the selected time step, selected column."]
-   [:pre.pre-scrollable {:style {:height "90vh" :resize "both"}}
-    (if (:col @selection)
-      (let [dt (:dt @selection)]
-        (comportexviz.details/detail-text (nth @steps dt)
-                                          (nth @steps (inc dt))
-                                          @selection)))
-    ]
-   [:p.text-muted [:small "(scrollable)"]]
-   [:hr]
-   [:p.text-muted "If you're brave:"]
-   [:button.btn.btn-warning.btn-block {:on-click (fn [e]
-                                                   (let [dt (:dt @selection)]
-                                                     (println (nth @steps dt)))
-                                                   (.preventDefault e))}
-    "Dump entire model to console"]])
+  [selection into-journal]
+  (let [text-response (atom [nil ""])]
+    (reagent/create-class
+     {:component-will-mount
+      (fn [_]
+        (add-watch selection :fetch-details-text
+                   (fn [_ _ _ sel]
+                     (reset! text-response [sel ""])
+                     (fetch-details-text! into-journal text-response sel)))
+
+        (fetch-details-text! into-journal text-response @selection))
+
+      :component-will-unmount
+      (fn [_]
+        (remove-watch selection :fetch-details-text))
+
+      :reagent-render
+      (fn [_ _]
+        [:div
+         [:p.text-muted "The details of model state on the selected time step, selected column."]
+         [:pre.pre-scrollable {:style {:height "90vh" :resize "both"}}
+          (let [[sel-for-text text] @text-response]
+            (when (= sel-for-text @selection)
+              text))]
+         [:p.text-muted [:small "(scrollable)"]]
+         [:hr]
+         [:p.text-muted "If you're brave:"]
+         [:button.btn.btn-warning.btn-block
+          {:on-click (fn [e]
+                       (let [response-c (async/chan)]
+                         (put! @into-journal [:get-model (:model-id @selection)
+                                              response-c])
+                         (go
+                           (println (<! response-c))))
+                       (.preventDefault e))}
+          "Dump entire model to console"]
+         ])})))
 
 (def viz-options-template
   (let [chbox (fn [id label]
@@ -290,6 +311,12 @@
     (put! ch (into [command] xs))
     (.preventDefault e)))
 
+(defn gather-start-data!
+  [run-start steps]
+  (reset! run-start
+          {:time (now)
+           :timestep (:timestep (first steps))}))
+
 (defn navbar
   [sim-options steps show-help viz-options viz-expanded into-viz]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
@@ -298,7 +325,23 @@
   (let [has-scrolled? (atom false)
         has-sorted? (atom false)
         has-watched? (atom false)
-        apply-to-all? (atom true)]
+        apply-to-all? (atom true)
+        run-start (atom {})]
+
+    ;; initial start data
+    (add-watch steps ::gather-start-data
+               (fn [_ _ _ xs]
+                 (remove-watch steps ::gather-start-data)
+                 (gather-start-data! run-start xs)))
+
+    ;; subsequent start data
+    (add-watch sim-options ::gather-start-data
+               (fn [_ _ oldv newv]
+                 (when (and (not (:go? oldv))
+                            (:go? newv))
+                   (when (first @steps)
+                     (gather-start-data! run-start @steps)))))
+
     (fn [_ _ _ _ _ _]
       [:nav.navbar.navbar-default
        [:div.container-fluid
@@ -462,7 +505,8 @@
          [:ul.nav.navbar-nav.navbar-right
           ;; sim rate
           [:li (if-not (:go? @sim-options) {:class "hidden"})
-           [:p.navbar-text (str (.toFixed (sim-rate (first @steps)) 1) "/sec.")]]
+           [:p.navbar-text (str (.toFixed (sim-rate (first @steps) @run-start)
+                                          1) "/sec.")]]
           ;; sim / anim options
           [:li.dropdown
            [:a.dropdown-toggle {:data-toggle "dropdown"
@@ -510,6 +554,11 @@
          ]
         ]])))
 
+;; TODO sometimes we want tabs to initialize when they're not shown,
+;; e.g. `ts-plots`, and other times we don't, e.g. `details`. We should lift
+;; initialization code out of `ts-plots`, etc. as desired and then stop
+;; rendering unshown tabs, rather than rendering them {:display "none"},
+;; fetching lots of data unnecessarily.
 (defn tabs
   [tab-cmps]
   (let [current-tab (atom (ffirst tab-cmps))]
@@ -577,25 +626,28 @@
         ]]]
      [:hr]]))
 
+
 (defn comportexviz-app
-  [model-tab main-pane sim-options viz-options selection steps series-colors
-   into-viz into-sim]
+  [_ _ _ _ _ _ _ _ _]
   (let [show-help (atom false)
         viz-expanded (atom false)]
-    [:div
-     [navbar sim-options steps show-help viz-options viz-expanded into-viz]
-     [help-block show-help]
-     [:div.container-fluid
-      [:div.row
-       [:div.col-sm-9.viz-expandable
-        [main-pane]]
-       [:div.col-sm-3
-        [tabs
-         [[:model [model-tab]]
-          [:drawing [bind-fields viz-options-template viz-options]]
-          [:params [parameters-tab steps selection into-sim]]
-          [:ts-plots [ts-plots-tab steps series-colors]]
-          [:cell-plots [cell-plots-tab steps selection series-colors]]
-          [:details [details-tab steps selection]]]]
-        ]]
-      [:div#loading-message "loading"]]]))
+    (fn [model-tab main-pane sim-options viz-options selection steps
+         step-template series-colors into-viz into-sim into-journal]
+     [:div
+      [navbar sim-options steps show-help viz-options viz-expanded into-viz]
+      [help-block show-help]
+      [:div.container-fluid
+       [:div.row
+        [:div.col-sm-9.viz-expandable
+         [main-pane]]
+        [:div.col-sm-3
+         [tabs
+          [[:model [model-tab]]
+           [:drawing [bind-fields viz-options-template viz-options]]
+           [:params [parameters-tab step-template selection into-sim]]
+           [:ts-plots [ts-plots-tab steps step-template series-colors into-journal]]
+           [:cell-plots [cell-plots-tab step-template selection series-colors
+                         into-journal]]
+           [:details [details-tab selection into-journal]]]]
+         ]]
+       [:div#loading-message "loading"]]])))

@@ -4,13 +4,15 @@
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [cljs.core.async :as async])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+            [cljs.core.async :as async :refer [put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1
@@ -21,6 +23,10 @@
 (def world-c
   (async/chan world-buffer
               (map (util/keep-history-middleware 300 :value :history))))
+
+(def sim-options
+  (atom (assoc default-sim-options
+               :go? true)))
 
 (def into-sim
   (atom nil))
@@ -53,28 +59,37 @@ Chifung has a friend."))
 
 (defn world-pane
   []
-  (let [show-predictions (atom false)]
+  (let [show-predictions (atom false)
+        selected-htm (atom nil)]
+    (add-watch main/selection ::fetch-selected-htm
+               (fn [_ _ _ sel]
+                 (when-let [model-id (:model-id sel)]
+                   (let [out-c (async/chan)]
+                     (put! @main/into-journal [:get-model model-id out-c])
+                     (go
+                       (reset! selected-htm (<! out-c)))))))
     (fn []
-      (when-let [htm (main/selected-model-step)]
-       (let [in-value (:value (first (core/input-seq htm)))]
-         [:div
-          [:p.muted [:small "Input on selected timestep."]]
-          [:div {:style {:min-height "40vh"}}
-           (helpers/text-world-input-component in-value htm max-shown scroll-every "")]
-          [:div.checkbox
-           [:label [:input {:type :checkbox
-                            :checked (when @show-predictions true)
-                            :on-change (fn [e]
-                                         (swap! show-predictions not)
-                                         (.preventDefault e))}]
-            "Compute predictions"]]
-          (when @show-predictions
-            (helpers/text-world-predictions-component in-value htm 8))])))))
+      (when-let [step (main/selected-step)]
+        (when-let [htm @selected-htm]
+          (let [in-value (first (:input-values step))]
+            [:div
+             [:p.muted [:small "Input on selected timestep."]]
+             [:div {:style {:min-height "40vh"}}
+              (helpers/text-world-input-component in-value htm max-shown scroll-every "")]
+             [:div.checkbox
+              [:label [:input {:type :checkbox
+                               :checked (when @show-predictions true)
+                               :on-change (fn [e]
+                                            (swap! show-predictions not)
+                                            (.preventDefault e))}]
+               "Compute predictions"]]
+             (when @show-predictions
+               (helpers/text-world-predictions-component in-value htm 8))]))))))
 
 (defn set-model!
   []
   (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/steps-c (async/chan))
+  (helpers/close-and-reset! main/into-journal (async/chan))
 
   (let [n-regions (:n-regions @config)
         encoder (case (:encoder @config)
@@ -82,11 +97,11 @@ Chifung has a friend."))
                   :random demo/random-encoder)]
     (with-ui-loading-message
       (reset! model (demo/n-region-model n-regions demo/spec encoder))
-      (simulation/simulate-onto-chan! @main/steps-c
-                                      model
-                                      world-c
-                                      main/sim-options
-                                      @into-sim))))
+      (server/init model
+                   world-c
+                   @main/into-journal
+                   @into-sim
+                   sim-options))))
 
 (defn immediate-key-down!
   [e]
@@ -163,7 +178,7 @@ Chifung has a friend."))
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
                   (dom/getElement "comportexviz-app"))
-  (set-model!)
-  (swap! main/sim-options assoc :go? true))
+  (set-model!))

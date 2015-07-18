@@ -1,33 +1,20 @@
-(ns comportexviz.simulation.common
-  (:require [cljs.core.async :as async :refer [chan put! <!]]
+(ns comportexviz.server.simulation
+  (:require [cljs.core.async :as async :refer [put! <!]]
+            [comportexviz.details]
             [comportexviz.helpers :as helpers]
-            [org.nfrac.comportex.protocols :as p])
+            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.util :as util])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
-;;; Shared code for various servers
-
-(def whitelisted
-  {:timestep p/timestep})
-
-(defn- extract-data [m route]
-  (helpers/update-routed
-   m route
-   (fn [m route]
-     (let [{:keys [values methods]} route]
-       (-> (select-keys m values)
-           (assoc :method-results
-                  (zipmap methods
-                          (->> methods
-                               (map (fn [[method & args]]
-                                      (let [f (whitelisted method)]
-                                        (assert f)
-                                        (apply f m args))))))))))))
+(def default-sim-options
+  {:go? false
+   :step-ms 20
+   :force-n-steps 0})
 
 (defn- sim-step! [model in-value out]
   (->> (swap! model p/htm-step in-value)
        (put! out)))
-
-(defn now [] (.getTime (js/Date.)))
 
 (defn should-go?! [options]
   (let [{:keys [go? force-n-steps step-ms]} @options]
@@ -38,12 +25,8 @@
                              0)
       :else false)))
 
-(defn- simulation-loop [model world out options sim-closed?]
+(defn simulation-loop [model world out options sim-closed?]
   (go
-    (swap! model assoc
-           :run-start {:time (now)
-                       :timestep (p/timestep @model)})
-
     (if (loop []
           (when (not @sim-closed?)
             (if-let [t (should-go?! options)]
@@ -70,3 +53,17 @@
                          (put! result :done)))
             (recur))))
     (reset! sim-closed? true)))
+
+;; To end the simulation, close `world-c` and/or `commands-c`. If only one is
+;; closed, the simulation may consume another value from the other before
+;; closing.
+(defn start
+  [steps-c model world-c options commands-c]
+  (let [model-atom (if (satisfies? IDeref model)
+                     model
+                     (atom model))
+        sim-closed? (atom false)]
+    (when commands-c
+      (handle-commands commands-c model-atom sim-closed?))
+    (simulation-loop model-atom world-c steps-c options sim-closed?))
+  nil)

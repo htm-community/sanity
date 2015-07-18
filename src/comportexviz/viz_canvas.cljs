@@ -8,12 +8,9 @@
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
             [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
-            [comportexviz.proxies :as proxy]
             [monet.canvas :as c]
-            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
-            [org.nfrac.comportex.cells :as cells]
             [clojure.set :as set]
             [cljs.core.async :as async :refer [<! put! chan]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
@@ -23,7 +20,8 @@
                       :layer nil
                       :dt 0
                       :col nil
-                      :cell-seg nil})
+                      :cell-seg nil
+                      :model-id nil})
 
 ;;; ## Colours
 
@@ -112,15 +110,16 @@
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
-(defn all-layout-paths
+(defn input-and-layer-paths
   [m]
-  (for [k [:inputs :regions]
-        subk (if (= k :regions)
-               (keys (k m))
-               [nil])
-        :let [path0 (if subk [k subk] [k])]
-        id (keys (get-in m path0))]
-    (conj path0 id)))
+  (let [input-paths (for [inp-id (keys (:inputs m))]
+                      [:inputs inp-id])
+        layer-paths (for [[rgn-id rgn] (:regions m)
+                          lyr-id (keys rgn)]
+                      [:regions rgn-id lyr-id])]
+    (concat input-paths layer-paths)))
+
+(def all-layout-paths input-and-layer-paths)
 
 (defn reset-layout-caches
   [m]
@@ -132,13 +131,13 @@
           (all-layout-paths m)))
 
 (defn init-grid-layouts
-  [model opts]
-  (let [inputs (:inputs model)
-        regions (:regions model)
+  [step opts]
+  (let [inputs (:inputs step)
+        regions (:regions step)
         layerseq (mapcat (fn [rgn-id]
                            (map vector (repeat rgn-id)
-                                (core/layers (regions rgn-id))))
-                         (core/region-keys model))
+                                (keys (regions rgn-id))))
+                         (keys regions))
         d-opts (:drawing opts)
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
@@ -147,16 +146,16 @@
         ;; for now draw inputs and layers in a horizontal stack
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
-                  (let [topo (p/topology (inputs inp-id))
+                  (let [topo (:topology (inputs inp-id))
                         lay (lay/grid-layout topo top-px left height-px d-opts
                                              true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} 6]
-                (core/input-keys model))
+                (keys inputs))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
-                  (let [topo (p/topology (get-in regions [rgn-id lyr-id]))
+                  (let [topo (:topology (get-in regions [rgn-id lyr-id]))
                         lay (lay/grid-layout topo top-px left height-px d-opts
                                              false display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
@@ -170,20 +169,18 @@
   "Used when the model remains the same but the display has
   changed. Maintains any sorting and facets on each layer/input
   layout. I.e. replaces the GridLayout within each OrderableLayout."
-  [viz-layouts model opts]
-  (let [grid-layouts (init-grid-layouts model opts)]
+  [viz-layouts step opts]
+  (let [grid-layouts (init-grid-layouts step opts)]
     (->
      (reduce (fn [m path]
-               (update-in m path
-                          (fn [lay]
-                            (assoc lay :layout (get-in grid-layouts path)))))
+               (update-in m path assoc :layout (get-in grid-layouts path)))
              viz-layouts
              (all-layout-paths viz-layouts))
      (reset-layout-caches))))
 
 (defn init-layouts
-  [model opts]
-  (let [grid-layouts (init-grid-layouts model opts)]
+  [step opts]
+  (let [grid-layouts (init-grid-layouts step opts)]
     (->
      (reduce (fn [m path]
                (update-in m path
@@ -230,39 +227,39 @@
                (update-in [:columns :refresh-index] inc)
                (update-in [:input :refresh-index] inc)))))
 
-(defn active-bits
-  [inp]
-  (if (:encoder inp)
-    (p/bits-value inp)
-    (p/motor-bits-value inp)))
+(defn active-ids
+  [viz-step path]
+  (let [[lyr-type & _] path]
+    (-> (:inbits-cols viz-step)
+        (get-in path)
+        (get (case lyr-type
+               :regions :active-columns
+               :inputs :active-bits))
+        sort)))
 
-(defn add-facet-to-sel-layer!
-  [viz-layouts viz-options htm rgn-id lyr-id]
-  (swap! viz-layouts
-         update-in [:regions rgn-id lyr-id]
-         (fn [lay]
-           (let [lyr (get-in htm [:regions rgn-id lyr-id])
-                 ids (sort (p/active-columns lyr))]
-             (lay/add-facet lay ids (p/timestep htm)))))
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
-
-(defn add-facet-to-all-layers!
-  [viz-layouts viz-options htm]
+(defn add-facet-to-layers!
+  [paths viz-layouts viz-options step]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path
                                 (fn [lay]
-                                  (let [[lyr-type _ _] path
-                                        get-active (case lyr-type
-                                                     :regions p/active-columns
-                                                     :inputs active-bits)
-                                        lyr (get-in htm path)
-                                        ids (sort (get-active lyr))]
-                                    (lay/add-facet lay ids (p/timestep htm))))))
+                                  (lay/add-facet lay
+                                                 (active-ids step path)
+                                                 (:timestep step)))))
                    m
-                   (all-layout-paths m))))
+                   paths))))
+
+(defn add-facet-to-sel-layer!
+  [viz-layouts viz-options step rgn-id lyr-id]
+  (add-facet-to-layers! [[:regions rgn-id lyr-id]] viz-layouts viz-options step)
+  ;; need this to invalidate the drawing cache
+  (swap! viz-options update-in [:columns :refresh-index] inc))
+
+(defn add-facet-to-all-layers!
+  [viz-layouts viz-options step]
+  (add-facet-to-layers! (all-layout-paths @viz-layouts) viz-layouts
+                        viz-options step)
   ;; need this to invalidate the drawing cache
   (swap! viz-options
          (fn [m]
@@ -285,41 +282,31 @@
                    m
                    (all-layout-paths m)))))
 
-(defn sort-sel-layer!
-  [viz-layouts viz-options model-steps sel-dt rgn-id lyr-id]
+(defn sort-layers!
+  [paths viz-layouts viz-options viz-steps sel-dt]
   (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
-        model-steps (take use-steps (drop sel-dt model-steps))]
-    (swap! viz-layouts
-           update-in [:regions rgn-id lyr-id]
-           (fn [lay]
-             (let [ids-ts (for [htm model-steps]
-                            (-> (get-in htm [:regions rgn-id lyr-id])
-                                (p/active-columns)
-                                (sort)))]
-               (lay/sort-by-recent-activity lay ids-ts)))))
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
-
-(defn sort-all-layers!
-  [viz-layouts viz-options model-steps sel-dt]
-  (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
-        model-steps (take use-steps (drop sel-dt model-steps))]
+        viz-steps (->> viz-steps (drop sel-dt) (take use-steps))]
     (swap! viz-layouts
            (fn [m]
              (reduce (fn [m path]
                        (update-in m path
                                   (fn [lay]
-                                    (let [[lyr-type _ _] path
-                                          get-active (case lyr-type
-                                                       :regions p/active-columns
-                                                       :inputs active-bits)
-                                          ids-ts (for [htm model-steps]
-                                                   (-> (get-in htm path)
-                                                       (get-active)
-                                                       (sort)))]
-                                      (lay/sort-by-recent-activity lay ids-ts)))))
+                                    (->> (map active-ids viz-steps (repeat path))
+                                         (lay/sort-by-recent-activity lay)))))
                      m
-                     (all-layout-paths m)))))
+                     paths)))))
+
+(defn sort-sel-layer!
+  [viz-layouts viz-options viz-steps sel-dt rgn-id lyr-id]
+  (sort-layers! [[:regions rgn-id lyr-id]]
+                viz-layouts viz-options viz-steps sel-dt)
+  ;; need this to invalidate the drawing cache
+  (swap! viz-options update-in [:columns :refresh-index] inc))
+
+(defn sort-all-layers!
+  [viz-layouts viz-options viz-steps sel-dt]
+  (sort-layers! (all-layout-paths @viz-layouts)
+                viz-layouts viz-options viz-steps sel-dt)
   ;; need this to invalidate the drawing cache
   (swap! viz-options
          (fn [m]
@@ -351,107 +338,31 @@
                (update-in [:input :refresh-index] inc)))))
 
 (defn draw-ff-synapses
-  [ctx htm r-lays i-lays selection opts]
+  [ctx ff-synapses-response steps r-lays i-lays]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
-  (let [{dt :dt, sel-rgn :region, sel-lyr :layer, sel-col :col} selection
-        do-growing? (get-in opts [:ff-synapses :growing])
-        do-inactive? (get-in opts [:ff-synapses :inactive])
-        do-disconn? (get-in opts [:ff-synapses :disconnected])
-        do-perm? (get-in opts [:ff-synapses :permanences])
-        syn-states (concat (when do-disconn? [:disconnected])
-                           (when do-inactive? [:inactive-syn])
-                           [:active :active-predicted]
-                           (when do-growing? [:growing]))
-        regions (:regions htm)
-        ;; need to know which layers have input across regions
-        input-layer? (into #{} (map (fn [[rgn-id rgn]]
-                                      [rgn-id (first (core/layers rgn))])
-                                    regions))
-        ;; need to know the output layer of each region
-        output-layer (into {} (map (fn [[rgn-id rgn]]
-                                     [rgn-id (last (core/layers rgn))])
-                                   regions))
-        this-rgn (get regions sel-rgn)
-        this-lyr (get this-rgn sel-lyr)
-        to-cols (case (get-in opts [:ff-synapses :to])
-                    :all (p/active-columns this-lyr)
-                    :selected [sel-col])
-        this-paths (map #(vector sel-rgn sel-lyr %) to-cols)]
-    ;; trace ff connections downwards
-    (loop [path (first this-paths)
-           more (rest this-paths)
-           done #{}]
-      (if (and path (not (done path)))
-        (let [[rgn-id lyr-id col] path
-              lyr (get-in regions [rgn-id lyr-id])
-              in-bits (:in-ff-bits (:state lyr))
-              in-sbits (:in-stable-ff-bits (:state lyr))
-              sg (:proximal-sg lyr)
-              prox-learning (:proximal-learning (:state lyr))
-              seg-up (get prox-learning [col 0])
-              {learn-seg-path :target-id, grow-sources :grow-sources} seg-up
-              this-seg-path (or learn-seg-path [col 0 0])
-              all-syns (p/in-synapses sg this-seg-path)
-              syns (select-keys all-syns (p/sources-connected-to sg this-seg-path))
-              this-lay (get-in r-lays [rgn-id lyr-id])
-              [this-x this-y] (element-xy this-lay col dt)]
-          (recur
-           (first more)
-           (into (next more)
-                 (for [syn-state syn-states
-                       :let [sub-syns (case syn-state
-                                        :active (select-keys syns in-bits)
-                                        :active-predicted (select-keys syns in-sbits)
-                                        :inactive-syn (if do-disconn?
-                                                        (apply dissoc all-syns in-bits)
-                                                        (apply dissoc syns in-bits))
-                                        :disconnected (-> (apply dissoc all-syns (keys syns))
-                                                          (select-keys in-bits))
-                                        :growing (select-keys syns grow-sources))
-                             _ (c/stroke-style ctx (state-colors syn-state))]
-                       [i perm] sub-syns]
-                   (let [[src-id src-lyr src-i]
-                         (if (input-layer? [rgn-id lyr-id])
-                           ;; input from another region
-                           (let [[src-id src-i]
-                                 (core/source-of-incoming-bit htm rgn-id i)]
-                             [src-id (output-layer src-id) src-i])
-                           ;; input from another layer in same region (hardcoded)
-                           [rgn-id :layer-4 i])
-                         src-lay (or (get i-lays src-id)
-                                     (get-in r-lays [src-id src-lyr]))
-                         src-col (if src-lyr
-                                   (first (p/source-of-bit
-                                           (get-in regions [src-id src-lyr])
-                                           src-i))
-                                   src-i)
-                         [src-x src-y] (element-xy src-lay src-col dt)]
-                     (doto ctx
-                       (c/alpha (if do-perm? perm 1))
-                       (c/begin-path)
-                       (c/move-to (- this-x 1) this-y) ;; -1 avoid obscuring colour
-                       (c/line-to (+ src-x 1) src-y)
-                       (c/stroke))
-                     (when src-lyr
-                       ;; source is a cell not an input bit, so continue tracing
-                       [src-id src-lyr src-col]))))
-           (conj done path)))
-        ;; go on to next
-        (when (seq more)
-          (recur (first more) (next more) done)))))
+
+  (let [[sel ff-synapses] ff-synapses-response
+        {:keys [model-id]} sel
+        dt (helpers/index-of steps #(= model-id (:model-id %)))]
+    (doseq [[[rgn-id lyr-id col] synapses] ff-synapses
+            :let [this-lay (get-in r-lays [rgn-id lyr-id])
+                  [this-x this-y] (element-xy this-lay col dt)]]
+      (doseq [{:keys [src-id src-col perm src-lyr syn-state]} synapses
+              :let [src-lay (or (get i-lays src-id)
+                                (get-in r-lays [src-id src-lyr]))
+                    [src-x src-y] (element-xy src-lay src-col dt)]]
+        (doto ctx
+          (c/stroke-style (state-colors syn-state))
+          (c/alpha (if perm perm 1))
+          (c/begin-path)
+          (c/move-to (- this-x 1) this-y) ;; -1 avoid obscuring colour
+          (c/line-to (+ src-x 1) src-y)
+          (c/stroke)))))
+
   (c/restore ctx)
   ctx)
-
-(defn group-synapses
-  [syns ac pcon]
-  (group-by (fn [[id p]]
-                   [(if (>= p pcon)
-                      :connected :disconnected)
-                    (if (ac id)
-                      :active :inactive)])
-                 syns))
 
 (defn natural-curve
   [ctx x0 y0 x1 y1]
@@ -468,20 +379,9 @@
   (cell-seg-line [this ctx ci si])
   (clicked-seg [this x y]))
 
-(defn all-cell-segments
-  [col depth distal-sg]
-  (let [cell-ids (map vector (repeat col) (range depth))]
-    (mapv (fn [cell-id]
-            (->> (p/cell-segments distal-sg cell-id)
-                 (reverse)
-                 (drop-while empty?)
-                 (reverse)))
-          cell-ids)))
-
 (defn cells-segments-layout
-  [col segs-by-cell cols-lay dt cells-left opts]
-  (let [nsegbycell (map count segs-by-cell)
-        nsegbycell-pad (map (partial max 1) nsegbycell)
+  [col nsegbycell cols-lay dt cells-left opts]
+  (let [nsegbycell-pad (map (partial max 1) nsegbycell)
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
         segs-left (+ cells-left (:seg-h-space-px d-opts))
@@ -533,191 +433,125 @@
                    [ci si])))))))
 
 (defn draw-cell-segments
-  [ctx htm prev-htm r-lays i-lays selection opts cells-left
+  [ctx cell-segments-response steps r-lays i-lays opts cells-left
    current-cell-segments-layout]
   (c/save ctx)
-  (let [{dt :dt, sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg} selection
-        regions (:regions htm)
-        lyr (get-in regions [sel-rgn sel-lyr])
-        lay (get-in r-lays [sel-rgn sel-lyr])
-        spec (p/params lyr)
-        stimulus-th (:seg-stimulus-threshold spec)
-        learning-th (:seg-learn-threshold spec)
-        pcon (:distal-perm-connected spec)
-        pinit (:distal-perm-init spec)
-        ac (p/active-cells lyr)
-        prev-lyr (get-in prev-htm [:regions sel-rgn sel-lyr])
-        prev-ac (:active-cells (:state prev-lyr))
-        prev-pc (:pred-cells (:prior-distal-state lyr))
-        prev-aci (:distal-bits (:prior-distal-state lyr))
-        depth (p/layer-depth lyr)
-        learning (:distal-learning (:state lyr))
-        seg-up (first (vals (select-keys learning (for [ci (range depth)] [col ci]))))
-        {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
-        segs-by-cell (->> (:distal-sg lyr)
-                          (all-cell-segments col depth))
-        p-segs-by-cell (when prev-htm
-                         (->> (get-in prev-htm [:regions sel-rgn sel-lyr :distal-sg])
-                              (all-cell-segments col depth)))
-        cslay (cells-segments-layout col segs-by-cell lay dt cells-left opts)
-        col-d-px (get-in opts [:drawing :col-d-px])
-        cell-r-px (get-in opts [:drawing :cell-r-px])
-        seg-h-px (get-in opts [:drawing :seg-h-px])
-        seg-w-px (get-in opts [:drawing :seg-w-px])
-        seg-r-px (* seg-w-px 0.5)]
-    ;; for the click handler to use
-    (reset! current-cell-segments-layout cslay)
-    (doseq [[ci segs] (map-indexed vector segs-by-cell)
-            :let [p-segs (nth p-segs-by-cell ci)
-                  [cell-x cell-y] (cell-xy cslay ci)
-                  cell-id [col ci]
-                  cell-active? (ac cell-id)
-                  cell-predictive? (get prev-pc cell-id)
-                  cell-learning? (= ci learn-ci)
-                  ;; need to add an entry for a new segment if just grown
-                  use-segs (if (and cell-learning? (>= learn-si (count p-segs)))
-                             (take (inc learn-si) (concat p-segs (repeat {})))
-                             p-segs)
-                  selected-cell? (if sel-ci-si
-                                   (== ci (first sel-ci-si))
-                                   cell-learning?)
-                  cell-state (cond
-                              (and cell-active? cell-predictive?) :active-predicted
-                              cell-predictive? :predicted
-                              cell-active? :active
-                              :else :inactive)]]
-      ;; draw background lines to cell from column and from segments
-      (c/stroke-width ctx col-d-px)
-      (c/stroke-style ctx (:background state-colors))
-      (col-cell-line cslay ctx ci)
-      (doseq [si (range (count segs))]
-        (cell-seg-line cslay ctx ci si))
-      (when cell-active?
-        (doto ctx
-          (c/stroke-style (:active state-colors))
-          (c/stroke-width 2))
-        (col-cell-line cslay ctx ci))
-      ;; draw the cell itself
-      (when selected-cell?
-        (doto ctx
-          (c/fill-style (:highlight state-colors))
-          (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
-          (c/fill)))
-      (doto ctx
-        (c/fill-style (state-colors cell-state))
-        (c/stroke-style "black")
-        (c/stroke-width 1)
-        (c/circle {:x cell-x :y cell-y :r cell-r-px})
-        (c/stroke)
-        (c/fill))
-      (c/fill-style ctx "black")
-      (c/text ctx {:text (str "cell " ci)
-                   :x (+ cell-x 10) :y (- cell-y cell-r-px 5)})
-      ;; draw each segment
-      (doseq [[si seg] (map-indexed vector use-segs)
-              :let [[sx sy] (seg-xy cslay ci si)
-                    grouped-syns (group-synapses seg prev-aci pcon)
-                    conn-act (count (grouped-syns [:connected :active]))
-                    conn-tot (+ (count (grouped-syns [:connected :inactive]))
-                                conn-act)
-                    disc-act (count (grouped-syns [:disconnected :active]))
-                    disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
-                                disc-act)
-                    z (-> (/ conn-act stimulus-th)
-                          (min 1.0))
-                    learn-seg? (and cell-learning? (= si learn-si))
-                    selected-seg? (if sel-ci-si
-                                    (= [ci si] sel-ci-si)
-                                    learn-seg?)
-                    scale (/ seg-w-px stimulus-th)]]
-        ;; draw segment as a rectangle
-        (let [h2 (int (/ seg-h-px 2))
-              conn-th-r {:x sx :y (- sy h2) :w (int (* stimulus-th scale)) :h seg-h-px}
-              conn-tot-r (assoc conn-th-r :w (* conn-tot scale))
-              conn-act-r (assoc conn-th-r :w (* conn-act scale))
-              disc-th-r {:x sx :y (+ sy h2) :w (int (* learning-th scale)) :h seg-h-px}
-              disc-tot-r (assoc disc-th-r :w (* disc-tot scale))
-              disc-act-r (assoc disc-th-r :w (* disc-act scale))]
-          (when selected-seg?
+  (let [[sel cell-segments] cell-segments-response
+        {sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg,
+         model-id :model-id} sel
+        dt (helpers/index-of steps #(= model-id (:model-id %)))]
+    (when (and dt col)
+      (let [lay (get-in r-lays [sel-rgn sel-lyr])
+            n-segs-by-cell (->> cell-segments
+                                (into (sorted-map))
+                                (map (fn [[_ d]]
+                                       (-> d :segments count))))
+            cslay (cells-segments-layout col n-segs-by-cell lay dt cells-left opts)
+            col-d-px (get-in opts [:drawing :col-d-px])
+            cell-r-px (get-in opts [:drawing :cell-r-px])
+            seg-h-px (get-in opts [:drawing :seg-h-px])
+            seg-w-px (get-in opts [:drawing :seg-w-px])
+            seg-r-px (* seg-w-px 0.5)]
+        ;; for the click handler to use
+        (reset! current-cell-segments-layout cslay)
+        (doseq [[ci cell-data] cell-segments
+                :let [[cell-x cell-y] (cell-xy cslay ci)
+                      {:keys [cell-active? cell-predictive? selected-cell?
+                              cell-state segments]} cell-data]]
+          ;; draw background lines to cell from column and from segments
+          (c/stroke-width ctx col-d-px)
+          (c/stroke-style ctx (:background state-colors))
+          (col-cell-line cslay ctx ci)
+          (doseq [si (range (count segments))]
+            (cell-seg-line cslay ctx ci si))
+          (when cell-active?
+            (doto ctx
+              (c/stroke-style (:active state-colors))
+              (c/stroke-width 2))
+            (col-cell-line cslay ctx ci))
+          ;; draw the cell itself
+          (when selected-cell?
             (doto ctx
               (c/fill-style (:highlight state-colors))
-              (c/fill-rect {:x (- sx 5) :y (- sy h2 5) :w (+ seg-w-px 5 5) :h (+ (* 2 seg-h-px) 5 5)})))
+              (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
+              (c/fill)))
           (doto ctx
-            (c/fill-style "white") ;; overlay on highlight rect
-            (c/fill-rect conn-th-r)
-            (c/fill-rect disc-th-r)
-            (c/fill-style (:background state-colors))
-            (c/fill-rect conn-tot-r)
-            (c/fill-rect disc-tot-r)
+            (c/fill-style (state-colors cell-state))
             (c/stroke-style "black")
             (c/stroke-width 1)
-            (c/fill-style (:active state-colors))
-            (c/fill-rect conn-act-r)
-            (c/stroke-rect conn-th-r)
-            (c/alpha 0.5)
-            (c/fill-rect disc-act-r)
-            (c/stroke-rect disc-th-r)
-            (c/alpha 1.0)))
-        (when (>= conn-act stimulus-th)
-          (doto ctx
-            (c/stroke-style (:active state-colors))
-            (c/stroke-width 2))
-          (cell-seg-line cslay ctx ci si))
-        (c/fill-style ctx "black")
-        (c/text-align ctx :right)
-        (c/text ctx {:text (str "seg " si "") :x (- sx 3) :y sy})
-        (c/text-align ctx :start)
-        (when learn-seg?
-          (c/text ctx {:text (str "learning") :x (+ sx seg-w-px 10) :y sy}))
-        ;; draw distal synapses
-        (c/stroke-width ctx 1)
-        (let [do-from (get-in opts [:distal-synapses :from])
-              do-growing? (get-in opts [:distal-synapses :growing])
-              do-inactive? (get-in opts [:distal-synapses :inactive])
-              do-disconn? (get-in opts [:distal-synapses :disconnected])
-              do-perm? (get-in opts [:distal-synapses :permanences])
-              syn-states (concat (when do-disconn? [:disconnected])
-                                 (when do-inactive? [:inactive-syn])
-                                 [:active]
-                                 (when do-growing? [:growing]))
-              grouped-sourced-syns
-              (util/remap (fn [syns]
-                            (map (fn [[i p]]
-                                   [i
-                                    (core/source-of-distal-bit htm sel-rgn sel-lyr i)
-                                    p])
-                                 syns))
-                          (assoc grouped-syns
-                                 :growing (if learn-seg? (map vector grow-sources (repeat pinit)))))]
-          (when (or (= do-from :all)
-                    (and (= do-from :selected) selected-seg?))
-            (doseq [syn-state syn-states
-                    :let [source-info (case syn-state
-                                        :active (grouped-sourced-syns [:connected :active])
-                                        :inactive-syn (concat (grouped-sourced-syns [:connected :inactive])
-                                                              (if do-disconn?
-                                                                (grouped-sourced-syns [:disconnected :inactive])))
-                                        :disconnected (grouped-sourced-syns [:disconnected :active])
-                                        :growing (grouped-sourced-syns :growing))
-                          _ (c/stroke-style ctx (state-colors syn-state))]]
+            (c/circle {:x cell-x :y cell-y :r cell-r-px})
+            (c/stroke)
+            (c/fill))
+          (c/fill-style ctx "black")
+          (c/text ctx {:text (str "cell " ci)
+                       :x (+ cell-x 10) :y (- cell-y cell-r-px 5)})
+          ;; draw each segment
+          (doseq [[si seg] segments
+                  :let [[sx sy] (seg-xy cslay ci si)
+                        {:keys [learn-seg? selected-seg? n-conn-act n-conn-tot
+                                n-dis-act n-dis-tot stimulus-th learning-th
+                                syns-by-state]} seg
+                        scale-factor (/ seg-w-px stimulus-th)
+                        scale #(-> % (* scale-factor) int)
+
+                        h2 (int (/ seg-h-px 2))
+                        conn-th-r {:x sx :y (- sy h2)
+                                   :w seg-w-px :h seg-h-px}
+                        conn-tot-r (assoc conn-th-r :w (scale n-conn-tot))
+                        conn-act-r (assoc conn-th-r :w (scale n-conn-act))
+                        disc-th-r {:x sx :y (+ sy h2)
+                                   :w (scale learning-th) :h seg-h-px}
+                        disc-tot-r (assoc disc-th-r :w (scale n-dis-tot))
+                        disc-act-r (assoc disc-th-r :w (scale n-dis-act))]]
+            ;; draw segment as a rectangle
+            (when selected-seg?
+              (doto ctx
+                (c/fill-style (:highlight state-colors))
+                (c/fill-rect {:x (- sx 5) :y (- sy h2 5)
+                              :w (+ seg-w-px 5 5) :h (+ (* 2 seg-h-px) 5 5)})))
+            (doto ctx
+              (c/fill-style "white") ;; overlay on highlight rect
+              (c/fill-rect conn-th-r)
+              (c/fill-rect disc-th-r)
+              (c/fill-style (:background state-colors))
+              (c/fill-rect conn-tot-r)
+              (c/fill-rect disc-tot-r)
+              (c/stroke-style "black")
+              (c/stroke-width 1)
+              (c/fill-style (:active state-colors))
+              (c/fill-rect conn-act-r)
+              (c/stroke-rect conn-th-r)
+              (c/alpha 0.5)
+              (c/fill-rect disc-act-r)
+              (c/stroke-rect disc-th-r)
+              (c/alpha 1.0))
+            (when (>= n-conn-act stimulus-th)
+              (doto ctx
+                (c/stroke-style (:active state-colors))
+                (c/stroke-width 2))
+              (cell-seg-line cslay ctx ci si))
+            (c/fill-style ctx "black")
+            (c/text-align ctx :right)
+            (c/text ctx {:text (str "seg " si "") :x (- sx 3) :y sy})
+            (c/text-align ctx :start)
+            (when learn-seg?
+              (c/text ctx {:text (str "learning") :x (+ sx seg-w-px 10) :y sy}))
+            ;; draw distal synapses
+            (c/stroke-width ctx 1)
+            (doseq [[syn-state syns] syns-by-state]
               (c/stroke-style ctx (state-colors syn-state))
-              (doseq [[i [src-id src-lyr src-i] p] source-info
+              (doseq [{:keys [src-col src-id src-lyr perm]} syns
                       :let [src-lay (or (get i-lays src-id)
                                         (get-in r-lays [src-id src-lyr]))
-                            src-col (if src-lyr
-                                      (first (p/source-of-bit
-                                              (get-in regions [src-id src-lyr])
-                                              src-i))
-                                      src-i)
                             [src-x src-y] (element-xy src-lay src-col (inc dt))]]
-                (when do-perm? (c/alpha ctx p))
+                (when perm (c/alpha ctx perm))
                 (doto ctx
                   (c/begin-path)
                   (c/move-to sx sy)
                   (c/line-to (+ src-x 1) src-y) ;; +1 avoid obscuring colour
                   (c/stroke))))
-            (c/alpha ctx 1.0)))))
-    (c/restore ctx))
+            (c/alpha ctx 1.0)))
+        (c/restore ctx))))
   ctx)
 
 (defn image-buffer
@@ -735,126 +569,33 @@
     (fill-elements lay ctx (lay/ids-onscreen lay))
     el))
 
-(defn active-bits-image
-  [lay inp]
+(defn fill-ids-image
+  [lay fill-style ids]
   (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        inbits (active-bits inp)]
-    (c/fill-style ctx (:active state-colors))
-    (fill-elements lay ctx inbits)
+        ctx (c/get-context el "2d")]
+    (c/fill-style ctx fill-style)
+    (fill-elements lay ctx ids)
     el))
 
-(defn pred-bits-image
-  [lay prev-rgn]
+(defn fill-ids-alpha-image
+  [lay fill-style id->alpha]
   (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        bit-votes (core/predicted-bit-votes prev-rgn)
-        bit-alpha (util/remap #(min 1.0 (/ % 8)) bit-votes)]
-    (c/fill-style ctx (:predicted state-colors))
-    (group-and-fill-elements lay ctx bit-alpha c/alpha)
+        ctx (c/get-context el "2d")]
+    (c/fill-style ctx fill-style)
+    (group-and-fill-elements lay ctx id->alpha c/alpha)
     el))
 
-(defn active-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        cols (p/active-columns lyr)]
-    (c/fill-style ctx (:active state-colors))
-    (fill-elements lay ctx cols)
-    el))
-
-(defn pred-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        cols (->> (p/prior-predictive-cells lyr)
-                  (map first)
-                  (distinct))]
-    (c/fill-style ctx (:predicted state-colors))
-    (fill-elements lay ctx cols)
-    ;; also draw breaks - these interrupt prediction & TP
-    (when (empty? (:distal-bits (:prior-distal-state lyr)))
-      (doto ctx
-        (c/stroke-style "black")
-        (c/stroke-width 2)
-        (c/begin-path)
-        (c/move-to 0.5 0)
-        (c/line-to 0.5 (.-height el))
-        (c/stroke)
-        (c/stroke-width 1)))
-    el))
-
-(defn tp-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        cols (->> (p/temporal-pooling-cells lyr)
-                  (map first))]
-    (c/fill-style ctx (:temporal-pooling state-colors))
-    (fill-elements lay ctx cols)
-    el))
-
-(defn overlaps-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        col-m (->> (:col-overlaps (:state lyr))
-                   (reduce-kv (fn [m [col _ _] v]
-                                (assoc! m col (max v (get m col 0))))
-                              (transient {}))
-                   (persistent!)
-                   (util/remap #(min 1.0 (/ % 16))))]
-    (c/fill-style ctx "black")
-    (group-and-fill-elements lay ctx col-m c/alpha)
-    el))
-
-(defn boost-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        spec (p/params lyr)
-        maxb (:max-boost spec)
-        col-m (->> (:boosts lyr)
-                   (map #(/ (dec %) (dec maxb)))
-                   (zipmap (range)))]
-    (c/fill-style ctx "black")
-    (group-and-fill-elements lay ctx col-m c/alpha)
-    el))
-
-(defn active-freq-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        spec (p/params lyr)
-        col-m (->> (:active-duty-cycles lyr)
-                   (map #(min 1.0 (* 2 %)))
-                   (zipmap (range)))]
-    (c/fill-style ctx "black")
-    (group-and-fill-elements lay ctx col-m c/alpha)
-    el))
-
-(defn count-segs-in-column
-  [distal-sg depth col]
-  (reduce (fn [n ci]
-            (+ n (util/count-filter seq
-                                    (p/cell-segments distal-sg [col ci]))))
-          0
-          (range depth)))
-
-(defn n-segments-columns-image
-  [lay lyr]
-  (let [el (image-buffer (layout-bounds lay))
-        ctx (c/get-context el "2d")
-        sg (:distal-sg lyr)
-        n-cols (p/size-of lyr)
-        depth (p/layer-depth lyr)
-        cols (lay/ids-onscreen lay)
-        col-m (->> cols
-                   (map #(count-segs-in-column sg depth %))
-                   (map #(min 1.0 (/ % 16.0)))
-                   (zipmap cols))]
-    (c/fill-style ctx "black")
-    (group-and-fill-elements lay ctx col-m c/alpha)
+(defn break-image
+  [lay]
+  (let [el (image-buffer (layout-bounds lay))]
+    (doto (c/get-context el "2d")
+      (c/stroke-style "black")
+      (c/stroke-width 2)
+      (c/begin-path)
+      (c/move-to 0.5 0)
+      (c/line-to 0.5 (.-height el))
+      (c/stroke)
+      (c/stroke-width 1))
     el))
 
 (defn scroll-status-str
@@ -874,14 +615,14 @@
 
 (defn should-draw? [steps opts]
   (let [{:keys [anim-go? anim-every height-px]} (:drawing opts)
-        model (first steps)]
-    (when (and anim-go? model height-px)
-      (let [t (p/timestep model)]
+        most-recent (first steps)]
+    (when (and anim-go? most-recent height-px)
+      (let [t (:timestep most-recent)]
         (zero? (mod t anim-every))))))
 
 (defn draw-timeline!
   [ctx steps sel-dt opts]
-  (let [current-t (p/timestep (first steps))
+  (let [current-t (:timestep (first steps))
         keep-steps (:keep-steps opts)
         width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
@@ -915,54 +656,68 @@
         t-width (/ width-px keep-steps)
         click-dt (quot (- (dec width-px) x) t-width)]
     (when (< click-dt (count steps))
-      (swap! selection assoc :dt click-dt))))
+      (swap! selection assoc
+             :dt click-dt
+             :model-id (:model-id (nth steps click-dt))))))
 
-(defn viz-timeline [model-steps selection viz-options]
+(defn viz-timeline [viz-steps selection viz-options]
   [resizing-canvas
-   {:on-click #(timeline-click % @model-steps selection @viz-options)
+   {:on-click #(timeline-click % @viz-steps selection @viz-options)
     :style {:width "100%"
             :height "2em"}}
-   [model-steps selection viz-options]
+   [viz-steps selection viz-options]
    (fn [ctx]
-     (let [steps @model-steps
+     (let [steps @viz-steps
            opts @viz-options]
        (when (should-draw? steps opts)
          (draw-timeline! ctx steps (:dt @selection) opts))))
    nil])
 
 (defn draw-viz!
-  [ctx steps layouts sel opts current-cell-segments-layout]
+  [ctx viz-steps ff-synapses-response cell-segments-response layouts sel opts
+   current-cell-segments-layout]
   (let [{sel-dt :dt
          sel-rgn :region
          sel-lyr :layer
          sel-col :col} sel
         i-lays (:inputs layouts)
         r-lays (:regions layouts)
+
         d-opts (:drawing opts)
+
         draw-steps (case (:display-mode d-opts)
                      :one-d (:draw-steps d-opts)
                      :two-d 1)
+
         draw-dts (if (== 1 draw-steps)
                    [sel-dt]
                    ;; in case scrolled back in history
                    (let [dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
                      (range dt0 (min (+ dt0 draw-steps)
-                                     (count steps)))))
-        sel-htm (nth steps sel-dt)
-        sel-prev-htm (nth steps (inc sel-dt) nil)
+                                     (count viz-steps)))))
+
+        label-top-px 0
         cells-left (->> (mapcat vals (vals r-lays))
                         (map lay/right-px)
                         (apply max)
-                        (+ (:seg-h-space-px d-opts)))
-        label-top-px 0
-        width-px (.-width (.-canvas ctx))
-        height-px (.-height (.-canvas ctx))]
-    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+                        (+ (:seg-h-space-px d-opts)))]
+
+    ;; Draw whenever a new step appears, even when the step's inbits / column
+    ;; data is not yet available. This keeps the viz-canvas in sync with the
+    ;; timeline without having to share viz-canvas internal state, and it
+    ;; handles cases where e.g. the ff-synapse data arrives before the
+    ;; inbits-cols data.
+
+    (c/clear-rect ctx {:x 0 :y 0
+                       :w (.-width (.-canvas ctx))
+                       :h (.-height (.-canvas ctx))})
+
     ;; draw labels
     (c/text-align ctx :start)
     (c/text-baseline ctx :top)
     (c/font-style ctx "10px sans-serif")
     (c/fill-style ctx "black")
+
     (doseq [[inp-id lay] i-lays]
       (c/text ctx {:text (name inp-id)
                    :x (:x (layout-bounds lay))
@@ -978,70 +733,92 @@
       (c/text ctx {:text (scroll-status-str lay false)
                    :x (:x (layout-bounds lay))
                    :y (+ label-top-px 10)}))
+
     (c/text ctx {:text "Cells and distal dendrite segments."
                  :x cells-left :y label-top-px})
+
     (doseq [dt draw-dts
-            :let [htm (nth steps dt)
-                  prev-htm (nth steps (inc dt) nil)
-                  dt-cache (::cache (meta htm))]]
+            :let [{sc :cache inbits-cols :inbits-cols
+                   ic-onscreen :inbits-cols-onscreen} (nth viz-steps dt)
+                  {:keys [inputs regions]} inbits-cols]]
       ;; draw encoded inbits
-      (doseq [[inp-id lay] i-lays
-              :let [inp (get-in htm [:inputs inp-id])
-                    ;; region this input feeds to, for predictions
-                    ff-rgn-id (first (get-in htm [:fb-deps inp-id]))
-                    ;; TODO offset if multiple inputs feeding to region
-                    prev-ff-rgn (when (pos? (p/size (p/ff-topology inp)))
-                                  (get-in prev-htm [:regions ff-rgn-id]))
+      (doseq [[inp-id {:keys [active-bits pred-bits-alpha]}] inputs
+              :let [lay (i-lays inp-id)
                     lay-cache (::cache (meta lay))]]
         (->> (bg-image lay)
              (with-cache lay-cache [::bg inp-id] opts #{:drawing})
              (draw-image-dt ctx lay dt))
-        (when (get-in opts [:input :active])
-          (->> (active-bits-image lay inp)
-               (with-cache dt-cache [::abits inp-id] opts #{:input :drawing})
+        (when active-bits
+          (->> active-bits
+               (fill-ids-image lay (:active state-colors))
+               (with-cache sc [::abits inp-id] opts #{:input :drawing})
                (draw-image-dt ctx lay dt)))
-        (when (and (get-in opts [:input :predicted])
-                   prev-ff-rgn)
-          (->> (pred-bits-image lay prev-ff-rgn)
-               (with-cache dt-cache [::pbits inp-id] opts #{:input :drawing})
+        (when pred-bits-alpha
+          (->> pred-bits-alpha
+               (fill-ids-alpha-image lay (:predicted state-colors))
+               (with-cache sc [::pbits inp-id] opts #{:input :drawing})
                (draw-image-dt ctx lay dt))))
+
       ;; draw regions / layers
-      (doseq [[rgn-id lyr-lays] r-lays
-              [lyr-id lay] lyr-lays
-              :let [lyr (get-in htm [:regions rgn-id lyr-id])
-                    uniqix (str (name rgn-id) (name lyr-id))
-                    lay-cache (::cache (meta lay))]]
-        (->> (bg-image lay)
-             (with-cache lay-cache [::bg uniqix] opts #{:drawing})
-             (draw-image-dt ctx lay dt))
-        (when (get-in opts [:columns :overlaps])
-          (->> (overlaps-columns-image lay lyr)
-               (with-cache dt-cache [::ocols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :boosts])
-          (->> (boost-columns-image lay lyr)
-               (with-cache dt-cache [::boosts uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :active-freq])
-          (->> (active-freq-columns-image lay lyr)
-               (with-cache dt-cache [::afreq uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :n-segments])
-          (->> (n-segments-columns-image lay lyr)
-               (with-cache dt-cache [::nsegcols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :active])
-          (->> (active-columns-image lay lyr)
-               (with-cache dt-cache [::acols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :predictive])
-          (->> (pred-columns-image lay lyr)
-               (with-cache dt-cache [::pcols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when (get-in opts [:columns :temporal-pooling])
-          (->> (tp-columns-image lay lyr)
-               (with-cache dt-cache [::tpcols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))))
+      (doseq [[rgn-id rgn-data] regions]
+        (doseq [[lyr-id {:keys [overlaps-columns-alpha
+                                boost-columns-alpha
+                                active-freq-columns-alpha
+
+                                active-columns
+                                pred-columns
+                                tp-columns
+                                break?]}] rgn-data
+                :let [uniqix (str (name rgn-id) (name lyr-id))
+                      lay (get-in r-lays [rgn-id lyr-id])
+                      lay-cache (::cache (meta lay))
+                      {:keys [n-segments-columns-alpha]} (get-in
+                                                          ic-onscreen
+                                                          [:regions rgn-id
+                                                           lyr-id])]]
+          (->> (bg-image lay)
+               (with-cache lay-cache [::bg uniqix] opts #{:drawing})
+               (draw-image-dt ctx lay dt))
+          (when overlaps-columns-alpha
+            (->> overlaps-columns-alpha
+                 (fill-ids-alpha-image lay "black")
+                 (with-cache sc [::ocols uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when boost-columns-alpha
+            (->> boost-columns-alpha
+                 (fill-ids-alpha-image lay "black")
+                 (with-cache sc [::boosts uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when active-freq-columns-alpha
+            (->> active-freq-columns-alpha
+                 (fill-ids-alpha-image lay "black")
+                 (with-cache sc [::afreq uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when n-segments-columns-alpha
+            (->> n-segments-columns-alpha
+                 (fill-ids-alpha-image lay "black")
+                 (with-cache sc [::nsegcols uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when (and active-columns
+                     (get-in opts [:columns :active]))
+                (->> active-columns
+                     (fill-ids-image lay (:active state-colors))
+                     (with-cache sc [::acols uniqix] opts #{:columns :drawing})
+                     (draw-image-dt ctx lay dt)))
+          (when pred-columns
+            (->> pred-columns
+                 (fill-ids-image lay (:predicted state-colors))
+                 (with-cache sc [::pcols uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when tp-columns
+            (->> tp-columns
+                 (fill-ids-image lay (:temporal-pooling state-colors))
+                 (with-cache sc [::tpcols uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
+          (when break?
+            (->> (break-image lay)
+                 (draw-image-dt ctx lay dt))))))
+
     ;; mark facets
     (doseq [lay (vals i-lays)]
       (lay/draw-facets lay ctx))
@@ -1058,17 +835,13 @@
     (when sel-col
       (let [lay (get-in r-lays [sel-rgn sel-lyr])]
         (lay/highlight-element lay ctx sel-dt sel-col sel-col (:highlight state-colors))))
+
     ;; draw ff synapses
-    (let [to (get-in opts [:ff-synapses :to])]
-      (when (or (= to :all)
-                (and (= to :selected)
-                     sel-col))
-        (draw-ff-synapses ctx sel-htm r-lays i-lays sel opts)))
+    (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays i-lays)
+
     ;; draw selected cells and segments
-    (when sel-col
-      (draw-cell-segments ctx sel-htm sel-prev-htm r-lays i-lays sel opts
-                          cells-left current-cell-segments-layout)))
-  nil)
+    (draw-cell-segments ctx cell-segments-response viz-steps r-lays i-lays opts
+                        cells-left current-cell-segments-layout)))
 
 (def code-key
   {32 :space
@@ -1110,7 +883,8 @@
             :when dt]
       (reset! hit? true)
       (when (== 1 (count (p/dims-of lay)))
-        (swap! selection assoc :dt (min dt max-dt))))
+        (let [dt (min dt max-dt)]
+          (swap! selection assoc :dt dt :model-id (:model-id (nth steps dt))))))
     ;; check regions
     (doseq [[rgn-id lyr-lays] r-lays
             [lyr-id lay] lyr-lays
@@ -1118,9 +892,11 @@
             :when dt]
       (reset! hit? true)
       (if (== 1 (count (p/dims-of lay)))
-        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell-seg nil
-               :dt (min dt max-dt))
-        (swap! selection assoc :region rgn-id :layer lyr-id :col col :cell-seg nil)))
+        (let [dt (min dt max-dt)]
+          (swap! selection assoc :region rgn-id :layer lyr-id :col col
+                 :cell-seg nil :dt dt :model-id (:model-id (nth steps dt))))
+        (swap! selection assoc :region rgn-id :layer lyr-id :col col
+               :cell-seg nil)))
     ;; check cells
     (when (:col @selection)
       (when-let [cslay @current-cell-segments-layout]
@@ -1131,22 +907,78 @@
       ;; checked all, nothing clicked
       (swap! selection assoc :col nil :cell-seg nil))))
 
-(defn absorb-changed-model [htm selection viz-options viz-layouts]
-  (let [region-key (first (core/region-keys htm))
-        layer-id (-> htm
-                     (get-in [:regions region-key])
-                     core/layers
-                     first)]
-    (reset! viz-layouts
-            (init-layouts htm @viz-options))
-    (swap! selection assoc
-           :region region-key
-           :layer layer-id
-           :dt 0
-           :col nil)))
+(defn absorb-step-template [step-template viz-options viz-layouts]
+  (reset! viz-layouts
+          (init-layouts step-template @viz-options)))
 
-(defn viz-canvas [_ model-steps selection viz-options commands-in-mult commands-out]
-  (let [viz-layouts (atom nil)
+(defn fetch-ff-synapses!
+  [into-journal ff-synapses-response sel opts]
+  (let [out-c (async/chan)]
+    (put! @into-journal [:get-ff-synapses sel opts out-c])
+    (go
+      ;; dt may be outdated at this point
+      (reset! ff-synapses-response [(dissoc sel :dt) (<! out-c)]))))
+
+(defn fetch-cell-segments!
+  [into-journal cell-segments-response sel opts]
+  (let [out-c (async/chan)]
+    (put! @into-journal [:get-cell-segments sel opts out-c])
+    (go
+      ;; dt may be outdated at this point
+      (reset! cell-segments-response [(dissoc sel :dt) (<! out-c)]))))
+
+(defn fetch-inbits-cols-onscreen!
+  [into-journal steps-data steps step-template opts layouts]
+  (let [paths (input-and-layer-paths step-template)
+        path->ids-onscreen (zipmap paths (->> paths
+                                              (map (fn [path]
+                                                     (get-in layouts path)))
+                                              (map lay/ids-onscreen)))]
+    (doseq [step steps
+            :let [model-id (:model-id step)
+                  response-c (async/chan)]]
+      (put! @into-journal
+            [:get-inbits-cols-subset model-id opts path->ids-onscreen
+             response-c])
+      (go
+        (swap! steps-data assoc-in [step :inbits-cols-onscreen]
+               (<! response-c))))))
+
+(defn fetch-inbits-cols!
+  [into-journal steps-data steps opts]
+  (doseq [step steps
+          :let [model-id (:model-id step)
+                response-c (async/chan)]]
+    (put! @into-journal
+          [:get-inbits-cols model-id opts response-c])
+
+    (go
+      (swap! steps-data assoc-in [step :inbits-cols]
+             (<! response-c)))))
+
+;; A "viz-step" is a step with viz-canvas-specific data added.
+(defn make-viz-step
+  [step steps-data]
+  (merge step (get steps-data step)))
+
+(defn make-viz-steps
+  [steps steps-data]
+  (map make-viz-step steps (repeat steps-data)))
+
+(defn scroll-positions
+  [layouts paths]
+  (->> paths
+       (map (fn [path]
+              (get-in layouts path)))
+       (map lay/scroll-position)))
+
+(defn viz-canvas
+  [_ steps selection step-template viz-options commands-in-mult sim-options
+   into-journal]
+  (let [steps-data (atom {})
+        ff-synapses-response (atom nil)
+        cell-segments-response (atom nil)
+        viz-layouts (atom nil)
         current-cell-segments-layout (clojure.core/atom nil)
         resizes (chan)
 
@@ -1154,16 +986,6 @@
         ;; between two components, mounting and unmounting, competing for values
         ;; on the channel.
         commands-in (tap-c commands-in-mult)]
-
-    (add-watch viz-options :rebuild-layouts
-               (fn [_ _ old-opts opts]
-                 (when (not= (:drawing opts)
-                             (:drawing old-opts))
-                   (swap! viz-layouts rebuild-layouts (first @model-steps) opts))))
-
-    (add-watch selection :update-dt-offsets
-               (fn [_ _ _ _]
-                 (update-dt-offsets! viz-layouts selection @viz-options)))
 
     (go-loop []
       (when-let [[command & xs] (<! commands-in)]
@@ -1173,37 +995,56 @@
                       sel-rgn (:region @selection)
                       sel-lyr (:layer @selection)]
                   (if apply-to-all?
-                    (sort-all-layers! viz-layouts viz-options @model-steps sel-dt)
-                    (sort-sel-layer! viz-layouts viz-options @model-steps sel-dt sel-rgn sel-lyr)))
+                    (sort-all-layers! viz-layouts viz-options
+                                      (make-viz-steps @steps @steps-data)
+                                      sel-dt)
+                    (sort-sel-layer! viz-layouts viz-options
+                                     (make-viz-steps @steps @steps-data) sel-dt
+                                     sel-rgn sel-lyr)))
           :clear-sort (let [[apply-to-all?] xs
                             sel-rgn (:region @selection)
                             sel-lyr (:layer @selection)]
                         (if apply-to-all?
                           (clear-sort-on-all-layers! viz-layouts viz-options)
-                          (clear-sort-on-sel-layer! viz-layouts viz-options sel-rgn sel-lyr)))
+                          (clear-sort-on-sel-layer! viz-layouts viz-options
+                                                    sel-rgn sel-lyr)))
           :add-facet (let [[apply-to-all?] xs
                            sel-dt (:dt @selection)
                            sel-rgn (:region @selection)
                            sel-lyr (:layer @selection)
-                           htm (nth @model-steps sel-dt)]
+                           viz-step (make-viz-step (nth @steps sel-dt)
+                                                   @steps-data)]
                        (if apply-to-all?
-                         (add-facet-to-all-layers! viz-layouts viz-options htm)
-                         (add-facet-to-sel-layer! viz-layouts viz-options htm sel-rgn sel-lyr)))
+                         (add-facet-to-all-layers! viz-layouts viz-options
+                                                   viz-step)
+                         (add-facet-to-sel-layer! viz-layouts viz-options
+                                                  viz-step sel-rgn sel-lyr)))
           :clear-facets (let [[apply-to-all?] xs
                               sel-rgn (:region @selection)
                               sel-lyr (:layer @selection)]
                           (if apply-to-all?
                             (clear-facets-on-all-layers! viz-layouts)
-                            (clear-facets-on-sel-layer! viz-layouts sel-rgn sel-lyr)))
+                            (clear-facets-on-sel-layer! viz-layouts sel-rgn
+                                                        sel-lyr)))
           :step-backward (let [;; we need to assume there is a previous step, so:
-                               max-dt (max 0 (- (count @model-steps) 2))]
-                           (swap! selection update-in [:dt]
-                                  #(min (inc %) max-dt)))
+                               max-dt (max 0 (- (count @steps) 2))]
+                           (swap! selection
+                                  (fn [sel]
+                                    (let [dt (min (inc (:dt sel)) max-dt)]
+                                      (assoc sel
+                                             :dt dt
+                                             :model-id (:model-id
+                                                        (nth @steps dt)))))))
           :step-forward (if (zero? (:dt @selection))
-                          (when commands-out
-                            (put! commands-out :sim-step))
-                          (swap! selection update-in [:dt]
-                                 #(max (dec %) 0)))
+                          (when sim-options
+                            (swap! sim-options update :force-n-steps inc))
+                          (swap! selection
+                                 (fn [sel]
+                                    (let [dt (max (dec (:dt sel)) 0)]
+                                      (assoc sel
+                                             :dt dt
+                                             :model-id (:model-id
+                                                        (nth @steps dt)))))))
           :column-up (when-let [col (:col @selection)]
                        (let [sel-rgn (:region @selection)
                              sel-lyr (:layer @selection)
@@ -1237,20 +1078,8 @@
                        (if apply-to-all?
                          (scroll-all-layers! viz-layouts viz-options false)
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
-          :toggle-run (when commands-out
-                        (put! commands-out :toggle-run))
-          :on-model-changed (if (not-empty @model-steps)
-                              (absorb-changed-model (first @model-steps) selection
-                                                    viz-options viz-layouts)
-                              (add-watch model-steps :absorb-changed-model
-                                         (fn [_ _ _ v]
-                                           (when (not-empty v)
-                                             (remove-watch model-steps
-                                                           :absorb-changed-model)
-                                             (absorb-changed-model (first v)
-                                                                   selection
-                                                                   viz-options
-                                                                   viz-layouts))))))
+          :toggle-run (when sim-options
+                        (swap! sim-options update :force-n-steps inc)))
         (recur)))
 
     (go-loop []
@@ -1262,25 +1091,98 @@
         (recur)))
 
     (reagent/create-class
-     {:component-will-unmount #(async/close! commands-in)
-      :display-name "viz-canvas"
-      :reagent-render (fn [props _ _ _ _ _]
-                        [resizing-canvas
-                         (assoc props
-                                :on-click #(viz-click % @model-steps selection @viz-layouts
-                                                      current-cell-segments-layout)
-                                :on-key-down #(viz-key-down % commands-in)
-                                :style {:width "100%"
-                                        :height "100vh"})
-                         [selection model-steps viz-layouts viz-options]
-                         (fn [ctx]
-                           (let [steps @model-steps
-                                 opts @viz-options]
-                             (when (should-draw? steps opts)
-                               (draw-viz! ctx steps @viz-layouts @selection opts
-                                          current-cell-segments-layout))))
-                         resizes])})))
+     {:component-will-mount
+      (fn [_]
+        (add-watch steps ::init-caches-and-request-data
+                   (fn [_ _ _ xs]
+                     (let [new-steps (->> xs (remove (partial contains?
+                                                              @steps-data)))]
+                       (swap! steps-data
+                              #(->
+                                ;; insert new caches
+                                (->> new-steps
+                                     (reduce (fn [s->d new-s]
+                                               (assoc s->d new-s {:cache
+                                                                  (atom {})}))
+                                             %))
+                                ;; remove old steps
+                                (select-keys xs)))
+                       (fetch-inbits-cols! into-journal steps-data new-steps
+                                           @viz-options)
+                       (fetch-inbits-cols-onscreen! into-journal steps-data
+                                                    new-steps @step-template
+                                                    @viz-options
+                                                    @viz-layouts))))
+        (add-watch viz-options ::inbits-cols
+                   (fn [_ _ _ opts]
+                     (fetch-inbits-cols! into-journal steps-data @steps opts)
+                     (fetch-inbits-cols-onscreen! into-journal steps-data @steps
+                                                  @step-template @viz-options
+                                                  @viz-layouts)))
+        (add-watch viz-layouts ::inbits-cols-onscreen
+                   (fn [_ _ prev layouts]
+                     (let [paths (input-and-layer-paths layouts)]
+                       (when (and prev
+                                  (not= (scroll-positions layouts paths)
+                                        (scroll-positions prev paths)))
+                         (fetch-inbits-cols-onscreen! into-journal steps-data
+                                                      @steps @step-template
+                                                      @viz-options layouts)))))
+        (add-watch step-template ::absorb-step-template
+                   (fn [_ _ _ template]
+                     (absorb-step-template template viz-options viz-layouts)))
+        (add-watch viz-options ::rebuild-layouts
+                   (fn [_ _ old-opts opts]
+                     (when (not= (:drawing opts)
+                                 (:drawing old-opts))
+                       (swap! viz-layouts rebuild-layouts @step-template
+                              opts))))
+        (add-watch selection ::update-dt-offsets
+                   (fn [_ _ _ _]
+                     (update-dt-offsets! viz-layouts selection @viz-options)))
+        (add-watch viz-options ::syns-segments
+                   (fn [_ _ _ opts]
+                     (when @into-journal
+                       (fetch-ff-synapses! into-journal ff-synapses-response
+                                           @selection opts)
+                       (fetch-cell-segments! into-journal cell-segments-response
+                                            @selection opts))))
+        (add-watch selection ::syns-segments
+                   (fn [_ _ _ sel]
+                     (fetch-ff-synapses! into-journal ff-synapses-response sel
+                                         @viz-options)
+                     (fetch-cell-segments! into-journal cell-segments-response
+                                           sel @viz-options))))
 
-(defn init-caches
-  [htm]
-  (vary-meta htm assoc ::cache (atom {})))
+      :component-will-unmount
+      (fn [_]
+        (remove-watch steps ::init-caches-and-request-data)
+        (remove-watch viz-options ::inbits-cols)
+        (remove-watch viz-layouts ::inbits-cols-onscreen)
+        (remove-watch step-template ::absorb-step-template)
+        (remove-watch viz-options ::rebuild-layouts)
+        (remove-watch selection ::update-dt-offsets)
+        (remove-watch viz-options ::syns-segments)
+        (remove-watch selection ::syns-segments)
+        (async/close! commands-in))
+
+      :display-name "viz-canvas"
+      :reagent-render
+      (fn [props _ _ _ _ _]
+        [resizing-canvas
+         (assoc props
+                :on-click #(viz-click % @steps selection @viz-layouts
+                                      current-cell-segments-layout)
+                :on-key-down #(viz-key-down % commands-in)
+                :style {:width "100%"
+                        :height "100vh"})
+         [selection steps steps-data ff-synapses-response
+          cell-segments-response viz-layouts viz-options]
+         (fn [ctx]
+           (let [viz-steps (make-viz-steps @steps @steps-data)
+                 opts @viz-options]
+             (when (should-draw? viz-steps opts)
+               (draw-viz! ctx viz-steps @ff-synapses-response
+                          @cell-segments-response @viz-layouts @selection opts
+                          current-cell-segments-layout))))
+         resizes])})))

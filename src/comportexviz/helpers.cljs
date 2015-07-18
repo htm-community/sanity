@@ -41,7 +41,6 @@
 (defn text-world-input-component
   [in-value htm max-shown scroll-every separator]
   (let [time (p/timestep htm)
-        rgn (first (core/region-seq htm))
         show-n (- max-shown (mod (- max-shown time) scroll-every))
         history (->> (:history (meta in-value))
                      (take-last show-n))]
@@ -141,43 +140,15 @@
     (async/tap mult c)
     c))
 
-(defn- merge-non-maps [& xs]
-  (if (apply (every-pred coll? (complement map?)) xs)
-    (apply concat xs)
-    (last xs)))
-
-(defn- child-route [route k]
-  (not-empty
-   (util/deep-merge-with merge-non-maps
-                         (get-in route [:children k] {})
-                         (get route :all-children {}))))
-
-(defn update-routed
-  "Traverse map `m` using the specified route, applying `node-fn` at each point.
-  `route` is a map which specifies which children to traverse and which route to
-  use for each child. `node-fn` consumes the current node and the current route.
-  This function consumes :children and :all-children fields of each route, and
-  passes the others through to `node-fn`.
-
-  For example, you might traverse the map
-    {:sharks {:bernardo {}
-              :chino {}}
-     :jets {:tony {}
-            :riff {}}}
-  with route
-    {:children {:sharks {:children {:bernardo {}}}
-                :jets {:all-children {}}}}
-  to apply `node-fn` to every map except for Chino's."
-  [m route node-fn]
-  (reduce (fn [new-m k]
-            (if-let [r (child-route route k)]
-              (assoc new-m
-                     k (update-routed (get m k) r node-fn))
-              new-m))
-          (node-fn m route) (keys m)))
-
 (defn close-and-reset! [chan-atom v]
   (swap! chan-atom (fn [c]
                      (when c
                        (async/close! c))
                      v)))
+
+(defn index-of
+  [coll pred]
+  (first (->> coll
+              (keep-indexed (fn [i v]
+                              (when (pred v)
+                                i))))))
