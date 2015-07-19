@@ -6,21 +6,26 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.string :as gstr]
             [goog.string.format]
-            [cljs.core.async :as async])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+            [cljs.core.async :as async :refer [put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1}))
 
 (def world-c
   (async/chan (async/buffer 1)))
+
+(def sim-options
+  (atom default-sim-options))
 
 (def into-sim
   (atom nil))
@@ -30,15 +35,12 @@
 
 (def raw-models-c
   (async/chan))
-(def raw-models-mult
-  (async/mult raw-models-c))
 
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
    state of model itself."
   []
-  (let [step-c (tap-c raw-models-mult)]
-    (demo/feed-world-c-with-actions! step-c world-c model)))
+  (demo/feed-world-c-with-actions! raw-models-c world-c model))
 
 (defn draw-world
   [ctx in-value htm]
@@ -95,64 +97,71 @@
 
 (defn world-pane
   []
-  (when-let [htm (main/selected-model-step)]
-    (let [in-value (:value (first (core/input-seq htm)))
-          DELTA (gstr/unescapeEntities "&Delta;")
-          TIMES (gstr/unescapeEntities "&times;")]
-      [:div
-       [:p.muted [:small "Input on selected timestep."]]
-       [:table.table.table-condensed
-        [:tr
-         [:th "x,y"]
-         [:td [:small "position"]]
-         [:td (:x in-value) "," (:y in-value)]]
-        [:tr
-         [:th (str DELTA "x," DELTA "y")]
-         [:td [:small "action"]]
-         [:td (str (signed-str (:dx in-value))
-                   ","
-                   (signed-str (:dy in-value)))]]
-        [:tr
-         [:th [:var "z"]]
-         [:td [:small "~reward"]]
-         [:td (signed-str (:z in-value))]]
-        [:tr
-         [:td {:colSpan 3}
-          [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
-       (q-learning-sub-pane htm)
-       ;; plot
-       [resizing-canvas {:style {:width "100%"
-                                 :height "240px"}}
-        [main/model-steps main/selection]
-        (fn [ctx]
-          (let [htm (main/selected-model-step)
-                in-value (:value (first (core/input-seq htm)))]
-            (draw-world ctx in-value htm)))
-        nil]
-       [:small
-        [:p
-         "Current position on the objective function surface. "
-         "Also shows approx Q values for each position/action combination,
+  (let [selected-htm (atom nil)]
+    (add-watch main/selection ::fetch-selected-htm
+               (fn [_ _ _ sel]
+                 (when-let [model-id (:model-id sel)]
+                   (let [out-c (async/chan)]
+                     (put! @main/into-journal [:get-model model-id out-c])
+                     (go
+                       (reset! selected-htm (<! out-c)))))))
+    (fn []
+      (when-let [step (main/selected-step)]
+        (when-let [htm @selected-htm]
+          (let [in-value (first (:input-values step))
+                DELTA (gstr/unescapeEntities "&Delta;")
+                TIMES (gstr/unescapeEntities "&times;")]
+            [:div
+             [:p.muted [:small "Input on selected timestep."]]
+             [:table.table.table-condensed
+              [:tr
+               [:th "x,y"]
+               [:td [:small "position"]]
+               [:td (:x in-value) "," (:y in-value)]]
+              [:tr
+               [:th (str DELTA "x," DELTA "y")]
+               [:td [:small "action"]]
+               [:td (str (signed-str (:dx in-value))
+                         ","
+                         (signed-str (:dy in-value)))]]
+              [:tr
+               [:th [:var "z"]]
+               [:td [:small "~reward"]]
+               [:td (signed-str (:z in-value))]]
+              [:tr
+               [:td {:colSpan 3}
+                [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
+             (q-learning-sub-pane htm)
+             ;; plot
+             [resizing-canvas {:style {:width "100%"
+                                       :height "240px"}}
+              [main/selection selected-htm]
+              (fn [ctx]
+                (let [step (main/selected-step)
+                      in-value (first (:input-values step))]
+                  (draw-world ctx in-value @selected-htm)))
+              nil]
+             [:small
+              [:p
+               "Current position on the objective function surface. "
+               "Also shows approx Q values for each position/action combination,
             where green is positive and red is negative.
             These are the last seen Q values including last adjustments."]
-        ]])))
+              ]]))))))
 
 (defn set-model!
   []
   (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/steps-c
-                            (async/chan
-                             100 (map simulation/browser-instance-proxy)))
-
-  (async/tap raw-models-mult @main/steps-c)
+  (helpers/close-and-reset! main/into-journal (async/chan))
 
   (with-ui-loading-message
     (reset! model (demo/make-model))
-    (simulation/simulate-raw-models-onto-chan! raw-models-c
-                                               model
-                                               world-c
-                                               main/sim-options
-                                               @into-sim)))
+    (server/init model
+                 world-c
+                 @main/into-journal
+                 @into-sim
+                 sim-options
+                 raw-models-c)))
 
 (def config-template
   [:div.form-horizontal
@@ -215,7 +224,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!)

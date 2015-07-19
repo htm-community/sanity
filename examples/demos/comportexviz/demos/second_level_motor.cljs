@@ -5,7 +5,8 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.demos.sensorimotor-1d :refer [draw-eye]]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -22,21 +23,21 @@
 
 (def control-c (async/chan))
 
+(def sim-options
+  (atom default-sim-options))
+
 (def into-sim (atom nil))
 
 (def model (atom nil))
 
 (def raw-models-c
   (async/chan))
-(def raw-models-mult
-  (async/mult raw-models-c))
 
 (defn feed-world!
   "Feed the world input channel continuously, selecting actions from
   state of model itself."
   []
-  (let [step-c (tap-c raw-models-mult)]
-    (demo/feed-world-c-with-actions! step-c control-c world-c model)))
+  (demo/feed-world-c-with-actions! raw-models-c control-c world-c model))
 
 (defn draw-world
   [ctx in-value]
@@ -103,8 +104,8 @@
 
 (defn world-pane
   []
-  (when-let [htm (main/selected-model-step)]
-    (let [in-value (:value (first (core/input-seq htm)))
+  (when-let [step (main/selected-step)]
+    (let [in-value (first (:input-values step))
           {:keys [sentences position]} in-value
           [i j k] position
           letter-sacc (:next-letter-saccade in-value)
@@ -129,10 +130,10 @@
              (str/join \newline))]
        [resizing-canvas {:style {:width "100%"
                                  :height "300px"}}
-        [main/model-steps main/selection]
+        [main/selection]
         (fn [ctx]
-          (let [htm (main/selected-model-step)
-                in-value (:value (first (core/input-seq htm)))]
+          (let [step (main/selected-step)
+                in-value (first (:input-values step))]
             (draw-world ctx in-value)))
         nil]
        [:pre
@@ -144,19 +145,16 @@
   []
   (let [] ;; TODO: config
     (helpers/close-and-reset! into-sim (async/chan))
-    (helpers/close-and-reset! main/steps-c
-                              (async/chan
-                               100 (map simulation/browser-instance-proxy)))
-
-    (async/tap raw-models-mult @main/steps-c)
+    (helpers/close-and-reset! main/into-journal (async/chan))
 
     (with-ui-loading-message
       (reset! model (demo/two-region-model))
-      (simulation/simulate-raw-models-onto-chan! raw-models-c
-                                                 model
-                                                 world-c
-                                                 main/sim-options
-                                                 @into-sim))))
+      (server/init model
+                   world-c
+                   @main/into-journal
+                   @into-sim
+                   sim-options
+                   raw-models-c))))
 
 (defn set-text!
   []
@@ -223,7 +221,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
                   (dom/getElement "comportexviz-app"))
 
   (set-model!)

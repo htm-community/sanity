@@ -3,7 +3,6 @@
             [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
             [comportexviz.helpers :refer [tap-c]]
-            [comportexviz.proxies :as proxy]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -11,64 +10,93 @@
 
 (enable-console-print!)
 
-;;; ## Simulation data
+;;; ## Journal data
 
-(def steps-c (atom nil))
-
-(def sim-options
-  (atom {:go? false
-         :step-ms 20
-         :force-n-steps 0}))
+(def into-journal (atom nil))
 
 ;;; ## Viz data
 
-(def model-steps (atom []))
+(def steps (atom []))
+(def step-template (atom nil))
 (def selection (atom viz/blank-selection))
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
 (def into-viz-mult (async/mult into-viz))
-(def from-viz (chan))
+
+;;; ## Connect journal to viz
+
+(defn subscribe-to-steps! [into-j]
+  (let [steps-c (async/chan)
+        response-c (async/chan)]
+    (put! into-j [:subscribe (:keep-steps @viz-options) steps-c response-c])
+    (go
+      ;; Get the template before getting any steps.
+      (reset! step-template (<! response-c))
+      (let [[region-key rgn] (-> @step-template :regions seq first)
+            layer-id (-> rgn keys first)]
+        (swap! selection assoc
+               :region region-key
+               :layer layer-id))
+
+      (add-watch viz-options ::keep-steps
+                 (fn [_ _ prev-opts opts]
+                   (let [n (:keep-steps opts)]
+                     (when (not= n (:keep-steps prev-opts))
+                       (put! into-j [:set-keep-steps n])))))
+
+      (loop []
+        (when-let [step (<! steps-c)]
+          (let [keep-steps (:keep-steps @viz-options)
+                [kept dropped] (split-at keep-steps
+                                         (cons step @steps))]
+            (reset! steps kept))
+          (recur))))
+    steps-c))
+
+(defn unsubscribe! [subscription-data]
+  (let [steps-c subscription-data]
+    (async/close! steps-c))
+  (remove-watch viz-options ::keep-steps))
 
 ;;; ## Entry point
 
-(go-loop []
-  (when-let [command (<! from-viz)]
-    (case command
-      :toggle-run (swap! sim-options update :go? not)
-      :sim-step (swap! sim-options update :force-n-steps inc))
-    (recur)))
+(add-watch steps ::recalculate-selection
+           (fn [_ _ _ steps]
+             (swap! selection
+                    (fn [sel]
+                      (assoc sel :model-id
+                             (:model-id
+                              (nth steps (:dt sel))))))))
 
-(add-watch steps-c :simulation-change
-           (fn [_ _ _ ch] ;; stream the simulation steps into the sliding history buffer
-             (put! into-viz [:on-model-changed])
-             (go-loop []
-               (when-let [x* (<! ch)]
-                 (let [x (-> (<! (proxy/model-proxy x*))
-                             viz/init-caches)
-                       keep-steps (:keep-steps @viz-options)
-                       [kept dropped] (split-at keep-steps (cons x @model-steps))]
-                   (reset! model-steps kept)
-                   (mapv proxy/release! dropped))
-                 (recur)))))
+(let [subscription-data (atom nil)]
+  (add-watch into-journal ::subscribe-to-steps
+             (fn [_ _ _ into-j]
+               (swap! subscription-data
+                      (fn [sd]
+                        (when sd
+                          (unsubscribe! sd))
+                        (subscribe-to-steps! into-j))))))
 
-(defn main-pane [world-pane model-steps selection viz-options into-viz-mult
-                 from-viz]
+;;; ## Components
+
+(defn main-pane [world-pane sim-options]
   [:div
-   [viz/viz-timeline model-steps selection viz-options]
+   [viz/viz-timeline steps selection viz-options]
    [:div.row
     [:div.col-sm-3.col-lg-2
      [world-pane]]
     [:div.col-sm-9.col-lg-10
-     [viz/viz-canvas {:tabIndex 1} model-steps selection viz-options
-      into-viz-mult from-viz]]]])
+     [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options into-viz-mult
+      sim-options into-journal]]]])
 
 (defn comportexviz-app
-  [model-tab world-pane into-sim]
-  (let [m (fn [] [main-pane world-pane model-steps selection viz-options
-                  into-viz-mult from-viz])]
+  [model-tab world-pane sim-options into-sim]
+  (let [m (fn [] [main-pane world-pane sim-options])]
     [cui/comportexviz-app model-tab m sim-options viz-options selection
-     model-steps viz/state-colors into-viz into-sim]))
+     steps step-template viz/state-colors into-viz into-sim into-journal]))
 
-(defn selected-model-step
+;;; ## Exported helpers
+
+(defn selected-step
   []
-  (nth @model-steps (:dt @selection) nil))
+  (nth @steps (:dt @selection) nil))

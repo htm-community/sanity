@@ -8,7 +8,8 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -20,10 +21,14 @@
   (atom {:input-stream :directional-steps-1d
          :n-regions 1}))
 
-(def into-sim
+(def world-c
   (atom nil))
 
-(def world-c
+(def sim-options
+  (atom (assoc default-sim-options
+               :go? true)))
+
+(def into-sim
   (atom nil))
 
 (def model-info
@@ -91,8 +96,8 @@
 
 (defn world-pane
   []
-  (when-let [htm (main/selected-model-step)]
-    (let [in-value (:value (first (core/input-seq htm)))
+  (when-let [step (main/selected-step)]
+    (let [in-value (first (:input-values step))
           model-id (::model-id (meta in-value))
           {:keys [patterns mixed? xy?]} (model-info model-id)
           currs (pattern-index-map in-value mixed? model-id)]
@@ -113,10 +118,10 @@
                (str " (" (first in-value) ")"))]])]]
        [resizing-canvas {:style {:width "100%"
                                  :height "300px"}}
-        [main/model-steps main/selection]
+        [main/selection]
         (fn [ctx]
-          (let [htm (main/selected-model-step)
-                in-value (:value (first (core/input-seq htm)))
+          (let [step (main/selected-step)
+                in-value (first (:input-values step))
                 model-id (::model-id (meta in-value))
                 {:keys [patterns mixed? xy?]} (model-info model-id)
                 currs (pattern-index-map in-value mixed? model-id)]
@@ -132,8 +137,8 @@
 
 (defn set-model!
   []
+  (helpers/close-and-reset! main/into-journal (async/chan))
   (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/steps-c (async/chan))
 
   (let [{:keys [input-stream n-regions]} @config
         {:keys [model-fn world-fn xy?]} (model-info input-stream)]
@@ -141,11 +146,11 @@
     (swap! main/viz-options assoc-in [:drawing :display-mode]
            (if (= input-stream :isolated-2d) :two-d :one-d))
     (with-ui-loading-message
-      (simulation/simulate-onto-chan! @main/steps-c
-                                      (model-fn n-regions)
-                                      @world-c
-                                      main/sim-options
-                                      @into-sim))))
+      (server/init (model-fn n-regions)
+                   @world-c
+                   @main/into-journal
+                   @into-sim
+                   sim-options))))
 
 (def config-template
   [:div.form-horizontal
@@ -227,6 +232,6 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
-                  (dom/getElement "comportexviz-app"))
-  (swap! main/sim-options assoc :go? true))
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
+                  (dom/getElement "comportexviz-app")))

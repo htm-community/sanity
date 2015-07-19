@@ -9,12 +9,13 @@
             [clojure.string :as str]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
-            [comportexviz.simulation.browser :as simulation]
+            [comportexviz.server.browser :as server]
+            [comportexviz.server.simulation :refer [default-sim-options]]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [cljs.core.async :as async :refer [<! timeout]])
+            [cljs.core.async :as async :refer [<! timeout put!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
@@ -79,6 +80,10 @@ fox eat something.
 (def world-c
   (async/chan world-buffer
               (map (util/keep-history-middleware 100 :word :history))))
+
+(def sim-options
+  (atom (assoc default-sim-options
+               :go? true)))
 
 (def into-sim
   (atom nil))
@@ -153,9 +158,17 @@ fox eat something.
 (defn world-pane
   []
   (let [show-predictions (atom false)
-        predictions-cache (atom {})]
+        predictions-cache (atom {})
+        selected-htm (atom nil)]
+    (add-watch main/selection ::fetch-selected-htm
+               (fn [_ _ _ sel]
+                 (when-let [model-id (:model-id sel)]
+                   (let [out-c (async/chan)]
+                     (put! @main/into-journal [:get-model model-id out-c])
+                     (go
+                       (reset! selected-htm (<! out-c)))))))
     (fn []
-      (when-let [htm (main/selected-model-step)]
+      (when-let [htm @selected-htm]
         (let [in-value (:value (first (core/input-seq htm)))]
           [:div
            [:p.muted [:small "Input on selected timestep."]]
@@ -216,7 +229,7 @@ fox eat something.
 (defn set-model!
   []
   (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/steps-c (async/chan))
+  (helpers/close-and-reset! main/into-journal (async/chan))
 
   (let [n-regions (:n-regions @config)
         spec (case (:spec-choice @config)
@@ -237,11 +250,11 @@ fox eat something.
       (reset! model (core/regions-in-series
                      core/sensory-region inp n-regions
                      (list* spec (repeat (merge spec higher-level-spec-diff)))))
-      (simulation/simulate-onto-chan! @main/steps-c
-                                      model
-                                      world-c
-                                      main/sim-options
-                                      @into-sim)
+      (server/init model
+                   world-c
+                   @main/into-journal
+                   @into-sim
+                   sim-options)
       (swap! config assoc :have-model? true))))
 
 (def config-template
@@ -350,7 +363,7 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
+                   into-sim]
                   (dom/getElement "comportexviz-app"))
-  (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (swap! main/sim-options assoc :go? true))
+  (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d))
