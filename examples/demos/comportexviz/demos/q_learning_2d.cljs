@@ -4,10 +4,10 @@
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [comportexviz.demos.q-learning-1d :refer [q-learning-sub-pane]]
             [comportexviz.main :as main]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.server.browser :as server]
-            [comportexviz.server.simulation :refer [default-sim-options]]
+            [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -23,9 +23,6 @@
 
 (def world-c
   (async/chan (async/buffer 1)))
-
-(def sim-options
-  (atom default-sim-options))
 
 (def into-sim
   (atom nil))
@@ -151,8 +148,8 @@
 
 (defn set-model!
   []
-  (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/into-journal (async/chan))
+  (utilv/close-and-reset! into-sim (async/chan))
+  (utilv/close-and-reset! main/into-journal (async/chan))
 
   (with-ui-loading-message
     (reset! model (demo/make-model))
@@ -160,7 +157,6 @@
                  world-c
                  @main/into-journal
                  @into-sim
-                 sim-options
                  raw-models-c)))
 
 (def config-template
@@ -224,8 +220,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
-                   into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!)

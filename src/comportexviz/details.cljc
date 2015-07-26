@@ -3,6 +3,11 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]))
 
+(defn to-fixed
+  [n digits]
+  #?(:cljs (.toFixed n digits)
+     :clj (format (str "%." digits "f") n)))
+
 (defn detail-text
   [htm
    prior-htm
@@ -71,7 +76,7 @@
               (for [[id p] (sort syns)]
                 (str "  " id
                      (if (>= p ff-pcon) " :=> " " :.: ")
-                     (.toFixed p 2)
+                     (to-fixed p 2)
                      (if (contains? sig-bits id) " S")
                      (if (contains? bits id)
                        (str " A "
@@ -93,7 +98,7 @@
                  (for [[id p] (sort syns)]
                    (str "  " id
                         (if (>= p d-pcon) " :=> " " :.: ")
-                        (.toFixed p 2)
+                        (to-fixed p 2)
                         (if (contains? d-lc-bits id) " L"
                             (if (contains? d-bits id) " A"))))])
               ])

@@ -7,7 +7,9 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
+            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.util :as utilv :refer [tap-c]]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
@@ -345,7 +347,7 @@
 
   (let [[sel ff-synapses] ff-synapses-response
         {:keys [model-id]} sel
-        dt (helpers/index-of steps #(= model-id (:model-id %)))]
+        dt (utilv/index-of steps #(= model-id (:model-id %)))]
     (doseq [[[rgn-id lyr-id col] synapses] ff-synapses
             :let [this-lay (get-in r-lays [rgn-id lyr-id])
                   [this-x this-y] (element-xy this-lay col dt)]]
@@ -439,7 +441,7 @@
   (let [[sel cell-segments] cell-segments-response
         {sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg,
          model-id :model-id} sel
-        dt (helpers/index-of steps #(= model-id (:model-id %)))]
+        dt (utilv/index-of steps #(= model-id (:model-id %)))]
     (when (and dt col)
       (let [lay (get-in r-lays [sel-rgn sel-lyr])
             n-segs-by-cell (->> cell-segments
@@ -912,23 +914,25 @@
           (init-layouts step-template @viz-options)))
 
 (defn fetch-ff-synapses!
-  [into-journal ff-synapses-response sel opts]
-  (let [out-c (async/chan)]
-    (put! @into-journal [:get-ff-synapses sel opts out-c])
+  [into-journal ff-synapses-response sel opts channel-proxies]
+  (let [response-c (async/chan)]
+    (put! @into-journal [:get-ff-synapses sel opts
+                         (channel-proxy/from-chan channel-proxies response-c)])
     (go
       ;; dt may be outdated at this point
-      (reset! ff-synapses-response [(dissoc sel :dt) (<! out-c)]))))
+      (reset! ff-synapses-response [(dissoc sel :dt) (<! response-c)]))))
 
 (defn fetch-cell-segments!
-  [into-journal cell-segments-response sel opts]
-  (let [out-c (async/chan)]
-    (put! @into-journal [:get-cell-segments sel opts out-c])
+  [into-journal cell-segments-response sel opts channel-proxies]
+  (let [response-c (async/chan)]
+    (put! @into-journal [:get-cell-segments sel opts
+                         (channel-proxy/from-chan channel-proxies response-c)])
     (go
       ;; dt may be outdated at this point
-      (reset! cell-segments-response [(dissoc sel :dt) (<! out-c)]))))
+      (reset! cell-segments-response [(dissoc sel :dt) (<! response-c)]))))
 
 (defn fetch-inbits-cols-onscreen!
-  [into-journal steps-data steps step-template opts layouts]
+  [into-journal steps-data steps step-template opts layouts channel-proxies]
   (let [paths (input-and-layer-paths step-template)
         path->ids-onscreen (zipmap paths (->> paths
                                               (map (fn [path]
@@ -939,22 +943,20 @@
                   response-c (async/chan)]]
       (put! @into-journal
             [:get-inbits-cols-subset model-id opts path->ids-onscreen
-             response-c])
+             (channel-proxy/from-chan channel-proxies response-c)])
       (go
         (swap! steps-data assoc-in [step :inbits-cols-onscreen]
                (<! response-c))))))
 
 (defn fetch-inbits-cols!
-  [into-journal steps-data steps opts]
+  [into-journal steps-data steps opts channel-proxies]
   (doseq [step steps
           :let [model-id (:model-id step)
                 response-c (async/chan)]]
-    (put! @into-journal
-          [:get-inbits-cols model-id opts response-c])
-
+    (put! @into-journal [:get-inbits-cols model-id opts
+                         (channel-proxy/from-chan channel-proxies response-c)])
     (go
-      (swap! steps-data assoc-in [step :inbits-cols]
-             (<! response-c)))))
+      (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
 
 ;; A "viz-step" is a step with viz-canvas-specific data added.
 (defn make-viz-step
@@ -973,8 +975,8 @@
        (map lay/scroll-position)))
 
 (defn viz-canvas
-  [_ steps selection step-template viz-options commands-in-mult sim-options
-   into-journal]
+  [_ steps selection step-template viz-options commands-in-mult into-sim
+   into-journal channel-proxies]
   (let [steps-data (atom {})
         ff-synapses-response (atom nil)
         cell-segments-response (atom nil)
@@ -1036,15 +1038,15 @@
                                              :model-id (:model-id
                                                         (nth @steps dt)))))))
           :step-forward (if (zero? (:dt @selection))
-                          (when sim-options
-                            (swap! sim-options update :force-n-steps inc))
+                          (when @into-sim
+                            (put! @into-sim [:step]))
                           (swap! selection
                                  (fn [sel]
-                                    (let [dt (max (dec (:dt sel)) 0)]
-                                      (assoc sel
-                                             :dt dt
-                                             :model-id (:model-id
-                                                        (nth @steps dt)))))))
+                                   (let [dt (max (dec (:dt sel)) 0)]
+                                     (assoc sel
+                                            :dt dt
+                                            :model-id (:model-id
+                                                       (nth @steps dt)))))))
           :column-up (when-let [col (:col @selection)]
                        (let [sel-rgn (:region @selection)
                              sel-lyr (:layer @selection)
@@ -1078,8 +1080,8 @@
                        (if apply-to-all?
                          (scroll-all-layers! viz-layouts viz-options false)
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
-          :toggle-run (when sim-options
-                        (swap! sim-options update :force-n-steps inc)))
+          :toggle-run (when @into-sim
+                        (put! @into-sim [:toggle])))
         (recur)))
 
     (go-loop []
@@ -1108,17 +1110,20 @@
                                 ;; remove old steps
                                 (select-keys xs)))
                        (fetch-inbits-cols! into-journal steps-data new-steps
-                                           @viz-options)
+                                           @viz-options channel-proxies)
                        (fetch-inbits-cols-onscreen! into-journal steps-data
                                                     new-steps @step-template
                                                     @viz-options
-                                                    @viz-layouts))))
+                                                    @viz-layouts
+                                                    channel-proxies))))
         (add-watch viz-options ::inbits-cols
                    (fn [_ _ _ opts]
-                     (fetch-inbits-cols! into-journal steps-data @steps opts)
+                     (fetch-inbits-cols! into-journal steps-data @steps opts
+                                         channel-proxies)
                      (fetch-inbits-cols-onscreen! into-journal steps-data @steps
                                                   @step-template @viz-options
-                                                  @viz-layouts)))
+                                                  @viz-layouts
+                                                  channel-proxies)))
         (add-watch viz-layouts ::inbits-cols-onscreen
                    (fn [_ _ prev layouts]
                      (let [paths (input-and-layer-paths layouts)]
@@ -1127,7 +1132,8 @@
                                         (scroll-positions prev paths)))
                          (fetch-inbits-cols-onscreen! into-journal steps-data
                                                       @steps @step-template
-                                                      @viz-options layouts)))))
+                                                      @viz-options layouts
+                                                      channel-proxies)))))
         (add-watch step-template ::absorb-step-template
                    (fn [_ _ _ template]
                      (absorb-step-template template viz-options viz-layouts)))
@@ -1144,15 +1150,15 @@
                    (fn [_ _ _ opts]
                      (when @into-journal
                        (fetch-ff-synapses! into-journal ff-synapses-response
-                                           @selection opts)
+                                           @selection opts channel-proxies)
                        (fetch-cell-segments! into-journal cell-segments-response
-                                            @selection opts))))
+                                            @selection opts channel-proxies))))
         (add-watch selection ::syns-segments
                    (fn [_ _ _ sel]
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
-                                         @viz-options)
+                                         @viz-options channel-proxies)
                      (fetch-cell-segments! into-journal cell-segments-response
-                                           sel @viz-options))))
+                                           sel @viz-options channel-proxies))))
 
       :component-will-unmount
       (fn [_]

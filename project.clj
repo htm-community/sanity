@@ -9,11 +9,18 @@
                  [org.nfrac/comportex "0.0.9-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
-                 [reagent-forms "0.5.1"]]
+                 [reagent-forms "0.5.1"]
+                 [ring/ring-core "1.4.0"]
+                 [compojure "1.4.0"]
+                 [info.sunng/ring-jetty9-adapter "0.8.6"]
+                 [com.cognitect/transit-clj "0.8.271"]
+                 [com.cognitect/transit-cljs "0.8.215"]]
 
   :plugins [[lein-cljsbuild "1.0.6"]
-            [com.cemerick/austin "0.1.6"]]
-  :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}
+            [com.cemerick/austin "0.1.6"]
+            [org.clojure/tools.nrepl "0.2.10"]]
+  :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]
+                 :init-ns comportexviz.launchpad}
 
   :source-paths ["src"]
 
