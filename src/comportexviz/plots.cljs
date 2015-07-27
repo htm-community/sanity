@@ -3,6 +3,7 @@
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.helpers :refer [canvas]]
+            [comportexviz.server.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [clojure.string :as str]
@@ -126,7 +127,7 @@
     ))
 
 (defn ts-freqs-plot-cmp
-  [steps region-key layer-id series-colors into-journal]
+  [steps region-key layer-id series-colors into-journal channel-proxies]
   (let [series-keys [:active :active-predicted :predicted]
         step-freqs (atom nil)
         agg-freqs-ts (aggregating-ts step-freqs 200)]
@@ -134,8 +135,11 @@
                (fn [_ _ _ v]
                  (when-let [model-id (:model-id (first v))]
                    (let [response-c (async/chan)]
-                     (put! @into-journal [:get-column-state-freqs model-id
-                                          region-key layer-id response-c])
+                     (put! @into-journal
+                           [:get-column-state-freqs model-id
+                            region-key layer-id
+                            (channel-proxy/from-chan channel-proxies
+                                                     response-c)])
                      (go
                        (reset! step-freqs (<! response-c)))))))
     (fn [_ _ _ _]
@@ -252,18 +256,20 @@
     (c/restore ctx)))
 
 (defn cell-excitation-plot-cmp
-  [_ selection _ _ _ into-journal]
+  [_ selection _ _ _ into-journal channel-proxies]
   (let [excitation-data (atom {})]
     (add-watch selection :fetch-excitation-data
                (fn [_ _ _ sel]
                  (let [{:keys [model-id region layer col]} sel
                        response-c (async/chan)]
-                   (put! @into-journal [:get-cell-excitation-data
-                                        model-id region layer col response-c])
+                   (put! @into-journal
+                         [:get-cell-excitation-data model-id region layer col
+                          (channel-proxy/from-chan channel-proxies
+                                                   response-c)])
                    (go
                      (reset! excitation-data (<! response-c))))))
 
-    (fn [step-template _ series-colors region-key layer-id _]
+    (fn [step-template _ series-colors region-key layer-id _ _]
       [canvas
        {}
        300

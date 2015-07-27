@@ -9,12 +9,12 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.server.browser :as server]
-            [comportexviz.server.simulation :refer [default-sim-options]]
+            [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
-            [cljs.core.async :as async])
+            [cljs.core.async :as async :refer [put!]])
   (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
@@ -23,10 +23,6 @@
 
 (def world-c
   (atom nil))
-
-(def sim-options
-  (atom (assoc default-sim-options
-               :go? true)))
 
 (def into-sim
   (atom nil))
@@ -137,20 +133,20 @@
 
 (defn set-model!
   []
-  (helpers/close-and-reset! main/into-journal (async/chan))
-  (helpers/close-and-reset! into-sim (async/chan))
+  (utilv/close-and-reset! main/into-journal (async/chan))
+  (utilv/close-and-reset! into-sim (async/chan))
+  (put! @into-sim [:run])
 
   (let [{:keys [input-stream n-regions]} @config
         {:keys [model-fn world-fn xy?]} (model-info input-stream)]
-    (helpers/close-and-reset! world-c (make-world-chan world-fn input-stream))
+    (utilv/close-and-reset! world-c (make-world-chan world-fn input-stream))
     (swap! main/viz-options assoc-in [:drawing :display-mode]
            (if (= input-stream :isolated-2d) :two-d :one-d))
     (with-ui-loading-message
       (server/init (model-fn n-regions)
                    @world-c
                    @main/into-journal
-                   @into-sim
-                   sim-options))))
+                   @into-sim))))
 
 (def config-template
   [:div.form-horizontal
@@ -232,6 +228,5 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
-                   into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app")))

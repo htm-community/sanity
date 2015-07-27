@@ -5,7 +5,7 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
             [comportexviz.server.browser :as server]
-            [comportexviz.server.simulation :refer [default-sim-options]]
+            [comportexviz.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
@@ -25,9 +25,6 @@
 (def world-c
   (async/chan world-buffer
               (map (util/keep-history-middleware 100 :word :history))))
-
-(def sim-options
-  (atom default-sim-options))
 
 (def into-sim
   (atom nil))
@@ -76,8 +73,8 @@
 
 (defn set-model!
   []
-  (helpers/close-and-reset! into-sim (async/chan))
-  (helpers/close-and-reset! main/into-journal (async/chan))
+  (utilv/close-and-reset! into-sim (async/chan))
+  (utilv/close-and-reset! main/into-journal (async/chan))
 
   (let [n-regions (:n-regions @config)
         encoder (case (:encoder @config)
@@ -88,8 +85,7 @@
       (server/init model
                    world-c
                    @main/into-journal
-                   @into-sim
-                   sim-options))))
+                   @into-sim))))
 
 (defn send-text!
   []
@@ -160,7 +156,6 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
-                   into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
   (set-model!))

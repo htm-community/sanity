@@ -2,11 +2,11 @@
   (:require [org.nfrac.comportex.demos.second-level-motor :as demo]
             [org.nfrac.comportex.core :as core]
             [comportexviz.main :as main]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas tap-c]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.demos.sensorimotor-1d :refer [draw-eye]]
             [comportexviz.server.browser :as server]
-            [comportexviz.server.simulation :refer [default-sim-options]]
+            [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -22,9 +22,6 @@
 (def world-c (async/chan))
 
 (def control-c (async/chan))
-
-(def sim-options
-  (atom default-sim-options))
 
 (def into-sim (atom nil))
 
@@ -144,8 +141,8 @@
 (defn set-model!
   []
   (let [] ;; TODO: config
-    (helpers/close-and-reset! into-sim (async/chan))
-    (helpers/close-and-reset! main/into-journal (async/chan))
+    (utilv/close-and-reset! into-sim (async/chan))
+    (utilv/close-and-reset! main/into-journal (async/chan))
 
     (with-ui-loading-message
       (reset! model (demo/two-region-model))
@@ -153,7 +150,6 @@
                    world-c
                    @main/into-journal
                    @into-sim
-                   sim-options
                    raw-models-c))))
 
 (defn set-text!
@@ -221,8 +217,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane sim-options
-                   into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
 
   (set-model!)

@@ -9,6 +9,7 @@
             [cljs.reader]
             [comportexviz.helpers :as helpers]
             [comportexviz.plots :as plots]
+            [comportexviz.server.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
@@ -33,7 +34,7 @@
     :else :number))
 
 (defn parameters-tab
-  [step-template _ into-sim]
+  [step-template _ into-sim _]
 
   (add-watch step-template ::push-to-server
              (fn [_ _ oldv newv]
@@ -49,7 +50,7 @@
                        (put! @into-sim [:set-spec path new-spec])))))))
 
   (let [partypes (cljs.core/atom {})] ;; immutable cache
-    (fn [step-template selection into-sim]
+    (fn [step-template selection into-sim channel-proxies]
       [:div
        [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
@@ -123,7 +124,9 @@
 
                  (if @into-sim
                    {:on-click #(let [finished (async/chan)]
-                                 (put! @into-sim [:restart finished])
+                                 (put! @into-sim
+                                       [:restart (channel-proxy/from-chan
+                                                  channel-proxies finished)])
                                  (helpers/ui-loading-message-until finished))}
                    {:disabled "disabled"})
                  "Rebuild model"]
@@ -136,7 +139,7 @@
   )
 
 (defn ts-plots-tab
-  [steps step-template series-colors into-journal]
+  [steps step-template series-colors into-journal channel-proxies]
   [:div
    [:p.text-muted "Time series of cortical column activity."]
    [:div
@@ -147,12 +150,12 @@
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
          [plots/ts-freqs-plot-cmp steps region-key layer-id series-colors
-          into-journal]
+          into-journal channel-proxies]
          ]))]
    ])
 
 (defn cell-plots-tab
-  [step-template selection series-colors into-journal]
+  [step-template selection series-colors into-journal channel-proxies]
   (let [show? (atom false)]
     (fn [_ _ _]
       [:div
@@ -172,20 +175,21 @@
             [:fieldset
              [:legend (str (name region-key) " " (name layer-id))]
              [plots/cell-excitation-plot-cmp step-template selection series-colors
-              region-key layer-id into-journal]
+              region-key layer-id into-journal channel-proxies]
              ]))]])))
 
 (defn fetch-details-text!
-  [into-journal text-response sel]
+  [into-journal text-response sel channel-proxies]
   (when (:col sel)
     (let [response-c (async/chan)]
-      (put! @into-journal
-            [:get-details-text sel response-c])
+      (put! @into-journal [:get-details-text sel
+                           (channel-proxy/from-chan channel-proxies
+                                                    response-c)])
       (go
         (reset! text-response [sel (<! response-c)])))))
 
 (defn details-tab
-  [selection into-journal]
+  [selection into-journal channel-proxies]
   (let [text-response (atom [nil ""])]
     (reagent/create-class
      {:component-will-mount
@@ -193,9 +197,11 @@
         (add-watch selection :fetch-details-text
                    (fn [_ _ _ sel]
                      (reset! text-response [sel ""])
-                     (fetch-details-text! into-journal text-response sel)))
+                     (fetch-details-text! into-journal text-response sel
+                                          channel-proxies)))
 
-        (fetch-details-text! into-journal text-response @selection))
+        (fetch-details-text! into-journal text-response @selection
+                             channel-proxies))
 
       :component-will-unmount
       (fn [_]
@@ -215,8 +221,12 @@
          [:button.btn.btn-warning.btn-block
           {:on-click (fn [e]
                        (let [response-c (async/chan)]
-                         (put! @into-journal [:get-model (:model-id @selection)
-                                              response-c])
+                         (put! @into-journal
+                               [:get-model
+                                (:model-id @selection)
+                                (channel-proxy/from-chan channel-proxies
+                                                         response-c)
+                                true])
                          (go
                            (println (<! response-c))))
                        (.preventDefault e))}
@@ -318,7 +328,7 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [sim-options steps show-help viz-options viz-expanded into-viz]
+  [steps show-help viz-options viz-expanded into-viz into-sim channel-proxies]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -326,7 +336,25 @@
         has-sorted? (atom false)
         has-watched? (atom false)
         apply-to-all? (atom true)
-        run-start (atom {})]
+        run-start (atom {})
+        going? (atom false)
+        subscriber-c (async/chan)]
+
+    (let [m [:subscribe-to-status (channel-proxy/from-chan channel-proxies
+                                                           subscriber-c)]]
+      (add-watch into-sim ::subscribe-to-status
+                 (fn [_ _ _ c]
+                   (when c
+                     (put! c m))))
+      (when @into-sim
+        (put! @into-sim m)))
+
+    (go-loop []
+      (when-let [[g?] (<! subscriber-c)]
+        ;; Avoid passing false directly through a channel.
+        ;; It foils every `when-let` on its way.
+        (reset! going? g?)
+        (recur)))
 
     ;; initial start data
     (add-watch steps ::gather-start-data
@@ -335,10 +363,10 @@
                  (gather-start-data! run-start xs)))
 
     ;; subsequent start data
-    (add-watch sim-options ::gather-start-data
-               (fn [_ _ oldv newv]
-                 (when (and (not (:go? oldv))
-                            (:go? newv))
+    (add-watch going? ::gather-start-data
+               (fn [_ _ oldv go?]
+                 (when (and (not oldv)
+                            go?)
                    (when (first @steps)
                      (gather-start-data! run-start @steps)))))
 
@@ -370,17 +398,17 @@
             [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step forward"]]]
           ;; pause button
-          [:li (if-not (:go? @sim-options) {:class "hidden"})
+          [:li (when-not @going? {:class "hidden"})
            [:button.btn.btn-default.navbar-btn
             {:type :button
-             :on-click #(swap! sim-options assoc :go? false)
+             :on-click #(put! @into-sim [:pause])
              :style {:width "5em"}}
             "Pause"]]
           ;; run button
-          [:li (if (:go? @sim-options) {:class "hidden"})
+          [:li (when @going? {:class "hidden"})
            [:button.btn.btn-primary.navbar-btn
             {:type :button
-             :on-click #(swap! sim-options assoc :go? true)
+             :on-click #(put! @into-sim [:run])
              :style {:width "5em"}}
             "Run"]]
           ;; display mode
@@ -504,7 +532,7 @@
          ;; right-aligned items
          [:ul.nav.navbar-nav.navbar-right
           ;; sim rate
-          [:li (if-not (:go? @sim-options) {:class "hidden"})
+          [:li (if-not @going? {:class "hidden"})
            [:p.navbar-text (str (.toFixed (sim-rate (first @steps) @run-start)
                                           1) "/sec.")]]
           ;; sim / anim options
@@ -516,31 +544,31 @@
            [:ul.dropdown-menu {:role "menu"}
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! sim-options assoc :step-ms 0)
+                                  (put! @into-sim [:set-step-ms 0])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "max sim speed"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! sim-options assoc :step-ms 0)
+                                  (put! @into-sim [:set-step-ms 0])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 100))}
                   "max sim speed, draw every 100 steps"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! sim-options assoc :step-ms 250)
+                                  (put! @into-sim [:set-step-ms 250])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 4 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! sim-options assoc :step-ms 500)
+                                  (put! @into-sim [:set-step-ms 500])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 2 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (swap! sim-options assoc :step-ms 1000)
+                                  (put! @into-sim [:set-step-ms 1000])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 1 step/sec."]]]]
@@ -628,13 +656,14 @@
 
 
 (defn comportexviz-app
-  [_ _ _ _ _ _ _ _ _]
+  [_ _ _ _ _ _ _ _ _ _]
   (let [show-help (atom false)
         viz-expanded (atom false)]
-    (fn [model-tab main-pane sim-options viz-options selection steps
-         step-template series-colors into-viz into-sim into-journal]
+    (fn [model-tab main-pane viz-options selection steps step-template
+         series-colors into-viz into-sim into-journal channel-proxies]
      [:div
-      [navbar sim-options steps show-help viz-options viz-expanded into-viz]
+      [navbar steps show-help viz-options viz-expanded into-viz into-sim
+       channel-proxies]
       [help-block show-help]
       [:div.container-fluid
        [:div.row
@@ -644,10 +673,12 @@
          [tabs
           [[:model [model-tab]]
            [:drawing [bind-fields viz-options-template viz-options]]
-           [:params [parameters-tab step-template selection into-sim]]
-           [:ts-plots [ts-plots-tab steps step-template series-colors into-journal]]
+           [:params [parameters-tab step-template selection into-sim
+                     channel-proxies]]
+           [:ts-plots [ts-plots-tab steps step-template series-colors
+                       into-journal channel-proxies]]
            [:cell-plots [cell-plots-tab step-template selection series-colors
-                         into-journal]]
-           [:details [details-tab selection into-journal]]]]
+                         into-journal channel-proxies]]
+           [:details [details-tab selection into-journal channel-proxies]]]]
          ]]
        [:div#loading-message "loading"]]])))

@@ -2,7 +2,7 @@
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [comportexviz.controls-ui :as cui]
-            [comportexviz.helpers :refer [tap-c]]
+            [comportexviz.server.channel-proxy :as channel-proxy]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -13,6 +13,7 @@
 ;;; ## Journal data
 
 (def into-journal (atom nil))
+(def channel-proxies (channel-proxy/registry))
 
 ;;; ## Viz data
 
@@ -28,7 +29,9 @@
 (defn subscribe-to-steps! [into-j]
   (let [steps-c (async/chan)
         response-c (async/chan)]
-    (put! into-j [:subscribe (:keep-steps @viz-options) steps-c response-c])
+    (put! into-j [:subscribe (:keep-steps @viz-options)
+                  (channel-proxy/from-chan channel-proxies steps-c)
+                  (channel-proxy/from-chan channel-proxies response-c)])
     (go
       ;; Get the template before getting any steps.
       (reset! step-template (<! response-c))
@@ -79,21 +82,22 @@
 
 ;;; ## Components
 
-(defn main-pane [world-pane sim-options]
+(defn main-pane [world-pane into-sim]
   [:div
    [viz/viz-timeline steps selection viz-options]
    [:div.row
     [:div.col-sm-3.col-lg-2
      [world-pane]]
     [:div.col-sm-9.col-lg-10
-     [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options into-viz-mult
-      sim-options into-journal]]]])
+     [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options
+      into-viz-mult into-sim into-journal channel-proxies]]]])
 
 (defn comportexviz-app
-  [model-tab world-pane sim-options into-sim]
-  (let [m (fn [] [main-pane world-pane sim-options])]
-    [cui/comportexviz-app model-tab m sim-options viz-options selection
-     steps step-template viz/state-colors into-viz into-sim into-journal]))
+  [model-tab world-pane into-sim]
+  (let [m (fn [] [main-pane world-pane into-sim])]
+    [cui/comportexviz-app model-tab m viz-options selection
+     steps step-template viz/state-colors into-viz into-sim into-journal
+     channel-proxies]))
 
 ;;; ## Exported helpers
 
