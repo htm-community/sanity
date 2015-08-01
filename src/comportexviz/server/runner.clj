@@ -5,7 +5,7 @@
             [compojure.core :refer [defroutes GET]]
             [compojure.route :as route]
             [org.nfrac.comportex.core]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.server.simulation :as simulation]
             [comportexviz.server.journal :as journal]
             [comportexviz.util :as utilv])

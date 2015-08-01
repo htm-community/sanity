@@ -1,6 +1,6 @@
 (ns comportexviz.demos.runner
   (:require [comportexviz.main :as main]
-            [comportexviz.server.remote :as server]
+            [comportexviz.bridge.remote :as bridge]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [cljs.core.async :as async])
@@ -17,7 +17,7 @@
   (reset! main/into-journal (async/chan))
 
   (let [into-sim (atom (async/chan))]
-    (server/init (str "ws://" js/location.host "/ws/")
+    (bridge/init (str "ws://" js/location.host "/ws/")
                  @main/into-journal
                  @into-sim
                  main/channel-proxies)

@@ -1,7 +1,7 @@
 (ns comportexviz.server.journal
   (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
                :cljs [cljs.core.async :as async :refer [put! <!]])
-            [comportexviz.details]
+            [comportexviz.server.details]
             [comportexviz.server.data :as data]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
@@ -107,7 +107,7 @@
                   id (:model-id sel)]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (comportexviz.details/detail-text htm prev-htm sel)
+                      (comportexviz.server.details/detail-text htm prev-htm sel)
                       (id-missing-response id steps-offset))))
 
             :get-model

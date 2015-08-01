@@ -8,12 +8,11 @@
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.util :as utilv :refer [tap-c]]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
-            [clojure.set :as set]
             [cljs.core.async :as async :refer [<! put! chan]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [comportexviz.macros :refer [with-cache]]))

@@ -1,4 +1,4 @@
-(ns comportexviz.launchpad
+(ns comportexviz.server.launchpad
   (:require [clojure.core.async :as async]
             [comportexviz.server.runner :as runner]))
 

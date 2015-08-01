@@ -9,7 +9,7 @@
             [cljs.reader]
             [comportexviz.helpers :as helpers]
             [comportexviz.plots :as plots]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 

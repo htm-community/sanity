@@ -3,7 +3,7 @@
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.helpers :refer [canvas]]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [clojure.string :as str]

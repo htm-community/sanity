@@ -1,7 +1,6 @@
 (ns comportexviz.server.simulation
   (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
                :cljs [cljs.core.async :as async :refer [put! <!]])
-            [comportexviz.details]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util])

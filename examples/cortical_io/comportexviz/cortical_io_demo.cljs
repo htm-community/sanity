@@ -9,7 +9,7 @@
             [clojure.string :as str]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
-            [comportexviz.server.browser :as server]
+            [comportexviz.bridge.browser :as server]
             [comportexviz.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]

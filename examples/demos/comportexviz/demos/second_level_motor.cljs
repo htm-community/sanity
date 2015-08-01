@@ -5,7 +5,7 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.demos.sensorimotor-1d :refer [draw-eye]]
-            [comportexviz.server.browser :as server]
+            [comportexviz.bridge.browser :as server]
             [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]

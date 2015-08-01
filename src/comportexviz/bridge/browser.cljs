@@ -1,4 +1,4 @@
-(ns comportexviz.server.browser
+(ns comportexviz.bridge.browser
   (:require [cljs.core.async :as async]
             [comportexviz.server.simulation :as simulation]
             [comportexviz.server.journal :as journal]

@@ -1,4 +1,4 @@
-(ns comportexviz.server.channel-proxy
+(ns comportexviz.bridge.channel-proxy
   (:require #?(:clj [clojure.core.async :as async]
                :cljs [cljs.core.async :as async])
             #?(:clj
@@ -91,7 +91,7 @@
 
 ;;; ## Transit helpers
 
-(def channel-proxy-tag "comportexviz.server.channel-proxy.ChannelProxy")
+(def channel-proxy-tag "ChannelProxy")
 
 (def write-handler
   {ChannelProxy (transit/write-handler (fn [_]
