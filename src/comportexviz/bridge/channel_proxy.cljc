@@ -13,6 +13,10 @@
      (reify cljs.core/IDeref
        (-deref [_] val))))
 
+#?(:clj
+   (defn random-uuid []
+     (java.util.UUID/randomUUID)))
+
 (deftype ImpersonateChannel [fput fclose ftake]
   p/ReadPort
   (take! [_ _]
@@ -49,8 +53,6 @@
   (target-id [_]
     target-id))
 
-(def last-target-id (atom 24601))
-
 (defprotocol PChannelProxyFactory
   (from-chan [_ ch])
   (from-target [_ target-id]))
@@ -61,7 +63,7 @@
 (deftype ChannelProxyRegistry [target->proxy]
   PChannelProxyFactory
   (from-chan [this ch]
-    (register-chan this (swap! last-target-id inc) ch))
+    (register-chan this (random-uuid) ch))
   (from-target [_ target-id]
     (get @target->proxy target-id))
 
