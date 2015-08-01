@@ -259,11 +259,13 @@
                                                              (get-in opts [:distal-synapses :permanences])
                                                              (assoc :perm p))))))))]))}]))))
 
-(defn inbits-cols-data [htm prev-htm opts]
+(defn inbits-cols-data
+  [htm prev-htm path->ids opts]
   {:inputs (into
             {}
             (for [inp-id (core/input-keys htm)
-                  :let [inp (get-in htm [:inputs inp-id])
+                  :let [bits-subset (path->ids [:inputs inp-id])
+                        inp (get-in htm [:inputs inp-id])
                         ;; region this input feeds to, for predictions
                         ff-rgn-id (first (get-in htm [:fb-deps inp-id]))
                         ;; TODO offset if multiple inputs feeding to region
@@ -285,7 +287,9 @@
                [rgn-id (into
                         {}
                         (for [lyr-id (core/layers rgn)
-                              :let [lyr (get rgn lyr-id)
+                              :let [cols-subset (path->ids [:regions rgn-id
+                                                            lyr-id])
+                                    lyr (get rgn lyr-id)
                                     spec (p/params lyr)]]
                           [lyr-id (cond-> {}
                                     (get-in opts [:columns :overlaps])
@@ -315,6 +319,15 @@
                                                 (map #(min 1.0 (* 2 %)))
                                                 (zipmap (range))))
 
+                                    (get-in opts [:columns :n-segments])
+                                    (assoc :n-segments-columns-alpha
+                                           (->> cols-subset
+                                                (map #(count-segs-in-column
+                                                       (:distal-sg lyr)
+                                                       (p/layer-depth lyr) %))
+                                                (map #(min 1.0 (/ % 16.0)))
+                                                (zipmap cols-subset)))
+
                                     ;; Always include, needed for sorting.
                                     ;; Check [:columns :active] before drawing.
                                     true
@@ -338,34 +351,6 @@
                                                (get-in [:prior-distal-state
                                                         :distal-bits])
                                                empty?)))]))]))})
-
-(defn inbits-cols-data-subset
-  [htm path->ids opts]
-  {:inputs (into
-            {}
-            (for [inp-id (core/input-keys htm)
-                  :let [bits-subset (path->ids [:inputs inp-id])]]
-              [inp-id {}]))
-   :regions (into
-             {}
-             (for [rgn-id (core/region-keys htm)
-                   :let [rgn (get-in htm [:regions rgn-id])]]
-               [rgn-id (into
-                        {}
-                        (for [lyr-id (core/layers rgn)
-                              :let [cols-subset (path->ids [:regions rgn-id
-                                                            lyr-id])
-                                    lyr (get rgn lyr-id)
-                                    spec (p/params lyr)]]
-                          [lyr-id (cond-> {}
-                                    (get-in opts [:columns :n-segments])
-                                    (assoc :n-segments-columns-alpha
-                                           (->> cols-subset
-                                                (map #(count-segs-in-column
-                                                       (:distal-sg lyr)
-                                                       (p/layer-depth lyr) %))
-                                                (map #(min 1.0 (/ % 16.0)))
-                                                (zipmap cols-subset))))]))]))})
 
 (defn cell-excitation-data
   [htm prior-htm rgn-id lyr-id sel-col]

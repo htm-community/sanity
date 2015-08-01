@@ -29,7 +29,8 @@
     (go-loop []
       (let [msg (<! to-network-c)]
         (when (not (nil? msg))
-          (.send ws (transit-str msg))
+          (let [out (transit-str msg)]
+            (.send ws out))
           (recur))))
 
     (async/pipeline 10 to-network-c (map (fn [v] [:into-sim :put! v])) into-sim

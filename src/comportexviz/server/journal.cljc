@@ -8,6 +8,10 @@
             [org.nfrac.comportex.util :as util])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
+#?(:clj
+   (defn random-uuid []
+     (java.util.UUID/randomUUID)))
+
 (defn make-step
   [model id]
   {:model-id id
@@ -28,6 +32,7 @@
         model-steps (atom [])
         keep-steps (atom 0)
         subscriber-c (atom nil)
+        viewports (atom {})
         find-model (fn [id]
                      (when (number? id)
                        (let [i (- id @steps-offset)]
@@ -61,26 +66,31 @@
               (->> (data/step-template-data @current-model)
                    (put! response-c)))
 
+            :register-viewport
+            (let [[viewport response-c] xs]
+              (let [token (random-uuid)]
+                (swap! viewports assoc token viewport)
+                (put! response-c token)))
+
+            :unregister-viewport
+            (let [[token] xs]
+              (swap! viewports dissoc token))
+
             :set-keep-steps
             (let [[keep-n-steps] xs]
               (reset! keep-steps keep-n-steps))
 
             :get-inbits-cols
-            (let [[id opts response-c] xs]
+            (let [[id token response-c] xs
+                  [opts path->ids] (get @viewports token)]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (data/inbits-cols-data htm prev-htm opts)
-                      (id-missing-response id steps-offset))))
-
-            :get-inbits-cols-subset
-            (let [[id opts path->ids response-c] xs]
-              (put! response-c
-                    (if-let [htm (find-model id)]
-                      (data/inbits-cols-data-subset htm path->ids opts)
+                      (data/inbits-cols-data htm prev-htm path->ids opts)
                       (id-missing-response id steps-offset))))
 
             :get-ff-synapses
-            (let [[sel opts response-c] xs
+            (let [[sel token response-c] xs
+                  [opts] (get @viewports token)
                   id (:model-id sel)
                   to (get-in opts [:ff-synapses :to])]
               (put! response-c
@@ -93,7 +103,8 @@
                         {})))
 
             :get-cell-segments
-            (let [[sel opts response-c] xs
+            (let [[sel token response-c] xs
+                  [opts] (get @viewports token)
                   id (:model-id sel)]
               (put! response-c
                     (if (:col sel)

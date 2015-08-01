@@ -19,7 +19,7 @@
 
 (def blank-selection {:region nil
                       :layer nil
-                      :dt 0
+                      :dt nil
                       :col nil
                       :cell-seg nil
                       :model-id nil})
@@ -111,7 +111,7 @@
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
-(defn input-and-layer-paths
+(defn all-layout-paths
   [m]
   (let [input-paths (for [inp-id (keys (:inputs m))]
                       [:inputs inp-id])
@@ -120,7 +120,14 @@
                       [:regions rgn-id lyr-id])]
     (concat input-paths layer-paths)))
 
-(def all-layout-paths input-and-layer-paths)
+(defn map-layouts
+  ([f layouts]
+   (map-layouts f (all-layout-paths layouts)))
+  ([f layouts paths]
+   (->> paths
+        (map (fn [path]
+               (get-in layouts path)))
+        (map f))))
 
 (defn reset-layout-caches
   [m]
@@ -192,11 +199,10 @@
      (reset-layout-caches))))
 
 (defn update-dt-offsets!
-  [viz-layouts selection opts]
+  [viz-layouts sel-dt opts]
   (swap! viz-layouts
          (fn [m]
-           (let [sel-dt (:dt @selection)
-                 draw-steps (get-in opts [:drawing :draw-steps])
+           (let [draw-steps (get-in opts [:drawing :draw-steps])
                  dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
              (-> (reduce (fn [m path]
                            (update-in m path assoc-in [:layout :dt-offset] dt0))
@@ -739,8 +745,7 @@
                  :x cells-left :y label-top-px})
 
     (doseq [dt draw-dts
-            :let [{sc :cache inbits-cols :inbits-cols
-                   ic-onscreen :inbits-cols-onscreen} (nth viz-steps dt)
+            :let [{sc :cache inbits-cols :inbits-cols} (nth viz-steps dt)
                   {:keys [inputs regions]} inbits-cols]]
       ;; draw encoded inbits
       (doseq [[inp-id {:keys [active-bits pred-bits-alpha]}] inputs
@@ -765,18 +770,14 @@
         (doseq [[lyr-id {:keys [overlaps-columns-alpha
                                 boost-columns-alpha
                                 active-freq-columns-alpha
-
+                                n-segments-columns-alpha
                                 active-columns
                                 pred-columns
                                 tp-columns
                                 break?]}] rgn-data
                 :let [uniqix (str (name rgn-id) (name lyr-id))
                       lay (get-in r-lays [rgn-id lyr-id])
-                      lay-cache (::cache (meta lay))
-                      {:keys [n-segments-columns-alpha]} (get-in
-                                                          ic-onscreen
-                                                          [:regions rgn-id
-                                                           lyr-id])]]
+                      lay-cache (::cache (meta lay))]]
           (->> (bg-image lay)
                (with-cache lay-cache [::bg uniqix] opts #{:drawing})
                (draw-image-dt ctx lay dt))
@@ -913,49 +914,46 @@
           (init-layouts step-template @viz-options)))
 
 (defn fetch-ff-synapses!
-  [into-journal ff-synapses-response sel opts channel-proxies]
+  [into-journal ff-synapses-response sel viewport-token channel-proxies]
   (let [response-c (async/chan)]
-    (put! @into-journal [:get-ff-synapses sel opts
+    (put! @into-journal [:get-ff-synapses sel viewport-token
                          (channel-proxy/from-chan channel-proxies response-c)])
     (go
       ;; dt may be outdated at this point
       (reset! ff-synapses-response [(dissoc sel :dt) (<! response-c)]))))
 
 (defn fetch-cell-segments!
-  [into-journal cell-segments-response sel opts channel-proxies]
+  [into-journal cell-segments-response sel viewport-token channel-proxies]
   (let [response-c (async/chan)]
-    (put! @into-journal [:get-cell-segments sel opts
+    (put! @into-journal [:get-cell-segments sel viewport-token
                          (channel-proxy/from-chan channel-proxies response-c)])
     (go
       ;; dt may be outdated at this point
       (reset! cell-segments-response [(dissoc sel :dt) (<! response-c)]))))
 
-(defn fetch-inbits-cols-onscreen!
-  [into-journal steps-data steps step-template opts layouts channel-proxies]
-  (let [paths (input-and-layer-paths step-template)
-        path->ids-onscreen (zipmap paths (->> paths
-                                              (map (fn [path]
-                                                     (get-in layouts path)))
-                                              (map lay/ids-onscreen)))]
-    (doseq [step steps
-            :let [model-id (:model-id step)
-                  response-c (async/chan)]]
-      (put! @into-journal
-            [:get-inbits-cols-subset model-id opts path->ids-onscreen
-             (channel-proxy/from-chan channel-proxies response-c)])
-      (go
-        (swap! steps-data assoc-in [step :inbits-cols-onscreen]
-               (<! response-c))))))
-
 (defn fetch-inbits-cols!
-  [into-journal steps-data steps opts channel-proxies]
+  [into-journal steps-data steps viewport-token channel-proxies]
   (doseq [step steps
           :let [model-id (:model-id step)
                 response-c (async/chan)]]
-    (put! @into-journal [:get-inbits-cols model-id opts
-                         (channel-proxy/from-chan channel-proxies response-c)])
+    (put! @into-journal [:get-inbits-cols model-id viewport-token
+                         (channel-proxy/from-chan channel-proxies
+                                                  response-c)])
     (go
       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
+
+(defn push-new-viewport!
+  [into-journal viewport-token step-template layouts opts channel-proxies]
+  (let [paths (all-layout-paths step-template)
+        path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
+                                                      paths))
+        viewport [opts path->ids-onscreen]
+        response-c (async/chan)]
+    (put! @into-journal [:register-viewport viewport
+                         (channel-proxy/from-chan channel-proxies
+                                                  response-c)])
+    (go
+      (reset! viewport-token (<! response-c)))))
 
 ;; A "viz-step" is a step with viz-canvas-specific data added.
 (defn make-viz-step
@@ -966,12 +964,12 @@
   [steps steps-data]
   (map make-viz-step steps (repeat steps-data)))
 
-(defn scroll-positions
-  [layouts paths]
-  (->> paths
-       (map (fn [path]
-              (get-in layouts path)))
-       (map lay/scroll-position)))
+(defn ids-onscreen-changed?
+  [before after]
+  (let [paths (all-layout-paths after)
+        extractor (juxt lay/scroll-position :order)]
+    (not= (map-layouts extractor before paths)
+          (map-layouts extractor after paths))))
 
 (defn viz-canvas
   [_ steps selection step-template viz-options commands-in-mult into-sim
@@ -980,6 +978,7 @@
         ff-synapses-response (atom nil)
         cell-segments-response (atom nil)
         viz-layouts (atom nil)
+        viewport-token (atom nil)
         current-cell-segments-layout (clojure.core/atom nil)
         resizes (chan)
 
@@ -1027,7 +1026,7 @@
                             (clear-facets-on-all-layers! viz-layouts)
                             (clear-facets-on-sel-layer! viz-layouts sel-rgn
                                                         sel-lyr)))
-          :step-backward (let [;; we need to assume there is a previous step, so:
+          :step-backward (let [ ;; we need to assume there is a previous step, so:
                                max-dt (max 0 (- (count @steps) 2))]
                            (swap! selection
                                   (fn [sel]
@@ -1109,33 +1108,37 @@
                                 ;; remove old steps
                                 (select-keys xs)))
                        (fetch-inbits-cols! into-journal steps-data new-steps
-                                           @viz-options channel-proxies)
-                       (fetch-inbits-cols-onscreen! into-journal steps-data
-                                                    new-steps @step-template
-                                                    @viz-options
-                                                    @viz-layouts
-                                                    channel-proxies))))
-        (add-watch viz-options ::inbits-cols
-                   (fn [_ _ _ opts]
-                     (fetch-inbits-cols! into-journal steps-data @steps opts
+                                           @viewport-token channel-proxies))))
+        (add-watch viewport-token ::fetch-everything
+                   (fn [_ _ old-token token]
+                     (fetch-inbits-cols! into-journal steps-data @steps token
                                          channel-proxies)
-                     (fetch-inbits-cols-onscreen! into-journal steps-data @steps
-                                                  @step-template @viz-options
-                                                  @viz-layouts
-                                                  channel-proxies)))
-        (add-watch viz-layouts ::inbits-cols-onscreen
+                     (fetch-ff-synapses! into-journal ff-synapses-response
+                                         @selection @viewport-token
+                                         channel-proxies)
+                     (fetch-cell-segments! into-journal cell-segments-response
+                                           @selection @viewport-token
+                                           channel-proxies)
+                     (when old-token
+                       (put! @into-journal [:unregister-viewport old-token]))))
+        (add-watch viz-options ::viewport
+                   (fn [_ _ _ opts]
+                     (push-new-viewport! into-journal viewport-token
+                                         @step-template @viz-layouts opts
+                                         channel-proxies)))
+        (add-watch viz-layouts ::viewport
                    (fn [_ _ prev layouts]
-                     (let [paths (input-and-layer-paths layouts)]
-                       (when (and prev
-                                  (not= (scroll-positions layouts paths)
-                                        (scroll-positions prev paths)))
-                         (fetch-inbits-cols-onscreen! into-journal steps-data
-                                                      @steps @step-template
-                                                      @viz-options layouts
-                                                      channel-proxies)))))
+                     (when (and prev
+                                (ids-onscreen-changed? prev layouts))
+                       (push-new-viewport! into-journal viewport-token
+                                           @step-template layouts @viz-options
+                                           channel-proxies))))
         (add-watch step-template ::absorb-step-template
                    (fn [_ _ _ template]
-                     (absorb-step-template template viz-options viz-layouts)))
+                     (absorb-step-template template viz-options viz-layouts)
+                     (push-new-viewport! into-journal viewport-token
+                                         template @viz-layouts @viz-options
+                                         channel-proxies)))
         (add-watch viz-options ::rebuild-layouts
                    (fn [_ _ old-opts opts]
                      (when (not= (:drawing opts)
@@ -1143,31 +1146,27 @@
                        (swap! viz-layouts rebuild-layouts @step-template
                               opts))))
         (add-watch selection ::update-dt-offsets
-                   (fn [_ _ _ _]
-                     (update-dt-offsets! viz-layouts selection @viz-options)))
-        (add-watch viz-options ::syns-segments
-                   (fn [_ _ _ opts]
-                     (when @into-journal
-                       (fetch-ff-synapses! into-journal ff-synapses-response
-                                           @selection opts channel-proxies)
-                       (fetch-cell-segments! into-journal cell-segments-response
-                                            @selection opts channel-proxies))))
+                   (fn [_ _ old-sel sel]
+                     (let [dt-sel (:dt sel)]
+                       (when (not= dt-sel (:dt old-sel))
+                         (update-dt-offsets! viz-layouts dt-sel @viz-options)))))
         (add-watch selection ::syns-segments
                    (fn [_ _ _ sel]
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
-                                         @viz-options channel-proxies)
+                                         @viewport-token channel-proxies)
                      (fetch-cell-segments! into-journal cell-segments-response
-                                           sel @viz-options channel-proxies))))
+                                           sel @viewport-token
+                                           channel-proxies))))
 
       :component-will-unmount
       (fn [_]
         (remove-watch steps ::init-caches-and-request-data)
-        (remove-watch viz-options ::inbits-cols)
-        (remove-watch viz-layouts ::inbits-cols-onscreen)
+        (remove-watch viewport-token ::fetch-everything)
+        (remove-watch viz-options ::viewport)
+        (remove-watch viz-layouts ::viewport)
         (remove-watch step-template ::absorb-step-template)
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)
-        (remove-watch viz-options ::syns-segments)
         (remove-watch selection ::syns-segments)
         (async/close! commands-in))
 
