@@ -20,7 +20,7 @@
             [com.cemerick/austin "0.1.6"]
             [org.clojure/tools.nrepl "0.2.10"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]
-                 :init-ns comportexviz.launchpad}
+                 :init-ns comportexviz.server.launchpad}
 
   :source-paths ["src"]
 

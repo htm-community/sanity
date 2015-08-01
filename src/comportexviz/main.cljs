@@ -1,8 +1,6 @@
 (ns comportexviz.main
-  (:require [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]
-            [comportexviz.controls-ui :as cui]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+  (:require [comportexviz.controls-ui :as cui]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])

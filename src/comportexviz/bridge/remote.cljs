@@ -1,8 +1,7 @@
-(ns comportexviz.server.remote
+(ns comportexviz.bridge.remote
   (:require [cljs.core.async :as async :refer [put! close!]]
-            [clojure.set]
             [cognitect.transit :as transit]
-            [comportexviz.server.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
                                                   map->TwoDTopology]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
