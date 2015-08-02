@@ -198,9 +198,8 @@
     (let [n0 scroll-top]
       (range n0 (+ n0 (ids-onscreen-count this)))))
 
-  (id-onscreen? [_ id]
-    (let [n (min (p/size topo)
-                 (quot height-px element-h))
+  (id-onscreen? [this id]
+    (let [n (ids-onscreen-count this)
           n0 scroll-top]
       (<= n0 id (+ n0 n -1))))
 
@@ -303,11 +302,9 @@
     (let [n0 scroll-top]
       (range n0 (+ n0 (ids-onscreen-count this) -1))))
 
-  (id-onscreen? [_ id]
-    (let [[w h] (p/dimensions topo)
-          n (* w (min h (quot height-px element-h)))
-          n0 scroll-top]
-      (<= n0 id (+ n0 n -1))))
+  (id-onscreen? [this id]
+    (let [n0 scroll-top]
+      (<= n0 id (+ n0 (ids-onscreen-count this) -1))))
 
   (clicked-id [_ x y]
     (let [[w h] (p/dimensions topo)
