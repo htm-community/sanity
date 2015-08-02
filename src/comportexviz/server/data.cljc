@@ -278,7 +278,8 @@
                         (and (get-in opts [:input :predicted]) prev-ff-rgn)
                         (assoc :pred-bits-alpha
                                (->> (core/predicted-bit-votes prev-ff-rgn)
-                                    (util/remap #(min 1.0 (/ % 8))))))]))
+                                    (util/remap #(min 1.0
+                                                      (float (/ % 8)))))))]))
 
    :regions (into
              {}
@@ -303,7 +304,7 @@
                                                            (transient {}))
                                                 (persistent!)
                                                 (util/remap #(min 1.0
-                                                                  (/ % 16)))))
+                                                                  (float (/ % 16))))))
 
                                     (get-in opts [:columns :boosts])
                                     (assoc :boost-columns-alpha
@@ -311,6 +312,7 @@
                                                 (map
                                                  #(/ (dec %)
                                                      (dec (:max-boost spec))))
+                                                (map float)
                                                 (zipmap (range))))
 
                                     (get-in opts [:columns :active-freq])
@@ -325,7 +327,8 @@
                                                 (map #(count-segs-in-column
                                                        (:distal-sg lyr)
                                                        (p/layer-depth lyr) %))
-                                                (map #(min 1.0 (/ % 16.0)))
+                                                (map #(min 1.0
+                                                           (float (/ % 16.0))))
                                                 (zipmap cols-subset)))
 
                                     ;; Always include, needed for sorting.

@@ -51,5 +51,8 @@
                                             [t :close!]))))]
               (let [ch (channel-proxy/from-target channel-proxies target)]
                 (case op
-                  :put! (put! ch msg)
+                  :put! (do
+                          ;; enumerate lazy tree
+                          ;; (dorun (tree-seq coll? seq msg))
+                          (put! ch msg))
                   :close! (close! ch))))))))

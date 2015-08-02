@@ -19,6 +19,8 @@
     "Current scroll position, giving the first element index visible on screen.")
   (scroll [this down?]
     "Updates the layout with scroll position adjusted up or down one page.")
+  (ids-onscreen-count [this]
+    "Returns the number of ids onscreen in constant time")
   (ids-onscreen [this]
     "Sequence of element ids per timestep currently drawn in the layout.")
   (id-onscreen? [this id]
@@ -179,7 +181,7 @@
     scroll-top)
 
   (scroll [this down?]
-    (let [page-n (count (ids-onscreen this))
+    (let [page-n (ids-onscreen-count this)
           n-ids (p/size topo)]
       (assoc this :scroll-top
              (if down?
@@ -188,11 +190,13 @@
                  scroll-top)
                (max 0 (- scroll-top page-n))))))
 
-  (ids-onscreen [_]
-    (let [n (min (p/size topo)
-                 (quot height-px element-h))
-          n0 scroll-top]
-      (range n0 (+ n0 n))))
+  (ids-onscreen-count [_]
+    (min (p/size topo)
+         (quot height-px element-h)))
+
+  (ids-onscreen [this]
+    (let [n0 scroll-top]
+      (range n0 (+ n0 (ids-onscreen-count this)))))
 
   (id-onscreen? [_ id]
     (let [n (min (p/size topo)
@@ -282,7 +286,7 @@
     scroll-top)
 
   (scroll [this down?]
-    (let [page-n (count (ids-onscreen this))
+    (let [page-n (ids-onscreen-count this)
           n-ids (p/size topo)]
       (assoc this :scroll-top
              (if down?
@@ -291,11 +295,13 @@
                  scroll-top)
                (max 0 (- scroll-top page-n))))))
 
-  (ids-onscreen [_]
-    (let [[w h] (p/dimensions topo)
-          n (* w (min h (quot height-px element-h)))
-          n0 scroll-top]
-      (range n0 (+ n0 n -1))))
+  (ids-onscreen-count [_]
+    (let [[w h] (p/dimensions topo)]
+      (* w (min h (quot height-px element-h)))))
+
+  (ids-onscreen [this]
+    (let [n0 scroll-top]
+      (range n0 (+ n0 (ids-onscreen-count this) -1))))
 
   (id-onscreen? [_ id]
     (let [[w h] (p/dimensions topo)
@@ -384,10 +390,12 @@
   (scroll [this down?]
     (update this :layout scroll down?))
 
+  (ids-onscreen-count [_]
+    (ids-onscreen-count layout))
+
   (ids-onscreen [_]
-    (let [n0 (scroll-position layout)
-          n (count (ids-onscreen layout))]
-      (->> (subseq order >= n0 < (+ n0 n))
+    (let [n0 (scroll-position layout)]
+      (->> (subseq order >= n0 < (+ n0 (ids-onscreen-count layout)))
            (map key))))
 
   (id-onscreen? [_ id]

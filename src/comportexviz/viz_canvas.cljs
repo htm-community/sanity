@@ -608,7 +608,7 @@
 (defn scroll-status-str
   [lay inbits?]
   (let [idx (lay/scroll-position lay)
-        page-n (count (lay/ids-onscreen lay))
+        page-n (lay/ids-onscreen-count lay)
         n-ids (p/size-of lay)]
     (str page-n
          " of "
@@ -1094,23 +1094,18 @@
      {:component-will-mount
       (fn [_]
         (add-watch steps ::init-caches-and-request-data
-                   (fn [_ _ _ xs]
-                     (let [new-steps (->> xs (remove (partial contains?
-                                                              @steps-data)))]
+                   (fn init-caches-and-request-data [_ _ _ xs]
+                     (let [new-steps (->> xs
+                                          (remove (partial contains?
+                                                           @steps-data)))]
                        (swap! steps-data
-                              #(->
-                                ;; insert new caches
-                                (->> new-steps
-                                     (reduce (fn [s->d new-s]
-                                               (assoc s->d new-s {:cache
-                                                                  (atom {})}))
-                                             %))
-                                ;; remove old steps
-                                (select-keys xs)))
+                              #(into (select-keys % xs) ;; remove old steps
+                                     (for [x new-steps] ;; insert new caches
+                                       [x {:cache (atom {})}])))
                        (fetch-inbits-cols! into-journal steps-data new-steps
                                            @viewport-token channel-proxies))))
         (add-watch viewport-token ::fetch-everything
-                   (fn [_ _ old-token token]
+                   (fn fetch-everything [_ _ old-token token]
                      (fetch-inbits-cols! into-journal steps-data @steps token
                                          channel-proxies)
                      (fetch-ff-synapses! into-journal ff-synapses-response
@@ -1122,36 +1117,36 @@
                      (when old-token
                        (put! @into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
-                   (fn [_ _ _ opts]
+                   (fn viewport<-opts [_ _ _ opts]
                      (push-new-viewport! into-journal viewport-token
                                          @step-template @viz-layouts opts
                                          channel-proxies)))
         (add-watch viz-layouts ::viewport
-                   (fn [_ _ prev layouts]
+                   (fn viewport<-layouts [_ _ prev layouts]
                      (when (and prev
                                 (ids-onscreen-changed? prev layouts))
                        (push-new-viewport! into-journal viewport-token
                                            @step-template layouts @viz-options
                                            channel-proxies))))
         (add-watch step-template ::absorb-step-template
-                   (fn [_ _ _ template]
+                   (fn step-template-changed [_ _ _ template]
                      (absorb-step-template template viz-options viz-layouts)
                      (push-new-viewport! into-journal viewport-token
                                          template @viz-layouts @viz-options
                                          channel-proxies)))
         (add-watch viz-options ::rebuild-layouts
-                   (fn [_ _ old-opts opts]
+                   (fn layouts<-viz-options [_ _ old-opts opts]
                      (when (not= (:drawing opts)
                                  (:drawing old-opts))
                        (swap! viz-layouts rebuild-layouts @step-template
                               opts))))
         (add-watch selection ::update-dt-offsets
-                   (fn [_ _ old-sel sel]
+                   (fn dt-offsets<-selection [_ _ old-sel sel]
                      (let [dt-sel (:dt sel)]
                        (when (not= dt-sel (:dt old-sel))
                          (update-dt-offsets! viz-layouts dt-sel @viz-options)))))
         (add-watch selection ::syns-segments
-                   (fn [_ _ _ sel]
+                   (fn fetch-selection-change [_ _ _ sel]
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
                                          @viewport-token channel-proxies)
                      (fetch-cell-segments! into-journal cell-segments-response
