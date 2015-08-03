@@ -944,16 +944,17 @@
 
 (defn push-new-viewport!
   [into-journal viewport-token step-template layouts opts channel-proxies]
-  (let [paths (all-layout-paths step-template)
-        path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
-                                                      paths))
-        viewport [opts path->ids-onscreen]
-        response-c (async/chan)]
-    (put! @into-journal [:register-viewport viewport
-                         (channel-proxy/from-chan channel-proxies
-                                                  response-c)])
-    (go
-      (reset! viewport-token (<! response-c)))))
+  (when @into-journal
+    (let [paths (all-layout-paths step-template)
+          path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
+                                                        paths))
+          viewport [opts path->ids-onscreen]
+          response-c (async/chan)]
+      (put! @into-journal [:register-viewport viewport
+                           (channel-proxy/from-chan channel-proxies
+                                                    response-c)])
+      (go
+        (reset! viewport-token (<! response-c))))))
 
 ;; A "viz-step" is a step with viz-canvas-specific data added.
 (defn make-viz-step

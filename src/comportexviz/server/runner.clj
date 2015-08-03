@@ -36,24 +36,35 @@
   (let [clients (atom {})]
    {:on-connect
     (fn [ws]
-      (let [to-network-c (async/chan)]
+      (let [to-network-c (async/chan)
+            client-info (atom {})]
         (go-loop []
           (let [msg (<! to-network-c)]
             (when (not (nil? msg))
               (jetty/send! ws msg)
               (recur))))
-        (swap! clients assoc ws to-network-c)))
+        (add-watch client-info ::push-to-client
+                   (fn [_ _ _ v]
+                     (put! to-network-c (transit-str
+                                         [:connection-admin :put!
+                                          [:reset-reconnect-blob v]]))))
+        (swap! clients assoc ws
+               [to-network-c client-info])))
 
     :on-error
     (fn [ws e] (println e))
 
     :on-close
     (fn [ws status-code reason]
+      (let [[_ client-info] (get @clients ws)]
+        (doseq [target [:into-sim :into-journal]
+                :let [ch (channel-proxy/from-target channel-proxies target)]]
+          (put! ch [[:client-disconnect] client-info])))
       (swap! clients dissoc ws))
 
     :on-text
     (fn [ws text]
-      (let [to-network-c (get @clients ws)
+      (let [[to-network-c client-info] (get @clients ws)
             [target op msg] (read-transit-str
                              text
                              (channel-proxy/read-handler
@@ -65,7 +76,7 @@
                                                     [t :close!])))))]
         (let [ch (channel-proxy/from-target channel-proxies target)]
           (case op
-            :put! (put! ch msg)
+            :put! (put! ch [msg client-info])
             :close! (close! ch)))))
 
     :on-bytes

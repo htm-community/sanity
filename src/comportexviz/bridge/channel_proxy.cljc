@@ -101,7 +101,9 @@
                                        target-id)})
 
 (defn read-handler [fput fclose]
-  {channel-proxy-tag (transit/read-handler #(ImpersonateChannel.
-                                             (partial fput %)
-                                             (partial fclose %)
-                                             nil))})
+  {channel-proxy-tag (transit/read-handler #(ChannelProxy.
+                                             %
+                                             (ImpersonateChannel.
+                                              (partial fput %)
+                                              (partial fclose %)
+                                              nil)))})

@@ -102,4 +102,5 @@
 
 (defn selected-step
   []
-  (nth @steps (:dt @selection) nil))
+  (when-let [dt (:dt @selection)]
+    (nth @steps dt nil)))
