@@ -178,6 +178,16 @@
               region-key layer-id into-journal channel-proxies]
              ]))]])))
 
+(defn transitions-tab
+  [steps step-template selection into-journal channel-proxies]
+  [:div
+   [:p.text-muted "Cell SDRs and their transitions meeting
+   seg-learn-threshold. Labelled by inputs for interpretability."]
+   [:div
+    (when @step-template
+      [plots/transitions-plot-cmp steps step-template selection into-journal
+       channel-proxies])]])
+
 (defn fetch-details-text!
   [into-journal text-response sel channel-proxies]
   (when (:col sel)
@@ -679,6 +689,8 @@
                        into-journal channel-proxies]]
            [:cell-plots [cell-plots-tab step-template selection series-colors
                          into-journal channel-proxies]]
+           [:transitions [transitions-tab steps step-template selection
+                          into-journal channel-proxies]]
            [:details [details-tab selection into-journal channel-proxies]]]]
          ]]
        [:div#loading-message "loading"]]])))
