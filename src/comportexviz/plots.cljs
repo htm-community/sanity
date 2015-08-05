@@ -11,7 +11,7 @@
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(defprotocol PCompressable
+(defprotocol PCompressible
   (compress [this factor]))
 
 (defprotocol PBucketed
@@ -28,7 +28,7 @@
   (buckets [_]
     (vec xs))
 
-  PCompressable
+  PCompressible
   (compress [_ factor]
     (SequenceCompressor. (* factor bucket-size*) fcompress
                          (->> xs
@@ -59,7 +59,7 @@
   (buckets [_]
     (buckets seq-compressor))
 
-  PCompressable
+  PCompressible
   (compress [_ factor]
     (SequenceCompressorCapped. max-bucket-count fcompress
                                (compress seq-compressor factor)))
