@@ -84,17 +84,32 @@
 ;;; canvas
 
 (defn on-resize [component width-px height-px resizes]
-  (let [size-px (-> component reagent/dom-node style/getSize)]
-    (reset! width-px (.-width size-px))
-    (reset! height-px (.-height size-px))
+  (let [el (reagent/dom-node component)
+        size-px (style/getSize el)
+        w (.-width size-px)
+        h (.-height size-px)]
+    (when (or (zero? w) (zero? h))
+      ;; The "right" way around this is to not use display:none, and instead
+      ;; simply exclude undisplayed nodes from the component's render fn.
+      (js/console.warn "The resizing-canvas can't handle display:none."))
+    (reset! width-px w)
+    (reset! height-px h)
     (when resizes
-      (put! resizes [(.-width size-px) (.-height size-px)]))))
+      (put! resizes [w h]))))
 
-(defn canvas [_ _ _ _ draw]
+(defn- canvas$call-draw-fn
+  [component]
+  ;; argv contains entire hiccup form, so it's shifted one to the right.
+  (let [[_ _ _ _ _ draw] (reagent/argv component)]
+    (draw (-> component
+              reagent/dom-node
+              (.getContext "2d")))))
+
+(defn canvas [_ _ _ _ _]
   (reagent/create-class
-   {:component-did-mount #(draw (-> % reagent/dom-node (.getContext "2d")))
+   {:component-did-mount #(canvas$call-draw-fn %)
 
-    :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+    :component-did-update #(canvas$call-draw-fn %)
 
     :display-name "canvas"
     :reagent-render (fn [props width height canaries _]
@@ -105,7 +120,15 @@
                                       :width width
                                       :height height)])}))
 
-(defn resizing-canvas [_ _ draw resizes]
+(defn- resizing-canvas$call-draw-fn
+  [component]
+  ;; argv contains entire hiccup form, so it's shifted one to the right.
+  (let [[_ _ _ draw _] (reagent/argv component)]
+    (draw (-> component
+              reagent/dom-node
+              (.getContext "2d")))))
+
+(defn resizing-canvas [_ _ _ resizes]
   (let [resize-key (atom nil)
         width-px (atom nil)
         height-px (atom nil)]
@@ -121,7 +144,7 @@
                              ;; Causes a render + did-update.
                              (on-resize component width-px height-px resizes))
 
-      :component-did-update #(draw (-> % reagent/dom-node (.getContext "2d")))
+      :component-did-update #(resizing-canvas$call-draw-fn %)
 
       :component-will-unmount #(when @resize-key
                                  (events/unlistenByKey @resize-key))

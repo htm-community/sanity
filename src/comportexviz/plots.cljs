@@ -2,7 +2,7 @@
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.helpers :refer [canvas]]
+            [comportexviz.helpers :refer [canvas resizing-canvas]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
@@ -10,6 +10,97 @@
             [goog.dom :as dom]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go]]))
+
+(defprotocol PCompressable
+  (compress [this factor]))
+
+(defprotocol PBucketed
+  (buckets [this])
+  (bucket-size [this]))
+
+(defprotocol PCapped
+  (max-count [this]))
+
+(deftype SequenceCompressor [bucket-size* fcompress xs unfilled-bucket]
+  PBucketed
+  (bucket-size [_]
+    bucket-size*)
+  (buckets [_]
+    (vec xs))
+
+  PCompressable
+  (compress [_ factor]
+    (SequenceCompressor. (* factor bucket-size*) fcompress
+                         (->> xs
+                              (partition factor)
+                              (mapv (partial apply fcompress)))
+                         unfilled-bucket))
+
+  ICollection
+  (-conj [_ x]
+    (let [bucket (conj unfilled-bucket x)]
+      (if (< (count bucket) bucket-size*)
+        (SequenceCompressor. bucket-size* fcompress xs bucket)
+        (SequenceCompressor. bucket-size* fcompress
+                             (conj xs (apply fcompress bucket)) (empty xs)))))
+
+  ICounted
+  (-count [_]
+    (count xs))
+
+  ISeqable
+  (-seq [_]
+    (seq xs)))
+
+(deftype SequenceCompressorCapped [max-bucket-count fcompress seq-compressor]
+  PBucketed
+  (bucket-size [_]
+    (bucket-size seq-compressor))
+  (buckets [_]
+    (buckets seq-compressor))
+
+  PCompressable
+  (compress [_ factor]
+    (SequenceCompressorCapped. max-bucket-count fcompress
+                               (compress seq-compressor factor)))
+
+  PCapped
+  (max-count [_]
+    max-bucket-count)
+
+  ICollection
+  (-conj [_ x]
+    (let [r (SequenceCompressorCapped. max-bucket-count fcompress
+                                       (conj seq-compressor x))]
+      (if (< (count r) max-bucket-count)
+        r
+        (compress r 2))))
+
+  ICounted
+  (-count [_]
+    (count seq-compressor))
+
+  ISeqable
+  (-seq [_]
+    (seq seq-compressor)))
+
+(defn sequence-compressor
+  "A sequence builder that does not necessarily grow on `conj`.
+  Individual items are the result of compressing buckets of values
+  into a single value. Compress the sequence or check its bucket size
+  via methods. Specify a `max-bucket-count` to make it automatically
+  recompress as it grows.
+
+  Extract the compressed sequence via `seq` or `buckets`.
+
+  `fcompress` must take an arbitrary number of args and must return a
+  value of the same format, i.e. a value that will later be used as a
+  fcompress arg."
+  ([fcompress]
+   (SequenceCompressor. 1 fcompress [] []))
+  ([max-bucket-count fcompress]
+   (SequenceCompressorCapped. max-bucket-count fcompress
+                              (sequence-compressor fcompress))))
 
 (defn mean
   [xs]
@@ -20,77 +111,32 @@
   (let [ks (keys (first maps))]
     (->>
      (for [k ks]
-       [k (f (map k maps))])
+       [k (f (map #(get % k) maps))])
      (into {}))))
 
-(defn double-aggregation-bucket
-  [{:as m :keys [bucket ts]}]
-  (let [b (* 2 bucket)]
-    (assoc m
-      :bucket b
-      :ts (mapv (partial aggregate-by mean)
-                (partition 2 ts)))))
-
-(defn update-aggregated-ts
-  [agg-val raw-ts keep-n]
-  ;; append to aggregated series
-  (let [new-agg (update-in agg-val [:ts] conj
-                           (aggregate-by mean raw-ts))
-        n (count (:ts new-agg))]
-    (if (and (> n keep-n)
-             (even? n))
-      (double-aggregation-bucket new-agg)
-      new-agg)))
-
-(defn aggregated-ts-ref
-  [c keep-n]
-  (let [agg (atom {:bucket 1 :ts [] :keep-n keep-n})]
-    (go (loop [pxs []]
-          (let [xs (conj pxs (<! c))]
-            (if (< (count xs) (:bucket @agg))
-              (recur xs)
-              (do
-                (swap! agg update-aggregated-ts xs keep-n)
-                (recur (empty xs)))))))
-    agg))
-
-(defn aggregating-ts
-  [step-atom keep-n]
-  (let [agg (atom {:bucket 1 :ts [] :keep-n keep-n})
-        accumulator (atom [])]
-    (add-watch step-atom :aggregate
-               (fn [_ _ _ x]
-                 (let [pxs @accumulator
-                       xs (conj pxs x)]
-                   (if (< (count xs) (:bucket @agg))
-                     (reset! accumulator xs)
-                     (do
-                       (swap! agg update-aggregated-ts xs keep-n)
-                       (reset! accumulator (empty xs))))
-                   )))
-    agg))
-
 (defn stacked-ts-plot
-  [el agg series-keys series-colors]
-  (let [{:keys [ts keep-n bucket]} @agg
-        n-timesteps (* bucket keep-n)
-        ncol (:size (peek ts))
+  [ctx col-state-freqs-log series-keys series-colors]
+  (let [bucket-size (bucket-size col-state-freqs-log)
+        buckets (buckets col-state-freqs-log)
+        n-timesteps (* bucket-size (max-count col-state-freqs-log))
+        ncol (:size (peek buckets))
         v-max (* ncol 0.06)
-        ctx (c/get-context el "2d")
-        plot-size {:w (- (.-width el) 50)
-                   :h (- (.-height el) 50)}
+        cnv (.-canvas ctx)
+        plot-size {:w (- (.-width cnv) 25)
+                   :h (- (.-height cnv) 18)}
         plot (plt/xy-plot ctx plot-size
                           [0 n-timesteps]
                           [v-max 0])
         ]
-    (c/clear-rect ctx {:x 0 :y 0 :w (:w plot-size) :h (:h plot-size)})
+
+    (c/clear-rect ctx {:x 0 :y 0 :w (.-width cnv) :h (.-height cnv)})
     (c/stroke-width ctx 0)
-    (doseq [[i x] (plt/indexed ts)]
+    (doseq [[i x] (plt/indexed buckets)]
       (reduce (fn [from-y k]
                 (let [val (get x k)]
                   (c/fill-style ctx (series-colors k))
-                  (plt/rect! plot (* i bucket) from-y
-                             bucket val)
+                  (plt/rect! plot (* i bucket-size) from-y
+                             bucket-size val)
                   (+ from-y val)))
               0 series-keys))
     (plt/frame! plot)
@@ -126,36 +172,22 @@
                      :text y})))
     ))
 
+(defn empty-col-state-freqs-log
+  []
+  (sequence-compressor 200
+                       (fn [& col-state-freqs-seq]
+                         (aggregate-by mean col-state-freqs-seq))))
+
 (defn ts-freqs-plot-cmp
-  [steps region-key layer-id series-colors into-journal channel-proxies]
-  (let [series-keys [:active :active-predicted :predicted]
-        step-freqs (atom nil)
-        agg-freqs-ts (aggregating-ts step-freqs 200)]
-    (add-watch steps [:calc-freqs region-key layer-id] ;; unique key per layer
-               (fn [_ _ _ v]
-                 (when-let [model-id (:model-id (first v))]
-                   (let [response-c (async/chan)]
-                     (put! @into-journal
-                           [:get-column-state-freqs model-id
-                            region-key layer-id
-                            (channel-proxy/from-chan channel-proxies
-                                                     response-c)])
-                     (go
-                       (reset! step-freqs (<! response-c)))))))
-    (fn [_ _ _ _]
-      (let [el-id (str "comportexviz-tsplot-" (name region-key) (name layer-id))
-            el (dom/getElement el-id)]
-        ;; draw!
-        (when el
-          (set! (.-width el) (* 0.28 (- (.-innerWidth js/window) 20)))
-          (set! (.-height el) 180)
-          (stacked-ts-plot el agg-freqs-ts series-keys series-colors))
-        (when-not el
-          ;; create data dependency for re-rendering
-          @agg-freqs-ts)
-        [:div
-         [:canvas {:id el-id}]])
-      )))
+  [col-state-freqs-log series-colors]
+  [resizing-canvas
+    {:style {:width "100%"
+             :height 180}}
+    []
+    (fn [ctx]
+      (stacked-ts-plot ctx col-state-freqs-log
+                       [:active :active-predicted :predicted]
+                       series-colors))])
 
 (def excitation-colors
   {:proximal-unstable :active
@@ -255,19 +287,27 @@
         (plt/frame! plot)))
     (c/restore ctx)))
 
+(defn fetch-excitation-data!
+  [excitation-data sel into-journal channel-proxies]
+  (let [{:keys [model-id region layer col]} sel
+        response-c (async/chan)]
+    (put! @into-journal
+          [:get-cell-excitation-data model-id region layer col
+           (channel-proxy/from-chan channel-proxies
+                                    response-c)])
+    (go
+      (reset! excitation-data (<! response-c)))))
+
 (defn cell-excitation-plot-cmp
   [_ selection _ _ _ into-journal channel-proxies]
   (let [excitation-data (atom {})]
     (add-watch selection :fetch-excitation-data
                (fn [_ _ _ sel]
-                 (let [{:keys [model-id region layer col]} sel
-                       response-c (async/chan)]
-                   (put! @into-journal
-                         [:get-cell-excitation-data model-id region layer col
-                          (channel-proxy/from-chan channel-proxies
-                                                   response-c)])
-                   (go
-                     (reset! excitation-data (<! response-c))))))
+                 (fetch-excitation-data! excitation-data sel into-journal
+                                         channel-proxies)))
+
+    (fetch-excitation-data! excitation-data @selection into-journal
+                            channel-proxies)
 
     (fn [step-template _ series-colors region-key layer-id _ _]
       [canvas

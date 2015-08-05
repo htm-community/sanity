@@ -138,10 +138,40 @@
             )))]))
   )
 
+(defn gather-col-state-history!
+  [col-state-history step into-journal channel-proxies]
+  (let [response-c (async/chan)]
+    (put! @into-journal [:get-column-state-freqs
+                         (:model-id step)
+                         (channel-proxy/from-chan channel-proxies response-c)])
+    (go
+      (let [r (<! response-c)]
+        (swap! col-state-history
+               #(reduce
+                 (fn [csh [layer-path col-state-freqs]]
+                   (update csh layer-path
+                           (fn [csf-log]
+                             (conj (or csf-log
+                                       (plots/empty-col-state-freqs-log))
+                                   col-state-freqs))))
+                 % r))))))
+
 (defn ts-plots-tab
-  [steps step-template series-colors into-journal channel-proxies]
+  [col-state-history step-template series-colors]
   [:div
    [:p.text-muted "Time series of cortical column activity."]
+   [:div
+    (for [[path csf-log] @col-state-history
+          :let [[region-key layer-id] path]]
+      ^{:key [region-key layer-id]}
+      [:fieldset
+       [:legend (str (name region-key) " " (name layer-id))]
+       [plots/ts-freqs-plot-cmp csf-log series-colors]])]])
+
+(defn cell-plots-tab
+  [step-template selection series-colors into-journal channel-proxies]
+  [:div
+   [:p.text-muted "Plots of cell excitation broken down by source."]
    [:div
     (when @step-template
       (for [[region-key rgn] (:regions @step-template)
@@ -149,34 +179,8 @@
         ^{:key [region-key layer-id]}
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
-         [plots/ts-freqs-plot-cmp steps region-key layer-id series-colors
-          into-journal channel-proxies]
-         ]))]
-   ])
-
-(defn cell-plots-tab
-  [step-template selection series-colors into-journal channel-proxies]
-  (let [show? (atom false)]
-    (fn [_ _ _]
-      [:div
-       [:p.text-muted "Plots of cell excitation broken down by source."]
-       [:div.checkbox
-        [:label [:input {:type :checkbox
-                         :checked (when @show? true)
-                         :on-change (fn [e]
-                                     (swap! show? not)
-                                     (.preventDefault e))}]
-         "Show plots"]]
-       [:div
-        (when (and @step-template @show?)
-          (for [[region-key rgn] (:regions @step-template)
-                layer-id (keys rgn)]
-            ^{:key [region-key layer-id]}
-            [:fieldset
-             [:legend (str (name region-key) " " (name layer-id))]
-             [plots/cell-excitation-plot-cmp step-template selection series-colors
-              region-key layer-id into-journal channel-proxies]
-             ]))]])))
+         [plots/cell-excitation-plot-cmp step-template selection series-colors
+          region-key layer-id into-journal channel-proxies]]))]])
 
 (defn fetch-details-text!
   [into-journal text-response sel channel-proxies]
@@ -582,11 +586,6 @@
          ]
         ]])))
 
-;; TODO sometimes we want tabs to initialize when they're not shown,
-;; e.g. `ts-plots`, and other times we don't, e.g. `details`. We should lift
-;; initialization code out of `ts-plots`, etc. as desired and then stop
-;; rendering unshown tabs, rather than rendering them {:display "none"},
-;; fetching lots of data unnecessarily.
 (defn tabs
   [tab-cmps]
   (let [current-tab (atom (ffirst tab-cmps))]
@@ -602,11 +601,12 @@
                                   (reset! current-tab k)
                                   (.preventDefault e))}
                   (name k)]]))]
-       (into [:div.tabs]
-             (for [[k cmp] tab-cmps]
-               [:div {:style (if (not= k @current-tab) {:display "none"})}
-                cmp]))
-       ])))
+       [:div.tabs
+        (let [[_ cmp] (->> tab-cmps
+                           (filter (fn [[k _]]
+                                     (= @current-tab k)))
+                           first)]
+          cmp)]])))
 
 (defn help-block
   [show-help]
@@ -654,11 +654,17 @@
         ]]]
      [:hr]]))
 
-
 (defn comportexviz-app
-  [_ _ _ _ _ _ _ _ _ _]
+  [_ _ _ _ steps step-template _ _ _ into-journal channel-proxies]
   (let [show-help (atom false)
-        viz-expanded (atom false)]
+        viz-expanded (atom false)
+        col-state-history (atom {})]
+
+    (add-watch steps ::ts-plot-data
+               (fn [_ _ _ xs]
+                 (gather-col-state-history! col-state-history (first xs)
+                                            into-journal channel-proxies)))
+
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal channel-proxies]
      [:div
@@ -675,8 +681,8 @@
            [:drawing [bind-fields viz-options-template viz-options]]
            [:params [parameters-tab step-template selection into-sim
                      channel-proxies]]
-           [:ts-plots [ts-plots-tab steps step-template series-colors
-                       into-journal channel-proxies]]
+           [:ts-plots [ts-plots-tab col-state-history step-template
+                       series-colors]]
            [:cell-plots [cell-plots-tab step-template selection series-colors
                          into-journal channel-proxies]]
            [:details [details-tab selection into-journal channel-proxies]]]]

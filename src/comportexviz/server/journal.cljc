@@ -150,11 +150,15 @@
                       (id-missing-response id steps-offset))))
 
             :get-column-state-freqs
-            (let [[id region-key layer-id response-c] xs]
+            (let [[id response-c] xs]
               (put! response-c
                     (if-let [htm (find-model id)]
-                      (-> (get-in htm [:regions region-key])
-                          (core/column-state-freqs layer-id))
+                      (into {}
+                            (for [[region-key rgn] (:regions htm)
+                                  layer-id (core/layers rgn)]
+                              [[region-key layer-id]
+                               (-> (get-in htm [:regions region-key])
+                                   (core/column-state-freqs layer-id))]))
                       (id-missing-response id steps-offset))))
 
             :get-cell-excitation-data
