@@ -167,5 +167,20 @@
                     (if-let [[prev-htm htm] (find-model-pair id)]
                       (data/cell-excitation-data htm prev-htm region-key layer-id
                                                  sel-col)
+                      (id-missing-response id steps-offset))))
+
+            :get-learn-cells
+            (let [[id region-key layer-id response-c] xs]
+              (put! response-c
+                    (if-let [htm (find-model id)]
+                      (-> (get-in htm [:regions region-key layer-id])
+                          (p/learnable-cells))
+                      (id-missing-response id steps-offset))))
+
+            :get-transitions-data
+            (let [[id region-key layer-id cell-sdr-fracs response-c] xs]
+              (put! response-c
+                    (if-let [htm (find-model id)]
+                      (data/transitions-data htm region-key layer-id cell-sdr-fracs)
                       (id-missing-response id steps-offset)))))
           (recur))))))
