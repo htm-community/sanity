@@ -156,17 +156,23 @@
                                    col-state-freqs))))
                  % r))))))
 
-(defn ts-plots-tab
-  [col-state-history step-template series-colors]
-  [:div
-   [:p.text-muted "Time series of cortical column activity."]
-   [:div
-    (for [[path csf-log] @col-state-history
-          :let [[region-key layer-id] path]]
-      ^{:key [region-key layer-id]}
-      [:fieldset
-       [:legend (str (name region-key) " " (name layer-id))]
-       [plots/ts-freqs-plot-cmp csf-log series-colors]])]])
+(defn ts-plots-tab-builder
+  [steps into-journal channel-proxies]
+  (let [col-state-history (atom {})]
+    (add-watch steps ::ts-plot-data
+               (fn [_ _ _ xs]
+                 (gather-col-state-history! col-state-history (first xs)
+                                            into-journal channel-proxies)))
+    (fn ts-plots-tab [series-colors]
+      [:div
+       [:p.text-muted "Time series of cortical column activity."]
+       [:div
+        (for [[path csf-log] @col-state-history
+              :let [[region-key layer-id] path]]
+          ^{:key [region-key layer-id]}
+          [:fieldset
+           [:legend (str (name region-key) " " (name layer-id))]
+           [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn cell-plots-tab
   [step-template selection series-colors into-journal channel-proxies]
@@ -182,15 +188,17 @@
          [plots/cell-excitation-plot-cmp step-template selection series-colors
           region-key layer-id into-journal channel-proxies]]))]])
 
-(defn transitions-tab
+(defn transitions-tab-builder
   [steps step-template selection into-journal channel-proxies]
-  [:div
-   [:p.text-muted "Cell SDRs and their transitions meeting
+  (let [transitions-plot (plots/transitions-plot-builder steps step-template
+                                                         selection into-journal
+                                                         channel-proxies)]
+    (fn transitions-tab []
+      [:div
+       [:p.text-muted "Cell SDRs and their transitions meeting
    seg-learn-threshold. Labelled by inputs for interpretability."]
-   [:div
-    (when @step-template
-      [plots/transitions-plot-cmp steps step-template selection into-journal
-       channel-proxies])]])
+       [:div
+        [transitions-plot]]])))
 
 (defn fetch-details-text!
   [into-journal text-response sel channel-proxies]
@@ -665,16 +673,12 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [_ _ _ _ steps step-template _ _ _ into-journal channel-proxies]
+  [_ _ _ selection steps step-template _ _ _ into-journal channel-proxies]
   (let [show-help (atom false)
         viz-expanded (atom false)
-        col-state-history (atom {})]
-
-    (add-watch steps ::ts-plot-data
-               (fn [_ _ _ xs]
-                 (gather-col-state-history! col-state-history (first xs)
-                                            into-journal channel-proxies)))
-
+        ts-plots-tab (ts-plots-tab-builder steps into-journal channel-proxies)
+        transitions-tab (transitions-tab-builder steps step-template selection
+                                                 into-journal channel-proxies)]
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal channel-proxies]
      [:div
@@ -691,12 +695,10 @@
            [:drawing [bind-fields viz-options-template viz-options]]
            [:params [parameters-tab step-template selection into-sim
                      channel-proxies]]
-           [:ts-plots [ts-plots-tab col-state-history step-template
-                       series-colors]]
+           [:ts-plots [ts-plots-tab series-colors]]
            [:cell-plots [cell-plots-tab step-template selection series-colors
                          into-journal channel-proxies]]
-           [:transitions [transitions-tab steps step-template selection
-                          into-journal channel-proxies]]
+           [:transitions [transitions-tab]]
            [:details [details-tab selection into-journal channel-proxies]]]]
          ]]
        [:div#loading-message "loading"]]])))

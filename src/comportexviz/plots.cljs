@@ -402,7 +402,7 @@
   (let [total (reduce + (vals freqs))]
     (util/remap #(/ % total) freqs)))
 
-(defn transitions-plot-cmp
+(defn transitions-plot-builder
   [steps step-template selection into-journal channel-proxies]
   (let [cell-sdr-counts (atom {})
         sdr-label-counts (atom {})
@@ -463,13 +463,16 @@
                                                 (util/remap freqs->fracs))
                            response-c (async/chan)]
                        (put! @into-journal [:get-transitions-data
-                                            model-id region layer cell-sdr-fracs response-c])
+                                            model-id region layer cell-sdr-fracs
+                                            (channel-proxy/from-chan
+                                             channel-proxies response-c)])
                        (go
                          (let [sdr-transitions (<! response-c)]
                            (reset! plot-data {:sdr-transitions sdr-transitions
                                               :sdr-label-fracs sdr-label-fracs
                                               :curr-sdr (get @curr-sdr [region layer])}))))))))
-    (fn [_ _ _ _ _]
+
+    (fn transitions-plot []
       [canvas
        {}
        300
