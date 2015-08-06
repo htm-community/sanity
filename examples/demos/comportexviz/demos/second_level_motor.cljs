@@ -19,7 +19,11 @@
 (def config
   (atom {:text demo/test-text}))
 
-(def world-c (async/chan))
+(def world-c
+  (async/chan (async/buffer 1)
+              (map (fn [{:keys [sentences position] :as v}]
+                     (let [label (str (get-in sentences position))]
+                       (assoc v :label label))))))
 
 (def control-c (async/chan))
 

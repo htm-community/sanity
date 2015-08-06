@@ -388,3 +388,75 @@
                                     spec (p/params lyr)]]
                           [lyr-id {:spec (p/params lyr)
                                    :topology (p/topology lyr)}]))]))})
+
+(defn- cell->id
+  [depth [col ci]]
+  (+ (* col depth) ci))
+
+(defn cell-cells-transitions
+  [distal-sg depth n-cols]
+  (let [all-cell-ids (for [col (range n-cols)
+                           ci (range depth)]
+                       [col ci])]
+    (->> all-cell-ids
+         (reduce (fn [m from-cell]
+                   (let [source-id (cell->id depth from-cell)
+                         to-segs (p/targets-connected-from distal-sg source-id)
+                         to-cells (map pop to-segs)]
+                     (if (seq to-cells)
+                       (assoc! m from-cell
+                               (into (get m from-cell #{})
+                                     to-cells))
+                       m)))
+                 (transient {}))
+         (persistent!))))
+
+(defn- cell-sdr-transitions
+  [cell-cells-xns cell-sdr-fracs]
+  (->> cell-cells-xns
+       (reduce-kv (fn [m from-cell to-cells]
+                    (assoc! m from-cell
+                            (apply merge-with max
+                                   (map cell-sdr-fracs to-cells))))
+                  (transient {}))
+       (persistent!)))
+
+(defn- sdr-sdr-transitions
+  [cell-sdrs-xns cell-sdr-fracs threshold]
+  (->> cell-sdrs-xns
+       ;; count SDR transitions
+       (reduce-kv (fn [m from-cell to-sdrs-fracs]
+                    (->>
+                     (cell-sdr-fracs from-cell)
+                     (reduce-kv (fn [m from-sdr from-frac]
+                                  (assoc! m from-sdr
+                                          (merge-with
+                                           +
+                                           (get m from-sdr {})
+                                           (util/remap #(* % from-frac) to-sdrs-fracs))))
+                                m)))
+                  (transient {}))
+       (persistent!)
+       ;; filter SDR transitions to where at least threshold cells have it
+       (util/remap (fn [to-sdr-frac-sums]
+                     (keep (fn [[sdr-id n]]
+                             (when (>= n threshold) sdr-id))
+                           to-sdr-frac-sums)))))
+
+(defn transitions-data
+  "Argument cell-sdr-fracs is a map from cell id to the SDRs it
+  participates in. Each value is a map from a unique SDR id to the
+  specificity of that SDR on that cell (fraction of that cell's
+  activations that were in that SDR).
+
+  Returns the SDR to SDR transitions, derived from distal
+  synapses. That is a map from an SDR id to a collection of following
+  SDRs to which a sufficient number of connected synapses exist."
+  [htm rgn-id lyr-id cell-sdr-fracs]
+  (let [lyr (get-in htm [:regions rgn-id lyr-id])
+        depth (p/layer-depth lyr)
+        threshold (get-in lyr [:spec :seg-learn-threshold])
+        distal-sg (:distal-sg lyr)]
+    (-> (cell-cells-transitions distal-sg depth (p/size-of lyr))
+        (cell-sdr-transitions cell-sdr-fracs)
+        (sdr-sdr-transitions cell-sdr-fracs threshold))))
