@@ -190,15 +190,23 @@
 
 (defn transitions-tab-builder
   [steps step-template selection into-journal channel-proxies]
-  (let [transitions-plot (plots/transitions-plot-builder steps step-template
-                                                         selection into-journal
-                                                         channel-proxies)]
+  (let [enable (async/chan)
+        transitions-plot (atom
+                          (fn []
+                            [:button.btn.btn-warning.btn-block
+                             {:on-click #(put! enable :enable)}
+                             "Enable"]))]
+    (go
+      (when (<! enable)
+        (reset! transitions-plot
+                (plots/transitions-plot-builder steps step-template selection
+                                                into-journal channel-proxies))))
     (fn transitions-tab []
       [:div
        [:p.text-muted "Cell SDRs and their transitions meeting
    seg-learn-threshold. Labelled by inputs for interpretability."]
        [:div
-        [transitions-plot]]])))
+        [@transitions-plot]]])))
 
 (defn fetch-details-text!
   [into-journal text-response sel channel-proxies]
@@ -396,7 +404,7 @@
       [:nav.navbar.navbar-default
        [:div.container-fluid
         [:div.navbar-header
-         [:button.navbar-toggle.collpased {:data-toggle "collapse"
+         [:button.navbar-toggle.collapsed {:data-toggle "collapse"
                                            :data-target "#comportex-navbar-collapse"}
           [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
          [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
