@@ -944,17 +944,15 @@
 
 (defn push-new-viewport!
   [into-journal viewport-token step-template layouts opts channel-proxies]
-  (when @into-journal
-    (let [paths (all-layout-paths step-template)
-          path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
-                                                        paths))
-          viewport [opts path->ids-onscreen]
-          response-c (async/chan)]
-      (put! @into-journal [:register-viewport viewport
-                           (channel-proxy/from-chan channel-proxies
-                                                    response-c)])
-      (go
-        (reset! viewport-token (<! response-c))))))
+  (let [paths (all-layout-paths step-template)
+        path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
+                                                      paths))
+        viewport [opts path->ids-onscreen]
+        response-c (async/chan)]
+    (put! @into-journal [:register-viewport viewport
+                         (channel-proxy/from-chan channel-proxies response-c)])
+    (go
+      (reset! viewport-token (<! response-c)))))
 
 ;; A "viz-step" is a step with viz-canvas-specific data added.
 (defn make-viz-step
@@ -1119,12 +1117,14 @@
                        (put! @into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
                    (fn viewport<-opts [_ _ _ opts]
-                     (push-new-viewport! into-journal viewport-token
-                                         @step-template @viz-layouts opts
-                                         channel-proxies)))
+                     (when @into-journal
+                       (push-new-viewport! into-journal viewport-token
+                                           @step-template @viz-layouts opts
+                                           channel-proxies))))
         (add-watch viz-layouts ::viewport
                    (fn viewport<-layouts [_ _ prev layouts]
-                     (when (and prev
+                     (when (and @into-journal
+                                prev
                                 (ids-onscreen-changed? prev layouts))
                        (push-new-viewport! into-journal viewport-token
                                            @step-template layouts @viz-options
@@ -1170,12 +1170,13 @@
       :reagent-render
       (fn [props _ _ _ _ _]
         [resizing-canvas
-         (assoc props
-                :on-click #(viz-click % @steps selection @viz-layouts
-                                      current-cell-segments-layout)
-                :on-key-down #(viz-key-down % commands-in)
-                :style {:width "100%"
-                        :height "100vh"})
+         (cond-> (assoc props
+                        :style {:width "100%"
+                                :height "100vh"})
+           @into-journal (assoc
+                          :on-click #(viz-click % @steps selection @viz-layouts
+                                                current-cell-segments-layout)
+                          :on-key-down #(viz-key-down % commands-in)))
          [selection steps steps-data ff-synapses-response
           cell-segments-response viz-layouts viz-options]
          (fn [ctx]

@@ -414,32 +414,36 @@
           ;; step back
           [:li
            [:button.btn.btn-default.navbar-btn
-            {:type :button
-             :on-click (send-command into-viz :step-backward)
-             :title "Step backward in time"}
+            (cond-> {:type :button
+                     :on-click (send-command into-viz :step-backward)
+                     :title "Step backward in time"}
+              (not @into-sim) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step backward"]]]
           ;; step forward
           [:li
            [:button.btn.btn-default.navbar-btn
-            {:type :button
-             :on-click (send-command into-viz :step-forward)
-             :title "Step forward in time"}
+            (cond-> {:type :button
+                     :on-click (send-command into-viz :step-forward)
+                     :title "Step forward in time"}
+              (not @into-sim) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step forward"]]]
           ;; pause button
           [:li (when-not @going? {:class "hidden"})
            [:button.btn.btn-default.navbar-btn
-            {:type :button
-             :on-click #(put! @into-sim [:pause])
-             :style {:width "5em"}}
+            (cond-> {:type :button
+                     :on-click #(put! @into-sim [:pause])
+                     :style {:width "5em"}}
+              (not @into-sim) (assoc :disabled "disabled"))
             "Pause"]]
           ;; run button
           [:li (when @going? {:class "hidden"})
            [:button.btn.btn-primary.navbar-btn
-            {:type :button
-             :on-click #(put! @into-sim [:run])
-             :style {:width "5em"}}
+            (cond-> {:type :button
+                     :on-click #(put! @into-sim [:run])
+                     :style {:width "5em"}}
+              (not @into-sim) (assoc :disabled "disabled"))
             "Run"]]
           ;; display mode
           [:li.dropdown
