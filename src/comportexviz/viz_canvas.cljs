@@ -963,6 +963,18 @@
   [steps steps-data]
   (map make-viz-step steps (repeat steps-data)))
 
+(defn absorb-new-steps!
+  [steps-v steps-data into-journal viewport-tok channel-proxies]
+  (let [new-steps (->> steps-v
+                       (remove (partial contains?
+                                        @steps-data)))]
+    (swap! steps-data
+           #(into (select-keys % steps-v) ;; remove old steps
+                  (for [step new-steps] ;; insert new caches
+                    [step {:cache (atom {})}])))
+    (fetch-inbits-cols! into-journal steps-data new-steps
+                        viewport-tok channel-proxies)))
+
 (defn ids-onscreen-changed?
   [before after]
   (let [paths (all-layout-paths after)
@@ -1035,7 +1047,7 @@
                                              :model-id (:model-id
                                                         (nth @steps dt)))))))
           :step-forward (if (zero? (:dt @selection))
-                          (when @into-sim
+                          (when (and into-sim @into-sim)
                             (put! @into-sim [:step]))
                           (swap! selection
                                  (fn [sel]
@@ -1077,7 +1089,7 @@
                        (if apply-to-all?
                          (scroll-all-layers! viz-layouts viz-options false)
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
-          :toggle-run (when @into-sim
+          :toggle-run (when (and into-sim @into-sim)
                         (put! @into-sim [:toggle])))
         (recur)))
 
@@ -1092,17 +1104,20 @@
     (reagent/create-class
      {:component-will-mount
       (fn [_]
+        (when @step-template
+          (absorb-step-template @step-template viz-options viz-layouts))
+
+        (when (not-empty @steps)
+          (add-watch viewport-token ::initial-steps-fetch
+                     (fn [_ _ _ token]
+                       (remove-watch viewport-token ::initial-steps-fetch)
+                       (absorb-new-steps! @steps steps-data into-journal token
+                                         channel-proxies))))
+
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
-                     (let [new-steps (->> xs
-                                          (remove (partial contains?
-                                                           @steps-data)))]
-                       (swap! steps-data
-                              #(into (select-keys % xs) ;; remove old steps
-                                     (for [x new-steps] ;; insert new caches
-                                       [x {:cache (atom {})}])))
-                       (fetch-inbits-cols! into-journal steps-data new-steps
-                                           @viewport-token channel-proxies))))
+                     (absorb-new-steps! xs steps-data into-journal
+                                       @viewport-token channel-proxies)))
         (add-watch viewport-token ::fetch-everything
                    (fn fetch-everything [_ _ old-token token]
                      (fetch-inbits-cols! into-journal steps-data @steps token

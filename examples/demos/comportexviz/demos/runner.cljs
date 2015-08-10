@@ -16,11 +16,11 @@
   []
   (reset! main/into-journal (async/chan))
 
-  (let [into-sim (atom (async/chan))]
-    (bridge/init (str "ws://" js/location.host "/ws/")
-                 @main/into-journal
-                 @into-sim
-                 main/channel-proxies)
-
+  (let [into-sim (atom (async/chan))
+        register-remote-target! (bridge/init
+                                 (str "ws://" js/location.host "/ws/")
+                                 main/channel-proxies)]
+    (register-remote-target! :into-journal @main/into-journal)
+    (register-remote-target! :into-sim @into-sim)
     (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                     (dom/getElement "comportexviz-app"))))
