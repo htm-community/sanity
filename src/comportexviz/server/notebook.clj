@@ -13,20 +13,6 @@
 ;; Currently not an issue. This keeps the `viz` API easier.
 (def channel-proxies (channel-proxy/registry))
 
-(def id-count (atom 0))
-(defn next-id! []
-  (str "ComportexNotebookOutput" (swap! id-count inc)))
-
-;; Elegant.
-(defn run-script-on-el [manipulate-el]
-  (let [id (next-id!)]
-    {:type :html
-     :content (str "<div id='" id "'></div>"
-                   "<script type='text/javascript'>"
-                   "var el = document.getElementById('" id "');"
-                   manipulate-el
-                   "</script>")}))
-
 (defn transit-str
   [m]
   (let [out (ByteArrayOutputStream.)
@@ -48,9 +34,19 @@
               ;; it's receiving -- it's not piping opaque messages to some other
               ;; corner of its code.
               target-id (channel-proxy/target-id ij)]
-          (run-script-on-el
-           (format "comportexviz.demos.notebook.add_viz(el,%s);"
-                   (pr-str (transit-str target-id)))))))))
+          {:type :html
+           :content ""
+           :didMount (format
+                      "(function(el) {
+                           comportexviz.demos.notebook.add_viz(el, %s)
+                       })"
+                      (pr-str (transit-str target-id)))
+           :saveHook "(function(el) {
+                          return {
+                            'type': 'html',
+                            'content': comportexviz.demos.notebook.exported_viz(el)
+                          };
+                      })"})))))
 
 (defn head-html
   [comportex-port]

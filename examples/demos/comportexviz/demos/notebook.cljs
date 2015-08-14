@@ -60,3 +60,8 @@
                          step-template viz-options into-viz-mult nil
                          (atom into-journal) channel-proxies]
                         el)))))
+
+(defn ^:export exported-viz [el]
+  (let [cnv (.-firstChild el)]
+    (assert (= "CANVAS" (.-nodeName cnv)))
+    (str "<img src='" (.toDataURL cnv "image/png") "' />")))
