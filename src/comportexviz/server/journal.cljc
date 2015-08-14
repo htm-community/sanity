@@ -30,7 +30,7 @@
   [steps-c commands-c current-model]
   (let [steps-offset (atom 0)
         model-steps (atom [])
-        keep-steps (atom 0)
+        keep-steps (atom 50)
         steps-in (async/chan)
         steps-mult (async/mult steps-in)
         find-model (fn [id]
@@ -77,6 +77,13 @@
                                                 steps-subscriber)
                         viewports (assoc ::viewports viewports))))
 
+            :get-steps
+            (let [[response-c] xs]
+              (put! response-c
+                    [(data/step-template-data @current-model)
+                     (->> (map make-step @model-steps (drop @steps-offset (range)))
+                          vec)]))
+
             :subscribe
             (let [[keep-n-steps steps-c response-c] xs]
               (reset! keep-steps keep-n-steps)
@@ -118,7 +125,7 @@
                                   (and (= to :selected)
                                        (:col sel)))
                           (if-let [htm (find-model id)]
-                            (data/ff-synapses-data (find-model id) sel opts)
+                            (data/ff-synapses-data htm sel opts)
                             (id-missing-response id steps-offset)))
                         {})))
 

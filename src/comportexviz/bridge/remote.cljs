@@ -21,12 +21,20 @@
                                               extra-handlers)})
       (transit/read s)))
 
+(defn target-put
+  [target v]
+  [target :put! v])
+
+(defn target-close
+  [target]
+  [target :close!])
+
 (defn init
-  [ws-url into-journal into-sim channel-proxies]
-  (let [id-max (atom 0)
-        to-network-c (async/chan)
+  [ws-url channel-proxies]
+  (let [to-network-c (async/chan)
         connection-admin-c (async/chan)
         reconnect-blob (atom nil)
+        remote-targets (atom {})
         fconn (fn fconn []
                 (let [ws (js/WebSocket. ws-url)]
                   (doto ws
@@ -36,10 +44,8 @@
                             (when @reconnect-blob
                               (println "Establishing reconnection."
                                        @reconnect-blob)
-                              (put! into-journal [:client-reconnect
-                                                  @reconnect-blob])
-                              (put! into-sim [:client-reconnect
-                                              @reconnect-blob]))
+                              (doseq [[t ch] @remote-targets]
+                                (put! ch [:client-reconnect @reconnect-blob])))
                             (go-loop []
                               (let [msg (<! to-network-c)]
                                 (when (not (nil? msg))
@@ -64,18 +70,19 @@
                                                    (channel-proxy/read-handler
                                                     (fn [t v]
                                                       (put! to-network-c
-                                                            [t :put! v]))
+                                                            (target-put t v)))
                                                     (fn [t]
                                                       (put! to-network-c
-                                                            [t :close!]))))]
-                              (let [ch (channel-proxy/from-target
-                                        channel-proxies target)]
-                                (case op
-                                  :put! (do
-                                          ;; enumerate lazy tree
-                                          ;; (dorun (tree-seq coll? seq msg))
-                                          (put! ch msg))
-                                  :close! (close! ch)))))))))]
+                                                            (target-close t)))
+                                                    ))
+                                  ch (channel-proxy/from-target
+                                      channel-proxies target)]
+                              (case op
+                                :put! (do
+                                        ;; enumerate lazy tree
+                                        ;; (dorun (tree-seq coll? seq msg))
+                                        (put! ch msg))
+                                :close! (close! ch))))))))]
     (go-loop []
       (let [v (<! connection-admin-c)]
         (when-not (nil? v)
@@ -84,10 +91,10 @@
               :reset-reconnect-blob (let [[blob] xs]
                                       (reset! reconnect-blob blob))))
           (recur))))
-    (async/pipeline 1 to-network-c (map (fn [v] [:into-sim :put! v])) into-sim
-                    false)
-    (async/pipeline 1 to-network-c (map (fn [v] [:into-journal :put! v]))
-                    into-journal false)
     (channel-proxy/register-chan channel-proxies :connection-admin
                                  connection-admin-c)
-    (fconn)))
+    (fconn)
+
+    (fn register-remote-target! [t ch]
+      (swap! remote-targets assoc t ch)
+      (async/pipeline 1 to-network-c (map (partial target-put t)) ch false))))

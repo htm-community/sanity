@@ -58,7 +58,8 @@
   (from-target [_ target-id]))
 
 (defprotocol PChannelProxyRegistry
-  (register-chan [_ target-id ch]))
+  (register-chan [_ target-id ch])
+  (known-targets [_]))
 
 (deftype ChannelProxyRegistry [target->proxy]
   PChannelProxyFactory
@@ -80,9 +81,22 @@
                                            dissoc target-id))
                                   nil))]
       (swap! target->proxy assoc target-id r)
-      r)))
+      r))
+  (known-targets [_]
+    (keys @target->proxy)))
 
 (defn registry
+  "A mechanism for getting serializable channels. Allows you to
+  specify network behavior to the serialized channels at decode time.
+
+  The idea: the parts of a program that know about the network are
+  often far-separated from the parts that know what's in a
+  message. With this approach, the decode/deserialize code now knows
+  when it sees a channel and can specify the proper behavior.
+
+  The registry keeps a mapping of IDs to channels, so that when
+  messages arrive from the network (generally coming from a remote
+  channel-proxy) the message can be dispatched to the proper channel."
   ([]
    (ChannelProxyRegistry. (atom {})))
   ([target->chan]

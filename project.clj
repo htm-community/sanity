@@ -12,9 +12,13 @@
                  [reagent-forms "0.5.1"]
                  [ring/ring-core "1.4.0"]
                  [compojure "1.4.0"]
-                 [info.sunng/ring-jetty9-adapter "0.8.6"]
-                 [com.cognitect/transit-clj "0.8.271"]
-                 [com.cognitect/transit-cljs "0.8.215"]]
+                 [info.sunng/ring-jetty9-adapter "0.9.1"]
+                 [com.cognitect/transit-clj "0.8.275"]
+                 [com.cognitect/transit-cljs "0.8.220"]
+                 [com.mrcslws/gorilla-repl "0.3.5-002"
+                  :exclusions [javax.servlet/servlet-api
+                               org.slf4j/slf4j-api]]
+                 [org.clojure/data.csv "0.1.2"]]
 
   :plugins [[lein-cljsbuild "1.0.6"]
             [com.cemerick/austin "0.1.6"]
@@ -27,6 +31,11 @@
   :clean-targets ["public/demos/out"
                   "public/cortical_io/out"
                   "public/local_inhibition/out"]
+
+  :profiles {:repl
+             {;; for Cursive debugging
+              ;; :jvm-opts ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"]
+              }}
 
   :cljsbuild {:builds [{:id "demos"
                         :source-paths ["src" "examples/demos"]
