@@ -55,13 +55,13 @@
 (def encoder (e/linear-encoder 200 10 [0 24]))
 
 (def model (core/regions-in-series
-                  core/sensory-region
-                  (core/sensory-input encoder) 1
-                  (repeat spec)))
-
-(viz [model])
+            core/sensory-region
+            (core/sensory-input encoder) 1
+            (repeat spec)))
 
 (def inputs (flatten (repeat (range 0 12))))
+
+(viz model)
 ;; @@
 
 ;; **
@@ -72,12 +72,11 @@
 (def timeline
   (reductions p/htm-step model inputs))
 
-(defn steps* [s l]
+(defn steps [start n]
   (->> timeline
-       (drop s)
-       (take l)))
-
-(def steps (comp viz steps*))
+       (drop start)
+       (take n)
+       viz))
 ;; @@
 
 ;; @@
@@ -89,26 +88,32 @@
 ;; @@
 
 ;; @@
-(def predicted-inputs (->> timeline
-                           (map #(-> %
-                                     (core/predictions 1)
-                                     first
-                                     :value))))
+(defn t->input [t]
+  (-> (nth timeline t)
+      core/input-seq
+      first
+      :value))
 
-(defn plot-predictions [range-start length]
-  (let [range-start (max 1 range-start) ;; need a previous step for predictions
-        r (range range-start (+ range-start length) 1)]
+(defn t->prediction [t]
+  (when (> t 0)
+    (-> (nth timeline (dec t))
+        (core/predictions 1)
+        first
+        :value)))
+
+(defn plot-predictions [start n]
+  (let [r (range start (+ start n) 1)]
     (plot/compose
      (plot/list-plot (->> r
                           (map (fn [i]
-                                 [i (nth inputs i)])))
+                                 [i (t->input i)])))
                      :plot-size 800
                      :joined true
                      :color "red"
                      :opacity 0.8)
      (plot/list-plot (->> r
                           (map (fn [i]
-                                 [i (nth predicted-inputs (dec i))])))
+                                 [i (t->prediction i)])))
                      :plot-size 800
                      :joined false
                      :color "blue"

@@ -25,7 +25,10 @@
   (reify
     renderable/Renderable
     (render [_]
-      (let [models-c (async/chan)
+      (let [models (if (sequential? models)
+                     models
+                     [models])
+            models-c (async/chan)
             into-j (async/chan)]
         (journal/init models-c into-j (atom (last models)))
         (async/onto-chan models-c models)
