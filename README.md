@@ -8,7 +8,7 @@ See it in action in see [the online demos](https://nupic-community.github.io/com
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
-# The Runner
+## The Runner
 
 ComportexViz runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
@@ -29,7 +29,7 @@ ComportexViz can run HTM models:
 - Inside the browser
 - On a remote / localhost server
 
-# The Notebook
+## The Notebook
 
 ComportexViz interactive visualizations are also available in notebook
 form, similar to IPython Notebook or Mathematica. It builds on
