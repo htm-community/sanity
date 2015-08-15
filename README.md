@@ -8,7 +8,9 @@ See it in action in see [the online demos](https://nupic-community.github.io/com
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
-ComportexViz runs HTM models in the browser with interactive
+# The Runner
+
+ComportexViz runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
 back in time. You can inspect input values, encoded input bits, and the
 columns that make up cortical region layers. Within a column you can inspect
@@ -22,6 +24,26 @@ these may be shown in 2D grids from a single time step, or as one
 vertical line per timestep, allowing several time steps to be shown
 in series. Also, summarised time series are shown in the 'plots' tab.
 
+ComportexViz can run HTM models:
+
+- Inside the browser
+- On a remote / localhost server
+
+# The Notebook
+
+ComportexViz interactive visualizations are also available in notebook
+form, similar to IPython Notebook or Mathematica. It builds on
+[Gorilla REPL](https://github.com/JonyEpsilon/gorilla-repl).
+
+The notebook:
+
+- Provides an alternate way to drive and present HTM models
+- Is a launchpad for ComportexViz runners
+- Is built for blogging. Use the
+  [Gorilla REPL viewer service](http://gorilla-repl.org/viewer.html)
+  or host your own on a static webserver. Upload your saved worksheet
+  and it will just work. Interactive graphics are serialized as images
+  in the state that you left them.
 
 ## Usage
 
@@ -39,6 +61,27 @@ Clone ComportexViz, and then build it:
 ```
 lein do cljsbuild clean, cljsbuild once demos
 ```
+
+Start a REPL:
+
+```
+lein repl
+```
+
+From the REPL, start a notebook:
+
+```clojure
+(start-notebook)
+```
+
+You can now launch it in a web browser. The notebook will show you how
+to launch your own ComportexViz runner.
+
+
+## Online demos
+
+To host [the online demos](https://nupic-community.github.io/comportexviz/) locally,
+do a `cljsbuild`, as above.
 
 Now open `public/demos/*.html` in a web browser, preferably Google
 Chrome. Each HTML page loads the corresponding model defined
