@@ -1,6 +1,7 @@
 (ns comportexviz.main
   (:require [comportexviz.controls-ui :as cui]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.helpers :as helpers :refer [window-resize-listener]]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -20,7 +21,6 @@
 (def selection (atom viz/blank-selection))
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
-(def into-viz-mult (async/mult into-viz))
 
 ;;; ## Connect journal to viz
 
@@ -88,8 +88,10 @@
     [:div.col-sm-3.col-lg-2
      [world-pane]]
     [:div.col-sm-9.col-lg-10
-     [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options
-      into-viz-mult into-sim into-journal channel-proxies]]]])
+     [window-resize-listener into-viz]
+     [viz/viz-canvas {:style {:width "100%" :height "100vh"} :tabIndex 1} steps
+      selection step-template viz-options into-viz into-sim into-journal
+      channel-proxies]]]])
 
 (defn comportexviz-app
   [model-tab world-pane into-sim]

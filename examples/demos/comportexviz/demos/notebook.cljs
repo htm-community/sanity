@@ -46,9 +46,7 @@
                              (cond->
                                  (= 1 (count @steps))
                                (assoc-in [:drawing :display-mode]
-                                         :two-d))))
-            into-viz (async/chan)
-            into-viz-mult (async/mult into-viz)]
+                                         :two-d))))]
         (let [[region-key rgn] (-> @step-template :regions seq first)
               layer-id (-> rgn keys first)]
           (swap! selection assoc
@@ -56,8 +54,10 @@
                  :region region-key
                  :layer layer-id
                  :model-id (:model-id (first @steps))))
-        (reagent/render [viz/viz-canvas {:tabIndex 0} steps selection
-                         step-template viz-options into-viz-mult nil
+        (reagent/render [viz/viz-canvas {:style {:width "100%"
+                                                 :height "100vh"}
+                                         :tabIndex 0} steps
+                         selection step-template viz-options nil nil
                          (atom into-journal) channel-proxies]
                         el)))))
 

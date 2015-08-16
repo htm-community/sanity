@@ -1,5 +1,6 @@
 (ns comportexviz.helpers
-  (:require [goog.dom]
+  (:require [comportexviz.util :refer [tap-c]]
+            [goog.dom]
             [goog.dom.classes]
             [goog.style :as style]
             [goog.events :as events]
@@ -8,7 +9,7 @@
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util :refer [round]]
             [cljs.core.async :as async :refer [put! <!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]))
+  (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]))
 
 (defn- loading-message-element []
   (goog.dom/getElement "loading-message"))
@@ -83,20 +84,6 @@
 
 ;;; canvas
 
-(defn on-resize [component width-px height-px resizes]
-  (let [el (reagent/dom-node component)
-        size-px (style/getSize el)
-        w (.-width size-px)
-        h (.-height size-px)]
-    (when (or (zero? w) (zero? h))
-      ;; The "right" way around this is to not use display:none, and instead
-      ;; simply exclude undisplayed nodes from the component's render fn.
-      (js/console.warn "The resizing-canvas can't handle display:none."))
-    (reset! width-px w)
-    (reset! height-px h)
-    (when resizes
-      (put! resizes [w h]))))
-
 (defn- canvas$call-draw-fn
   [component]
   ;; argv contains entire hiccup form, so it's shifted one to the right.
@@ -120,6 +107,24 @@
                                       :width width
                                       :height height)])}))
 
+(defn window-resize-listener [resizes-c]
+  "An empty component whose sole role is to pipe window resize events into a
+   channel."
+  (let [resize-key (atom nil)]
+    (reagent/create-class
+     {:component-did-mount (fn [component]
+                             (reset! resize-key
+                                     (events/listen js/window "resize"
+                                                    #(put! resizes-c
+                                                           :window-resized))))
+
+      :component-will-unmount #(when @resize-key
+                                 (events/unlistenByKey @resize-key))
+
+      :display-name "window-resize-listener"
+      :reagent-render (fn [_]
+                        nil)})))
+
 (defn- resizing-canvas$call-draw-fn
   [component]
   ;; argv contains entire hiccup form, so it's shifted one to the right.
@@ -128,32 +133,51 @@
               reagent/dom-node
               (.getContext "2d")))))
 
-(defn resizing-canvas [_ _ _ resizes]
-  (let [resize-key (atom nil)
-        width-px (atom nil)
-        height-px (atom nil)]
+(defn resizing-canvas [_ _ _ invalidates-c resizes]
+  "A canvas that syncs its internal dimensions with its layout dimensions.
+  This sync happens immediately after the canvas is mounted in the DOM, and
+  subsequently whenever a value comes through the `invalidates-mult`."
+  (let [width-px (atom nil)
+        height-px (atom nil)
+        invalidates-c (or invalidates-c (async/chan))
+        teardown-c (async/chan)]
     (reagent/create-class
      {:component-did-mount (fn [component]
-                             (reset! resize-key
-                                     (events/listen js/window "resize"
-                                                    #(on-resize component
-                                                                width-px
-                                                                height-px
-                                                                resizes)))
-
-                             ;; Causes a render + did-update.
-                             (on-resize component width-px height-px resizes))
+                             (go-loop []
+                               (when (not (nil? (alt! teardown-c nil
+                                                      invalidates-c true
+                                                      :priority true)))
+                                 (let [size-px (-> component
+                                                   reagent/dom-node
+                                                   style/getSize)
+                                       w (.-width size-px)
+                                       h (.-height size-px)]
+                                   (reset! width-px w)
+                                   (reset! height-px h)
+                                   (when resizes
+                                     (put! resizes [w h])))
+                                 (recur)))
+                             (put! invalidates-c :initial-mount))
 
       :component-did-update #(resizing-canvas$call-draw-fn %)
 
-      :component-will-unmount #(when @resize-key
-                                 (events/unlistenByKey @resize-key))
+      :component-will-unmount #(put! teardown-c :teardown)
 
       :display-name "resizing-canvas"
       :reagent-render (fn [props canaries _ _]
                         ;; Need to deref all atoms consumed by draw function to
                         ;; subscribe to changes.
                         (mapv deref canaries)
-                        [:canvas (assoc props
-                                   :width @width-px
-                                   :height @height-px)])})))
+                        (let [w @width-px
+                              h @height-px]
+                          (when (or (zero? w) (zero? h))
+                            ;; The "right" way around this is to not use
+                            ;; display:none, and instead simply exclude
+                            ;; undisplayed nodes from the component's render fn.
+                            (js/console.warn
+                             (str "The resizing canvas is size " w " " h
+                                  ". If it's 'display:none`, it won't detect "
+                                  "its own visibility change.")))
+                          [:canvas (assoc props
+                                          :width w
+                                          :height h)]))})))

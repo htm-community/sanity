@@ -13,8 +13,8 @@
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
-            [cljs.core.async :as async :refer [<! put! chan]])
-  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
+            [cljs.core.async :as async :refer [<! put!]])
+  (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
                    [comportexviz.macros :refer [with-cache]]))
 
 (def blank-selection {:region nil
@@ -978,12 +978,13 @@
 (defn ids-onscreen-changed?
   [before after]
   (let [paths (all-layout-paths after)
+        ;; TODO should also consider height
         extractor (juxt lay/scroll-position :order)]
     (not= (map-layouts extractor before paths)
           (map-layouts extractor after paths))))
 
 (defn viz-canvas
-  [_ steps selection step-template viz-options commands-in-mult into-sim
+  [_ steps selection step-template viz-options into-viz into-sim
    into-journal channel-proxies]
   (let [steps-data (atom {})
         ff-synapses-response (atom nil)
@@ -991,15 +992,14 @@
         viz-layouts (atom nil)
         viewport-token (atom nil)
         current-cell-segments-layout (clojure.core/atom nil)
-        resizes (chan)
-
-        ;; Use a mult for commands-in to avoid scenarios where there's a race
-        ;; between two components, mounting and unmounting, competing for values
-        ;; on the channel.
-        commands-in (tap-c commands-in-mult)]
-
+        resizes (async/chan)
+        size-invalidates-c (async/chan)
+        into-viz (or into-viz (async/chan))
+        teardown-c (async/chan)]
     (go-loop []
-      (when-let [[command & xs] (<! commands-in)]
+      (when-let [[command & xs] (alt! teardown-c nil
+                                      into-viz ([v] v)
+                                      :priority true)]
         (case command
           :sort (let [[apply-to-all?] xs
                       sel-dt (:dt @selection)
@@ -1090,8 +1090,8 @@
                          (scroll-all-layers! viz-layouts viz-options false)
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
           :toggle-run (when (and into-sim @into-sim)
-                        (put! @into-sim [:toggle])))
-        (recur)))
+                        (put! @into-sim [:toggle]))
+          :window-resized (put! size-invalidates-c :window-resized))))
 
     (go-loop []
       (when-let [[width-px height-px] (<! resizes)]
@@ -1179,19 +1179,18 @@
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)
         (remove-watch selection ::syns-segments)
-        (async/close! commands-in))
+        (put! teardown-c :teardown))
 
       :display-name "viz-canvas"
+
       :reagent-render
       (fn [props _ _ _ _ _]
         [resizing-canvas
-         (cond-> (assoc props
-                        :style {:width "100%"
-                                :height "100vh"})
+         (cond-> props
            @into-journal (assoc
                           :on-click #(viz-click % @steps selection @viz-layouts
                                                 current-cell-segments-layout)
-                          :on-key-down #(viz-key-down % commands-in)))
+                          :on-key-down #(viz-key-down % into-viz)))
          [selection steps steps-data ff-synapses-response
           cell-segments-response viz-layouts viz-options]
          (fn [ctx]
@@ -1201,4 +1200,5 @@
                (draw-viz! ctx viz-steps @ff-synapses-response
                           @cell-segments-response @viz-layouts @selection opts
                           current-cell-segments-layout))))
+         size-invalidates-c
          resizes])})))
