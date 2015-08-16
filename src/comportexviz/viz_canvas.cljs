@@ -1091,7 +1091,8 @@
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
           :toggle-run (when (and into-sim @into-sim)
                         (put! @into-sim [:toggle]))
-          :window-resized (put! size-invalidates-c :window-resized))))
+          :window-resized (put! size-invalidates-c :window-resized))
+        (recur)))
 
     (go-loop []
       (when-let [[width-px height-px] (<! resizes)]
