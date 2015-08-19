@@ -33,6 +33,7 @@
         keep-steps (atom 50)
         steps-in (async/chan)
         steps-mult (async/mult steps-in)
+        journal-id (random-uuid)
         find-model (fn [id]
                      (when (number? id)
                        (let [i (- id @steps-offset)]
@@ -61,21 +62,25 @@
             :client-disconnect
             (do
               (println "JOURNAL: Client disconnected.")
-              (async/untap steps-mult (::steps-subscriber @client-info)))
+              (async/untap steps-mult (get-in @client-info
+                                              [journal-id ::steps-subscriber])))
 
             :client-reconnect
             (let [[old-client-info] xs
                   {viewports ::viewports
-                   steps-subscriber ::steps-subscriber} old-client-info]
+                   steps-subscriber ::steps-subscriber} (get old-client-info
+                                                             journal-id)]
               (println "JOURNAL: Client reconnected.")
               (when steps-subscriber
                 (println "JOURNAL: Client resubscribed to steps.")
                 (async/tap steps-mult steps-subscriber))
               (swap! client-info
                      #(cond-> %
-                        steps-subscriber (assoc ::steps-subscriber
-                                                steps-subscriber)
-                        viewports (assoc ::viewports viewports))))
+                        steps-subscriber (assoc-in [journal-id
+                                                    ::steps-subscriber]
+                                                   steps-subscriber)
+                        viewports (assoc-in [journal-id
+                                             ::viewports] viewports))))
 
             :get-steps
             (let [[response-c] xs]
@@ -88,7 +93,8 @@
             (let [[keep-n-steps steps-c response-c] xs]
               (reset! keep-steps keep-n-steps)
               (async/tap steps-mult steps-c)
-              (swap! client-info assoc ::steps-subscriber steps-c)
+              (swap! client-info assoc-in [journal-id ::steps-subscriber]
+                     steps-c)
               (println "JOURNAL: Client subscribed to steps.")
               (->> (data/step-template-data @current-model)
                    (put! response-c)))
@@ -96,12 +102,14 @@
             :register-viewport
             (let [[viewport response-c] xs]
               (let [token (random-uuid)]
-                (swap! client-info update ::viewports assoc token viewport)
+                (swap! client-info update-in [journal-id ::viewports]
+                       assoc token viewport)
                 (put! response-c token)))
 
             :unregister-viewport
             (let [[token] xs]
-              (swap! client-info update ::viewports dissoc token))
+              (swap! client-info update-in [journal-id ::viewports]
+                     dissoc token))
 
             :set-keep-steps
             (let [[keep-n-steps] xs]
@@ -109,7 +117,8 @@
 
             :get-inbits-cols
             (let [[id token response-c] xs
-                  [opts path->ids] (get-in @client-info [::viewports token])]
+                  [opts path->ids] (get-in @client-info [journal-id ::viewports
+                                                         token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
                       (data/inbits-cols-data htm prev-htm path->ids opts)
@@ -117,7 +126,7 @@
 
             :get-ff-synapses
             (let [[sel token response-c] xs
-                  [opts] (get-in @client-info [::viewports token])
+                  [opts] (get-in @client-info [journal-id ::viewports token])
                   id (:model-id sel)
                   to (get-in opts [:ff-synapses :to])]
               (put! response-c
@@ -131,7 +140,7 @@
 
             :get-cell-segments
             (let [[sel token response-c] xs
-                  [opts] (get-in @client-info [::viewports token])
+                  [opts] (get-in @client-info [journal-id ::viewports token])
                   id (:model-id sel)]
               (put! response-c
                     (if (:col sel)

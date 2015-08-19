@@ -41,9 +41,10 @@
 (defn start-notebook
   []
   (let [comportex-port (random-port)]
-    (server-ws/start notebook/channel-proxies {:port comportex-port
-                                               :block? false
-                                               :http-handler (route/files "/")})
+    (server-ws/start notebook/channel-proxies notebook/connection-changes-c
+                     {:port comportex-port
+                      :block? false
+                      :http-handler (route/files "/")})
     (let [gorilla-port (notebook/start comportex-port)
           hostname (str "localhost:" gorilla-port)]
       (println

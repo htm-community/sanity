@@ -27,40 +27,70 @@
         reader (transit/reader in :json {:handlers extra-handlers})]
     (transit/read reader)))
 
+(defn connection-persistor
+  [reconnect-blob connection-changes-c channel-proxies]
+  (let [connection-persist-c (async/chan)
+        reconnect-blob-subscribers (atom [])]
+    (channel-proxy/register-chan channel-proxies :connection-persistor
+                                 connection-persist-c)
+    (go-loop []
+      (let [[command & xs] (<! connection-persist-c)]
+        (when (not (nil? command))
+          (case command
+            :ping
+            nil
+
+            :subscribe-reconnect-blob
+            (let [[subscriber-c] xs]
+              (swap! reconnect-blob-subscribers conj subscriber-c))
+
+            :restore-connection
+            (let [[recovered-reconnect-blob] xs]
+              (put! connection-changes-c [[:client-reconnected]
+                                          recovered-reconnect-blob])))
+          (recur))))
+    (add-watch reconnect-blob [(hash connection-persist-c) ::push-to-clients]
+               (fn [_ _ _ v]
+                 (doseq [subscriber-c @reconnect-blob-subscribers]
+                   (put! subscriber-c v))))
+    connection-persist-c))
+
+(defn ws-output-chan
+  [ws]
+  (let [to-network-c (async/chan)]
+    (go-loop []
+      (let [msg (<! to-network-c)]
+        (when (not (nil? msg))
+          (jetty/send! ws msg)
+          (recur))))
+    to-network-c))
+
 (defn ws-handler
-  [channel-proxies]
+  [channel-proxies connection-changes-c]
   (let [clients (atom {})]
    {:on-connect
     (fn [ws]
-      (let [to-network-c (async/chan)
-            client-info (atom {})]
-        (go-loop []
-          (let [msg (<! to-network-c)]
-            (when (not (nil? msg))
-              (jetty/send! ws msg)
-              (recur))))
-        (add-watch client-info ::push-to-client
-                   (fn [_ _ _ v]
-                     (put! to-network-c (transit-str
-                                         [:connection-admin :put!
-                                          [:reset-reconnect-blob v]]))))
+      (let [client-info (atom {})]
         (swap! clients assoc ws
-               [to-network-c client-info])))
+               [client-info
+                (ws-output-chan ws)
+                (connection-persistor client-info connection-changes-c
+                                      channel-proxies)])))
 
     :on-error
     (fn [ws e] (println e))
 
     :on-close
     (fn [ws status-code reason]
-      (let [[_ client-info] (get @clients ws)]
-        (doseq [target (channel-proxy/known-targets channel-proxies)
-                :let [ch (channel-proxy/from-target channel-proxies target)]]
-          (put! ch [[:client-disconnect] client-info])))
+      (let [[client-info to-network-c connection-persist-c] (get @clients ws)]
+        (close! to-network-c)
+        (close! connection-persist-c)
+        (put! connection-changes-c [[:client-disconnect] client-info]))
       (swap! clients dissoc ws))
 
     :on-text
     (fn [ws text]
-      (let [[to-network-c client-info] (get @clients ws)
+      (let [[client-info to-network-c] (get @clients ws)
             [target op msg] (read-transit-str
                              text
                              (channel-proxy/read-handler
@@ -83,9 +113,10 @@
     (fn [ws bytes offset len])}))
 
 (defn start
-  ([channel-proxies {:keys [http-handler port block?]}]
+  ([channel-proxies connection-changes-c {:keys [http-handler port block?]}]
    (run-jetty (or http-handler
                   (routes (GET "/*" [] (str "Use WebSocket on port " port))))
               {:port port
-               :websockets {"/ws" (ws-handler channel-proxies)}
+               :websockets {"/ws" (ws-handler channel-proxies
+                                              connection-changes-c)}
                :join? block?})))

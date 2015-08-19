@@ -9,9 +9,11 @@
             [gorilla-repl.core :as g])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
-;; If there are multiple notebooks this is used for all of them.
+;; If there are multiple notebooks these are used for all of them.
 ;; Currently not an issue. This keeps the `viz` API easier.
 (def channel-proxies (channel-proxy/registry))
+(def connection-changes-c (async/chan))
+(def connection-changes-mult (async/mult connection-changes-c))
 
 (defn transit-str
   [m]
@@ -30,6 +32,7 @@
                      [models])
             models-c (async/chan)
             into-j (async/chan)]
+        (async/tap connection-changes-mult into-j)
         (journal/init models-c into-j (atom (last models)))
         (async/onto-chan models-c models)
         (let [ij (channel-proxy/from-chan channel-proxies into-j)
@@ -41,7 +44,7 @@
            :content ""
            :didMount (format
                       "(function(el) {
-                           comportexviz.demos.notebook.add_viz(el, %s)
+                           comportexviz.demos.notebook.add_viz(el, %s);
                        })"
                       (pr-str (transit-str target-id)))
            :saveHook "(function(el) {

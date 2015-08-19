@@ -32,9 +32,20 @@
 (defn init
   [ws-url channel-proxies]
   (let [to-network-c (async/chan)
-        connection-admin-c (async/chan)
+        connection-persistor-c (async/chan)
         reconnect-blob (atom nil)
-        remote-targets (atom {})
+        ;; Remote targets are often declared inside of messages, but you have to
+        ;; jumpstart the process somehow. One machine needs to know about
+        ;; targets on another machine before communication can start.
+        pipe-to-remote-target! (fn pipe-to-remote-target [t ch]
+                                 (go-loop []
+                                   (let [v (<! ch)]
+                                     (if-not (nil? v)
+                                       (do
+                                         (put! to-network-c (target-put t v))
+                                         (recur))
+                                       (put! to-network-c (target-close t))))))
+        _ (pipe-to-remote-target! :connection-persistor connection-persistor-c)
         fconn (fn fconn []
                 (let [ws (js/WebSocket. ws-url)]
                   (doto ws
@@ -44,8 +55,8 @@
                             (when @reconnect-blob
                               (println "Establishing reconnection."
                                        @reconnect-blob)
-                              (doseq [[t ch] @remote-targets]
-                                (put! ch [:client-reconnect @reconnect-blob])))
+                              (put! connection-persistor-c [:restore-connection
+                                                            @reconnect-blob]))
                             (go-loop []
                               (let [msg (<! to-network-c)]
                                 (when (not (nil? msg))
@@ -73,8 +84,7 @@
                                                             (target-put t v)))
                                                     (fn [t]
                                                       (put! to-network-c
-                                                            (target-close t)))
-                                                    ))
+                                                            (target-close t)))))
                                   ch (channel-proxy/from-target
                                       channel-proxies target)]
                               (case op
@@ -83,18 +93,6 @@
                                         ;; (dorun (tree-seq coll? seq msg))
                                         (put! ch msg))
                                 :close! (close! ch))))))))]
-    (go-loop []
-      (let [v (<! connection-admin-c)]
-        (when-not (nil? v)
-          (let [[command & xs] v]
-            (case command
-              :reset-reconnect-blob (let [[blob] xs]
-                                      (reset! reconnect-blob blob))))
-          (recur))))
-    (channel-proxy/register-chan channel-proxies :connection-admin
-                                 connection-admin-c)
-    (fconn)
 
-    (fn register-remote-target! [t ch]
-      (swap! remote-targets assoc t ch)
-      (async/pipeline 1 to-network-c (map (partial target-put t)) ch false))))
+    (fconn)
+    pipe-to-remote-target!))

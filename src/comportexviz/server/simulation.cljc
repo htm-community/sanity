@@ -6,6 +6,10 @@
             [org.nfrac.comportex.util :as util])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
+#?(:clj
+   (defn random-uuid []
+     (java.util.UUID/randomUUID)))
+
 (defn- sim-step! [model in-value out]
   (->> (swap! model p/htm-step in-value)
        (put! out)))
@@ -37,7 +41,8 @@
 
 (defn handle-commands [commands model options sim-closed?]
   (let [status-in (async/chan)
-        status-mult (async/mult status-in)]
+        status-mult (async/mult status-in)
+        simulation-id (random-uuid)]
     (add-watch options ::push-to-subscribers
                (fn [_ _ oldv newv]
                  (let [{:keys [go?]} newv]
@@ -50,11 +55,14 @@
             (case command
               :client-disconnect (do
                                    (println "SIMULATION: Client disconnected.")
-                                   (async/untap status-mult (::status-subscriber
-                                                             @client-info)))
+                                   (async/untap status-mult
+                                                (get-in @client-info
+                                                        [simulation-id
+                                                         ::status-subscriber])))
               :client-reconnect (let [[old-client-info] xs
                                       {status-subscriber
-                                       ::status-subscriber} old-client-info]
+                                       ::status-subscriber} (get old-client-info
+                                                                 simulation-id)]
                                   (println "SIMULATION: Client reconnected.")
                                   (when status-subscriber
                                     (println (str "SIMULATION: Client "
@@ -63,8 +71,9 @@
                                   (swap! client-info
                                          #(cond-> %
                                             status-subscriber
-                                            (assoc ::status-subscriber
-                                                   status-subscriber))))
+                                            (assoc-in [simulation-id
+                                                       ::status-subscriber]
+                                                      status-subscriber))))
               :step (swap! options update :force-n-steps inc)
               :set-spec (let [[path v] xs]
                           (swap! model assoc-in path v))
@@ -88,8 +97,9 @@
                                      (println (str "SIMULATION: Client "
                                                    "subscribed to status."))
                                      (async/tap status-mult ch)
-                                     (swap! client-info assoc
-                                            ::status-subscriber ch))))
+                                     (swap! client-info assoc-in
+                                            [simulation-id ::status-subscriber]
+                                            ch))))
           (recur))
         (reset! sim-closed? true)))))
 

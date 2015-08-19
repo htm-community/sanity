@@ -16,14 +16,18 @@
          into-sim (async/chan)
          models-in (async/chan)
          models-mult (async/mult models-in)
+         connection-changes-c (async/chan)
+         connection-changes-mult (async/mult connection-changes-c)
          channel-proxies (channel-proxy/registry
-                          {:into-sim into-sim
-                           :into-journal into-journal})
-         server (server-ws/start channel-proxies
+                        {:into-sim into-sim
+                         :into-journal into-journal})
+         server (server-ws/start channel-proxies connection-changes-c
                                  (assoc opts
                                         :http-handler (route/files "/")))]
      (when models-out-c
        (async/tap models-mult models-out-c))
+     (async/tap connection-changes-mult into-journal)
+     (async/tap connection-changes-mult into-sim)
      (simulation/start models-in model-atom input-c into-sim)
      (journal/init (utilv/tap-c models-mult) into-journal model-atom)
      (reify

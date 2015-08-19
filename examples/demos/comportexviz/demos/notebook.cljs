@@ -11,12 +11,12 @@
 (enable-console-print!)
 
 (def channel-proxies (channel-proxy/registry))
-(def register-remote-target!
+(def pipe-to-remote-target!
   (atom nil))
 
 (defn ^:export connect
   [url]
-  (reset! register-remote-target!
+  (reset! pipe-to-remote-target!
           (remote/init url channel-proxies)))
 
 (defn read-transit-str
@@ -28,7 +28,7 @@
   (let [journal-target (read-transit-str serialized)
         into-journal (async/chan)
         response-c (async/chan)]
-    (@register-remote-target! journal-target into-journal)
+    (@pipe-to-remote-target! journal-target into-journal)
     (put! into-journal [:get-steps (channel-proxy/from-chan channel-proxies
                                                             response-c)])
     (go
