@@ -7,7 +7,8 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
+            [comportexviz.helpers :as helpers :refer [resizing-canvas
+                                                      window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.util :as utilv :refer [tap-c]]
             [monet.canvas :as c]
@@ -1090,8 +1091,7 @@
                          (scroll-all-layers! viz-layouts viz-options false)
                          (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
           :toggle-run (when (and into-sim @into-sim)
-                        (put! @into-sim [:toggle]))
-          :window-resized (put! size-invalidates-c :window-resized))
+                        (put! @into-sim [:toggle])))
         (recur)))
 
     (go-loop []
@@ -1186,20 +1186,22 @@
 
       :reagent-render
       (fn [props _ _ _ _ _]
-        [resizing-canvas
-         (cond-> props
-           @into-journal (assoc
-                          :on-click #(viz-click % @steps selection @viz-layouts
-                                                current-cell-segments-layout)
-                          :on-key-down #(viz-key-down % into-viz)))
-         [selection steps steps-data ff-synapses-response
-          cell-segments-response viz-layouts viz-options]
-         (fn [ctx]
-           (let [viz-steps (make-viz-steps @steps @steps-data)
-                 opts @viz-options]
-             (when (should-draw? viz-steps opts)
-               (draw-viz! ctx viz-steps @ff-synapses-response
-                          @cell-segments-response @viz-layouts @selection opts
-                          current-cell-segments-layout))))
-         size-invalidates-c
-         resizes])})))
+        [:div nil
+         [window-resize-listener size-invalidates-c]
+         [resizing-canvas
+          (cond-> props
+            @into-journal (assoc
+                           :on-click #(viz-click % @steps selection @viz-layouts
+                                                 current-cell-segments-layout)
+                           :on-key-down #(viz-key-down % into-viz)))
+          [selection steps steps-data ff-synapses-response
+           cell-segments-response viz-layouts viz-options]
+          (fn [ctx]
+            (let [viz-steps (make-viz-steps @steps @steps-data)
+                  opts @viz-options]
+              (when (should-draw? viz-steps opts)
+                (draw-viz! ctx viz-steps @ff-synapses-response
+                           @cell-segments-response @viz-layouts @selection opts
+                           current-cell-segments-layout))))
+          size-invalidates-c
+          resizes]])})))

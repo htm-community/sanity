@@ -1,7 +1,6 @@
 (ns comportexviz.main
   (:require [comportexviz.controls-ui :as cui]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.helpers :as helpers :refer [window-resize-listener]]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -88,7 +87,6 @@
     [:div.col-sm-3.col-lg-2
      [world-pane]]
     [:div.col-sm-9.col-lg-10
-     [window-resize-listener into-viz]
      [viz/viz-canvas {:style {:width "100%" :height "100vh"} :tabIndex 1} steps
       selection step-template viz-options into-viz into-sim into-journal
       channel-proxies]]]])

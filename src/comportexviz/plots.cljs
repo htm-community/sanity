@@ -2,7 +2,8 @@
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
             [comportexviz.plots-canvas :as plt]
-            [comportexviz.helpers :refer [canvas resizing-canvas]]
+            [comportexviz.helpers :refer [canvas resizing-canvas
+                                          window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
@@ -179,15 +180,20 @@
                          (aggregate-by mean col-state-freqs-seq))))
 
 (defn ts-freqs-plot-cmp
-  [col-state-freqs-log series-colors]
-  [resizing-canvas
-    {:style {:width "100%"
-             :height 180}}
-    []
-    (fn [ctx]
-      (stacked-ts-plot ctx col-state-freqs-log
-                       [:active :active-predicted :predicted]
-                       series-colors))])
+  [_ _]
+  (let [size-invalidates-c (async/chan)]
+    (fn [col-state-freqs-log series-colors]
+      [:div nil
+       [window-resize-listener size-invalidates-c]
+       [resizing-canvas
+        {:style {:width "100%"
+                 :height 180}}
+        []
+        (fn [ctx]
+          (stacked-ts-plot ctx col-state-freqs-log
+                           [:active :active-predicted :predicted]
+                           series-colors))
+        size-invalidates-c]])))
 
 (def excitation-colors
   {:proximal-unstable :active
