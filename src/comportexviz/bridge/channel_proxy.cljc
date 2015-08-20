@@ -53,23 +53,15 @@
   (target-id [_]
     target-id))
 
-(defprotocol PChannelProxyFactory
-  (from-chan [_ ch])
-  (from-target [_ target-id]))
-
 (defprotocol PChannelProxyRegistry
-  (register-chan [_ target-id ch])
-  (known-targets [_]))
+  (register! [_ ch] [_ target-id ch])
+  (as-map [_]))
 
 (deftype ChannelProxyRegistry [target->proxy]
-  PChannelProxyFactory
-  (from-chan [this ch]
-    (register-chan this (random-uuid) ch))
-  (from-target [_ target-id]
-    (get @target->proxy target-id))
-
   PChannelProxyRegistry
-  (register-chan [_ target-id ch]
+  (register! [this ch]
+    (register! this (random-uuid) ch))
+  (register! [_ target-id ch]
     (let [r (ChannelProxy.
              target-id
              (ImpersonateChannel. (fn [v]
@@ -82,8 +74,8 @@
                                   nil))]
       (swap! target->proxy assoc target-id r)
       r))
-  (known-targets [_]
-    (keys @target->proxy)))
+  (as-map [_]
+    @target->proxy))
 
 (defn registry
   "A mechanism for getting serializable channels. Allows you to
@@ -102,7 +94,7 @@
   ([target->chan]
    (let [r (ChannelProxyRegistry. (atom {}))]
      (doseq [[t c] target->chan]
-       (register-chan r t c))
+       (register! r t c))
      r)))
 
 ;;; ## Transit helpers

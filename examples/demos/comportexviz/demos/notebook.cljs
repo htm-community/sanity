@@ -10,14 +10,14 @@
 
 (enable-console-print!)
 
-(def channel-proxies (channel-proxy/registry))
+(def local-targets (channel-proxy/registry))
 (def pipe-to-remote-target!
   (atom nil))
 
 (defn ^:export connect
   [url]
   (reset! pipe-to-remote-target!
-          (remote/init url channel-proxies)))
+          (remote/init url local-targets)))
 
 (defn read-transit-str
   [s]
@@ -29,7 +29,7 @@
         into-journal (async/chan)
         response-c (async/chan)]
     (@pipe-to-remote-target! journal-target into-journal)
-    (put! into-journal [:get-steps (channel-proxy/from-chan channel-proxies
+    (put! into-journal [:get-steps (channel-proxy/register! local-targets
                                                             response-c)])
     (go
       (let [[step-template all-steps :as r] (<! response-c)
@@ -58,7 +58,7 @@
                                                  :height "100vh"}
                                          :tabIndex 0} steps
                          selection step-template viz-options nil nil
-                         (atom into-journal) channel-proxies]
+                         (atom into-journal) local-targets]
                         el)))))
 
 (defn ^:export exported-viz [el]

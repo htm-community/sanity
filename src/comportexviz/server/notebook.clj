@@ -11,7 +11,7 @@
 
 ;; If there are multiple notebooks these are used for all of them.
 ;; Currently not an issue. This keeps the `viz` API easier.
-(def channel-proxies (channel-proxy/registry))
+(def local-targets (channel-proxy/registry))
 (def connection-changes-c (async/chan))
 (def connection-changes-mult (async/mult connection-changes-c))
 
@@ -35,7 +35,7 @@
         (async/tap connection-changes-mult into-j)
         (journal/init models-c into-j (atom (last models)))
         (async/onto-chan models-c models)
-        (let [ij (channel-proxy/from-chan channel-proxies into-j)
+        (let [ij (channel-proxy/register! local-targets into-j)
               ;; No need to send a channel-proxy. The client knows exactly what
               ;; it's receiving -- it's not piping opaque messages to some other
               ;; corner of its code.

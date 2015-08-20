@@ -11,7 +11,7 @@
 ;;; ## Journal data
 
 (def into-journal (atom nil))
-(def channel-proxies (channel-proxy/registry))
+(def local-targets (channel-proxy/registry))
 
 ;;; ## Viz data
 
@@ -27,8 +27,8 @@
   (let [steps-c (async/chan)
         response-c (async/chan)]
     (put! into-j [:subscribe (:keep-steps @viz-options)
-                  (channel-proxy/from-chan channel-proxies steps-c)
-                  (channel-proxy/from-chan channel-proxies response-c)])
+                  (channel-proxy/register! local-targets steps-c)
+                  (channel-proxy/register! local-targets response-c)])
     (go
       ;; Get the template before getting any steps.
       (reset! step-template (<! response-c))
@@ -89,14 +89,14 @@
     [:div.col-sm-9.col-lg-10
      [viz/viz-canvas {:style {:width "100%" :height "100vh"} :tabIndex 1} steps
       selection step-template viz-options into-viz into-sim into-journal
-      channel-proxies]]]])
+      local-targets]]]])
 
 (defn comportexviz-app
   [model-tab world-pane into-sim]
   (let [m (fn [] [main-pane world-pane into-sim])]
     [cui/comportexviz-app model-tab m viz-options selection
      steps step-template viz/state-colors into-viz into-sim into-journal
-     channel-proxies]))
+     local-targets]))
 
 ;;; ## Exported helpers
 

@@ -30,7 +30,7 @@
   [target :close!])
 
 (defn init
-  [ws-url channel-proxies]
+  [ws-url local-targets]
   (let [to-network-c (async/chan)
         connection-persistor-c (async/chan)
         reconnect-blob (atom nil)
@@ -85,8 +85,8 @@
                                                     (fn [t]
                                                       (put! to-network-c
                                                             (target-close t)))))
-                                  ch (channel-proxy/from-target
-                                      channel-proxies target)]
+                                  ch (get (channel-proxy/as-map local-targets)
+                                          target)]
                               (case op
                                 :put! (do
                                         ;; enumerate lazy tree

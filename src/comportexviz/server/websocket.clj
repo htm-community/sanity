@@ -28,11 +28,11 @@
     (transit/read reader)))
 
 (defn connection-persistor
-  [reconnect-blob connection-changes-c channel-proxies]
+  [reconnect-blob connection-changes-c local-targets]
   (let [connection-persist-c (async/chan)
         reconnect-blob-subscribers (atom [])]
-    (channel-proxy/register-chan channel-proxies :connection-persistor
-                                 connection-persist-c)
+    (channel-proxy/register! local-targets :connection-persistor
+                             connection-persist-c)
     (go-loop []
       (let [[command & xs] (<! connection-persist-c)]
         (when (not (nil? command))
@@ -66,7 +66,7 @@
     to-network-c))
 
 (defn ws-handler
-  [channel-proxies connection-changes-c]
+  [local-targets connection-changes-c]
   (let [clients (atom {})]
    {:on-connect
     (fn [ws]
@@ -75,7 +75,7 @@
                [client-info
                 (ws-output-chan ws)
                 (connection-persistor client-info connection-changes-c
-                                      channel-proxies)])))
+                                      local-targets)])))
 
     :on-error
     (fn [ws e] (println e))
@@ -100,23 +100,23 @@
                               (fn [t]
                                 (put! to-network-c (transit-str
                                                     [t :close!])))))]
-        (if-let [ch (channel-proxy/from-target channel-proxies target)]
+        (if-let [ch (get (channel-proxy/as-map local-targets) target)]
           (case op
             :put! (put! ch [msg client-info])
             :close! (close! ch))
           (do
             (println "ERROR: Unrecognized target" target)
-            (println "KNOWN TARGETS:" (channel-proxy/known-targets
-                                       channel-proxies))))))
+            (println "KNOWN TARGETS:" (keys (channel-proxy/as-map
+                                             local-targets)))))))
 
     :on-bytes
     (fn [ws bytes offset len])}))
 
 (defn start
-  ([channel-proxies connection-changes-c {:keys [http-handler port block?]}]
+  ([local-targets connection-changes-c {:keys [http-handler port block?]}]
    (run-jetty (or http-handler
                   (routes (GET "/*" [] (str "Use WebSocket on port " port))))
               {:port port
-               :websockets {"/ws" (ws-handler channel-proxies
+               :websockets {"/ws" (ws-handler local-targets
                                               connection-changes-c)}
                :join? block?})))

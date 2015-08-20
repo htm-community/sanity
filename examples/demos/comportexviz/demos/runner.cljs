@@ -19,7 +19,7 @@
   (let [into-sim (atom (async/chan))
         pipe-to-remote-target! (bridge/init
                                 (str "ws://" js/location.host "/ws/")
-                                main/channel-proxies)]
+                                main/local-targets)]
     (pipe-to-remote-target! :into-journal @main/into-journal)
     (pipe-to-remote-target! :into-sim @into-sim)
     (reagent/render [main/comportexviz-app model-tab world-pane into-sim]

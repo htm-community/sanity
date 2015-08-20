@@ -294,26 +294,26 @@
     (c/restore ctx)))
 
 (defn fetch-excitation-data!
-  [excitation-data sel into-journal channel-proxies]
+  [excitation-data sel into-journal local-targets]
   (let [{:keys [model-id region layer col]} sel
         response-c (async/chan)]
     (put! @into-journal
           [:get-cell-excitation-data model-id region layer col
-           (channel-proxy/from-chan channel-proxies
+           (channel-proxy/register! local-targets
                                     response-c)])
     (go
       (reset! excitation-data (<! response-c)))))
 
 (defn cell-excitation-plot-cmp
-  [_ selection _ _ _ into-journal channel-proxies]
+  [_ selection _ _ _ into-journal local-targets]
   (let [excitation-data (atom {})]
     (add-watch selection :fetch-excitation-data
                (fn [_ _ _ sel]
                  (fetch-excitation-data! excitation-data sel into-journal
-                                         channel-proxies)))
+                                         local-targets)))
 
     (fetch-excitation-data! excitation-data @selection into-journal
-                            channel-proxies)
+                            local-targets)
 
     (fn [step-template _ series-colors region-key layer-id _ _]
       [canvas
@@ -409,7 +409,7 @@
     (util/remap #(/ % total) freqs)))
 
 (defn transitions-plot-builder
-  [steps step-template selection into-journal channel-proxies]
+  [steps step-template selection into-journal local-targets]
   (let [cell-sdr-counts (atom {})
         sdr-label-counts (atom {})
         curr-sdr (atom {})
@@ -422,7 +422,7 @@
                            :let [response-c (async/chan)]]
                      (put! @into-journal [:get-learn-cells model-id
                                           region-key layer-id
-                                          (channel-proxy/from-chan channel-proxies
+                                          (channel-proxy/register! local-targets
                                                                    response-c)])
                      (go
                        (let [lc (<! response-c)
@@ -470,8 +470,8 @@
                            response-c (async/chan)]
                        (put! @into-journal [:get-transitions-data
                                             model-id region layer cell-sdr-fracs
-                                            (channel-proxy/from-chan
-                                             channel-proxies response-c)])
+                                            (channel-proxy/register!
+                                             local-targets response-c)])
                        (go
                          (let [sdr-transitions (<! response-c)]
                            (reset! plot-data {:sdr-transitions sdr-transitions

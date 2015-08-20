@@ -18,10 +18,10 @@
          models-mult (async/mult models-in)
          connection-changes-c (async/chan)
          connection-changes-mult (async/mult connection-changes-c)
-         channel-proxies (channel-proxy/registry
+         local-targets (channel-proxy/registry
                         {:into-sim into-sim
                          :into-journal into-journal})
-         server (server-ws/start channel-proxies connection-changes-c
+         server (server-ws/start local-targets connection-changes-c
                                  (assoc opts
                                         :http-handler (route/files "/")))]
      (when models-out-c

@@ -50,7 +50,7 @@
                        (put! @into-sim [:set-spec path new-spec])))))))
 
   (let [partypes (cljs.core/atom {})] ;; immutable cache
-    (fn [step-template selection into-sim channel-proxies]
+    (fn [step-template selection into-sim local-targets]
       [:div
        [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
@@ -125,8 +125,8 @@
                  (if @into-sim
                    {:on-click #(let [finished (async/chan)]
                                  (put! @into-sim
-                                       [:restart (channel-proxy/from-chan
-                                                  channel-proxies finished)])
+                                       [:restart (channel-proxy/register!
+                                                  local-targets finished)])
                                  (helpers/ui-loading-message-until finished))}
                    {:disabled "disabled"})
                  "Rebuild model"]
@@ -139,11 +139,11 @@
   )
 
 (defn gather-col-state-history!
-  [col-state-history step into-journal channel-proxies]
+  [col-state-history step into-journal local-targets]
   (let [response-c (async/chan)]
     (put! @into-journal [:get-column-state-freqs
                          (:model-id step)
-                         (channel-proxy/from-chan channel-proxies response-c)])
+                         (channel-proxy/register! local-targets response-c)])
     (go
       (let [r (<! response-c)]
         (swap! col-state-history
@@ -157,12 +157,12 @@
                  % r))))))
 
 (defn ts-plots-tab-builder
-  [steps into-journal channel-proxies]
+  [steps into-journal local-targets]
   (let [col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
                  (gather-col-state-history! col-state-history (first xs)
-                                            into-journal channel-proxies)))
+                                            into-journal local-targets)))
     (fn ts-plots-tab [series-colors]
       [:div
        [:p.text-muted "Time series of cortical column activity."]
@@ -175,7 +175,7 @@
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn cell-plots-tab
-  [step-template selection series-colors into-journal channel-proxies]
+  [step-template selection series-colors into-journal local-targets]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
    [:div
@@ -186,10 +186,10 @@
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
          [plots/cell-excitation-plot-cmp step-template selection series-colors
-          region-key layer-id into-journal channel-proxies]]))]])
+          region-key layer-id into-journal local-targets]]))]])
 
 (defn transitions-tab-builder
-  [steps step-template selection into-journal channel-proxies]
+  [steps step-template selection into-journal local-targets]
   (let [enable (async/chan)
         transitions-plot (atom
                           (fn []
@@ -200,7 +200,7 @@
       (when (<! enable)
         (reset! transitions-plot
                 (plots/transitions-plot-builder steps step-template selection
-                                                into-journal channel-proxies))))
+                                                into-journal local-targets))))
     (fn transitions-tab []
       [:div
        [:p.text-muted "Cell SDRs and their transitions meeting
@@ -209,17 +209,17 @@
         [@transitions-plot]]])))
 
 (defn fetch-details-text!
-  [into-journal text-response sel channel-proxies]
+  [into-journal text-response sel local-targets]
   (when (:col sel)
     (let [response-c (async/chan)]
       (put! @into-journal [:get-details-text sel
-                           (channel-proxy/from-chan channel-proxies
+                           (channel-proxy/register! local-targets
                                                     response-c)])
       (go
         (reset! text-response [sel (<! response-c)])))))
 
 (defn details-tab
-  [selection into-journal channel-proxies]
+  [selection into-journal local-targets]
   (let [text-response (atom [nil ""])]
     (reagent/create-class
      {:component-will-mount
@@ -228,10 +228,10 @@
                    (fn [_ _ _ sel]
                      (reset! text-response [sel ""])
                      (fetch-details-text! into-journal text-response sel
-                                          channel-proxies)))
+                                          local-targets)))
 
         (fetch-details-text! into-journal text-response @selection
-                             channel-proxies))
+                             local-targets))
 
       :component-will-unmount
       (fn [_]
@@ -254,7 +254,7 @@
                          (put! @into-journal
                                [:get-model
                                 (:model-id @selection)
-                                (channel-proxy/from-chan channel-proxies
+                                (channel-proxy/register! local-targets
                                                          response-c)
                                 true])
                          (go
@@ -358,7 +358,7 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [steps show-help viz-options viz-expanded into-viz into-sim channel-proxies]
+  [steps show-help viz-options viz-expanded into-viz into-sim local-targets]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -370,7 +370,7 @@
         going? (atom false)
         subscriber-c (async/chan)]
 
-    (let [m [:subscribe-to-status (channel-proxy/from-chan channel-proxies
+    (let [m [:subscribe-to-status (channel-proxy/register! local-targets
                                                            subscriber-c)]]
       (add-watch into-sim ::subscribe-to-status
                  (fn [_ _ _ c]
@@ -685,17 +685,17 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [_ _ _ selection steps step-template _ _ _ into-journal channel-proxies]
+  [_ _ _ selection steps step-template _ _ _ into-journal local-targets]
   (let [show-help (atom false)
         viz-expanded (atom false)
-        ts-plots-tab (ts-plots-tab-builder steps into-journal channel-proxies)
+        ts-plots-tab (ts-plots-tab-builder steps into-journal local-targets)
         transitions-tab (transitions-tab-builder steps step-template selection
-                                                 into-journal channel-proxies)]
+                                                 into-journal local-targets)]
     (fn [model-tab main-pane viz-options selection steps step-template
-         series-colors into-viz into-sim into-journal channel-proxies]
+         series-colors into-viz into-sim into-journal local-targets]
      [:div
       [navbar steps show-help viz-options viz-expanded into-viz into-sim
-       channel-proxies]
+       local-targets]
       [help-block show-help]
       [:div.container-fluid
        [:div.row
@@ -706,11 +706,11 @@
           [[:model [model-tab]]
            [:drawing [bind-fields viz-options-template viz-options]]
            [:params [parameters-tab step-template selection into-sim
-                     channel-proxies]]
+                     local-targets]]
            [:ts-plots [ts-plots-tab series-colors]]
            [:cell-plots [cell-plots-tab step-template selection series-colors
-                         into-journal channel-proxies]]
+                         into-journal local-targets]]
            [:transitions [transitions-tab]]
-           [:details [details-tab selection into-journal channel-proxies]]]]
+           [:details [details-tab selection into-journal local-targets]]]]
          ]]
        [:div#loading-message "loading"]]])))
