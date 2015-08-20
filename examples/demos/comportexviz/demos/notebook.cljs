@@ -62,6 +62,6 @@
                         el)))))
 
 (defn ^:export exported-viz [el]
-  (let [cnv (.-firstChild el)]
+  (let [cnv (-> el (.getElementsByTagName "canvas") (aget 0))]
     (assert (= "CANVAS" (.-nodeName cnv)))
     (str "<img src='" (.toDataURL cnv "image/png") "' />")))
