@@ -915,22 +915,37 @@
           (init-layouts step-template @viz-options)))
 
 (defn fetch-ff-synapses!
-  [into-journal ff-synapses-response sel viewport-token local-targets]
-  (let [response-c (async/chan)]
-    (put! @into-journal [:get-ff-synapses sel viewport-token
-                         (channel-proxy/register! local-targets response-c)])
-    (go
-      ;; dt may be outdated at this point
-      (reset! ff-synapses-response [(dissoc sel :dt) (<! response-c)]))))
+  [into-journal ff-synapses-response sel opts viewport-token local-targets]
+  (let [to (get-in opts [:ff-synapses :to])
+        {:keys [model-id region layer col]} sel
+        [continue? only-ids] (case to
+                               :all [true nil]
+                               :selected (if col
+                                           [true [col]]
+                                           [false])
+                               :default [false])]
+    (when continue?
+      (let [response-c (async/chan)]
+        (put! @into-journal [:get-ff-synapses model-id region layer only-ids
+                             viewport-token (channel-proxy/register!
+                                             local-targets response-c)])
+        (go
+          ;; dt may be outdated at this point
+          (reset! ff-synapses-response [(dissoc sel :dt) (<! response-c)]))))))
 
 (defn fetch-cell-segments!
   [into-journal cell-segments-response sel viewport-token local-targets]
-  (let [response-c (async/chan)]
-    (put! @into-journal [:get-cell-segments sel viewport-token
-                         (channel-proxy/register! local-targets response-c)])
-    (go
-      ;; dt may be outdated at this point
-      (reset! cell-segments-response [(dissoc sel :dt) (<! response-c)]))))
+  (let [{:keys [model-id region layer col cell-seg]} sel]
+    (when col
+      (let [response-c (async/chan)]
+        (put! @into-journal [:get-cell-segments model-id region layer col
+                             cell-seg viewport-token
+                             (channel-proxy/register! local-targets
+                                                      response-c)])
+        (go
+          ;; dt may be outdated at this point
+          (reset! cell-segments-response [(dissoc sel :dt)
+                                          (<! response-c)]))))))
 
 (defn fetch-inbits-cols!
   [into-journal steps-data steps viewport-token local-targets]
@@ -1124,7 +1139,7 @@
                      (fetch-inbits-cols! into-journal steps-data @steps token
                                          local-targets)
                      (fetch-ff-synapses! into-journal ff-synapses-response
-                                         @selection @viewport-token
+                                         @selection @viz-options @viewport-token
                                          local-targets)
                      (fetch-cell-segments! into-journal cell-segments-response
                                            @selection @viewport-token
@@ -1165,7 +1180,8 @@
         (add-watch selection ::syns-segments
                    (fn fetch-selection-change [_ _ _ sel]
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
-                                         @viewport-token local-targets)
+                                         @viz-options @viewport-token
+                                         local-targets)
                      (fetch-cell-segments! into-journal cell-segments-response
                                            sel @viewport-token
                                            local-targets))))

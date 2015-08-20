@@ -129,36 +129,30 @@
                       (id-missing-response id steps-offset))))
 
             :get-ff-synapses
-            (let [[sel token response-c] xs
+            (let [[id rgn-id lyr-id only-ids token response-c] xs
                   [opts] (get-in @client-info [journal-id ::viewports token])
-                  id (:model-id sel)
                   to (get-in opts [:ff-synapses :to])]
               (put! response-c
-                    (or (when (or (= to :all)
-                                  (and (= to :selected)
-                                       (:col sel)))
-                          (if-let [htm (find-model id)]
-                            (data/ff-synapses-data htm sel opts)
-                            (id-missing-response id steps-offset)))
-                        {})))
+                    (if-let [htm (find-model id)]
+                      (data/ff-synapses-data htm rgn-id lyr-id only-ids opts)
+                      (id-missing-response id steps-offset))))
 
             :get-cell-segments
-            (let [[sel token response-c] xs
-                  [opts] (get-in @client-info [journal-id ::viewports token])
-                  id (:model-id sel)]
-              (put! response-c
-                    (if (:col sel)
-                      (if-let [[prev-htm htm] (find-model-pair id)]
-                        (data/cell-segments-data htm prev-htm sel opts)
-                        (id-missing-response id steps-offset))
-                      {})))
-
-            :get-details-text
-            (let [[sel response-c] xs
-                  id (:model-id sel)]
+            (let [[id rgn-id lyr-id col ci-si token response-c] xs
+                  [opts] (get-in @client-info [journal-id ::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (comportexviz.server.details/detail-text htm prev-htm sel)
+                      (data/cell-segments-data htm prev-htm rgn-id lyr-id col
+                                               ci-si opts)
+                      (id-missing-response id steps-offset))))
+
+            :get-details-text
+            (let [[id rgn-id lyr-id col response-c] xs]
+              (put! response-c
+                    (if-let [[prev-htm htm] (find-model-pair id)]
+                      (comportexviz.server.details/detail-text htm prev-htm
+                                                               rgn-id lyr-id
+                                                               col)
                       (id-missing-response id steps-offset))))
 
             :get-model

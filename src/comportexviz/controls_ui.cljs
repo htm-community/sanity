@@ -211,8 +211,9 @@
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]
   (when (:col sel)
-    (let [response-c (async/chan)]
-      (put! @into-journal [:get-details-text sel
+    (let [{:keys [model-id region layer col]} sel
+          response-c (async/chan)]
+      (put! @into-journal [:get-details-text model-id region layer col
                            (channel-proxy/register! local-targets
                                                     response-c)])
       (go

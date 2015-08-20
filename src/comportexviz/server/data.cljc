@@ -40,9 +40,8 @@
           (range depth)))
 
 (defn ff-synapses-data
-  [htm selection opts]
-  (let [{sel-rgn :region, sel-lyr :layer, sel-col :col} selection
-        do-growing? (get-in opts [:ff-synapses :growing])
+  [htm rgn-id lyr-id only-ids opts]
+  (let [do-growing? (get-in opts [:ff-synapses :growing])
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-disconn? (get-in opts [:ff-synapses :disconnected])
         do-perm? (get-in opts [:ff-synapses :permanences])
@@ -59,12 +58,12 @@
         output-layer (into {} (map (fn [[rgn-id rgn]]
                                      [rgn-id (last (core/layers rgn))])
                                    regions))
-        this-rgn (get regions sel-rgn)
-        this-lyr (get this-rgn sel-lyr)
-        to-cols (case (get-in opts [:ff-synapses :to])
-                  :all (p/active-columns this-lyr)
-                  :selected [sel-col])
-        this-paths (map #(vector sel-rgn sel-lyr %) to-cols)]
+        this-rgn (get regions rgn-id)
+        this-lyr (get this-rgn lyr-id)
+        to-cols (if (coll? only-ids)
+                  only-ids
+                  (p/active-columns this-lyr))
+        this-paths (map #(vector rgn-id lyr-id %) to-cols)]
 
     ;; trace ff connections downwards
     (loop [path (first this-paths)
@@ -134,9 +133,8 @@
           path->synapses)))))
 
 (defn cell-segments-data
-  [htm prev-htm selection opts]
-  (let [{sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg} selection
-        regions (:regions htm)
+  [htm prev-htm sel-rgn sel-lyr col sel-ci-si opts]
+  (let [regions (:regions htm)
         lyr (get-in regions [sel-rgn sel-lyr])
         spec (p/params lyr)
         stimulus-th (:seg-stimulus-threshold spec)
