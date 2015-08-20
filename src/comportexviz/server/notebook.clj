@@ -23,41 +23,43 @@
     (.toString out)))
 
 (defn viz
-  [models]
-  (reify
-    renderable/Renderable
-    (render [_]
-      (let [models (if (sequential? models)
-                     models
-                     [models])
-            models-c (async/chan)
-            into-j (async/chan)]
-        (async/tap connection-changes-mult into-j)
-        (journal/init models-c into-j (atom (last models)) -1)
-        (async/onto-chan models-c models)
-        (let [ij (channel-proxy/register! local-targets into-j)
-              ;; No need to send a channel-proxy. The client knows exactly what
-              ;; it's receiving -- it's not piping opaque messages to some other
-              ;; corner of its code.
-              target-id (channel-proxy/target-id ij)]
-          {:type :html
-           :content ""
-           :didMount (format
-                      "(function(el) {
+  ([models]
+   (viz models nil))
+  ([models viz-options]
+   (reify
+     renderable/Renderable
+     (render [_]
+       (let [models (if (sequential? models)
+                      models
+                      [models])
+             models-c (async/chan)
+             into-j (async/chan)]
+         (async/tap connection-changes-mult into-j)
+         (journal/init models-c into-j (atom (last models)) -1)
+         (async/onto-chan models-c models)
+         (let [ij (channel-proxy/register! local-targets into-j)
+               ;; No need to send a channel-proxy. The client knows exactly what
+               ;; it's receiving -- it's not piping opaque messages to some other
+               ;; corner of its code.
+               target-id (channel-proxy/target-id ij)]
+           {:type :html
+            :content ""
+            :didMount (format
+                       "(function(el) {
                            comportexviz.demos.notebook.add_viz(el, %s);
                        })"
-                      (pr-str (transit-str target-id)))
-           :willUnmount (format
-                         "(function(el) {
+                       (pr-str (transit-str [target-id viz-options])))
+            :willUnmount (format
+                          "(function(el) {
                             comportexviz.demos.notebook.release_viz(el, %s);
                           })"
-                        (pr-str (transit-str target-id)))
-           :saveHook "(function(el) {
+                          (pr-str (transit-str target-id)))
+            :saveHook "(function(el) {
                           return {
                             'type': 'html',
                             'content': comportexviz.demos.notebook.exported_viz(el)
                           };
-                      })"})))))
+                      })"}))))))
 
 (defn head-html
   [comportex-port]

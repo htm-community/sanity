@@ -1,11 +1,12 @@
 (ns comportexviz.demos.notebook
-  (:require [cljs.core.async :as async :refer [chan put! <!]]
-            [cognitect.transit :as transit]
+  (:require [cognitect.transit :as transit]
+            [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.bridge.remote :as remote]
             [comportexviz.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
-            [comportexviz.bridge.remote :as remote]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [reagent.core :as reagent :refer [atom]])
+            [org.nfrac.comportex.util :as util]
+            [reagent.core :as reagent :refer [atom]]
+            [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (enable-console-print!)
@@ -26,7 +27,7 @@
       (transit/read s)))
 
 (defn ^:export add-viz [el serialized]
-  (let [journal-target (read-transit-str serialized)
+  (let [[journal-target opts] (read-transit-str serialized)
         into-journal (async/chan)
         response-c (async/chan)]
     (swap! target->chan assoc journal-target into-journal)
@@ -41,14 +42,21 @@
                        vec
                        atom)
             selection (atom viz/blank-selection)
+            base-opts (cond-> viz/default-viz-options
+                        (= 1 (count @steps))
+                        (assoc-in [:drawing :display-mode]
+                                  :two-d))
             viz-options (atom
-                         (-> viz/default-viz-options
-                             (assoc-in [:ff-synapses :to] :all)
-                             (assoc-in [:distal-synapses :to] :all)
-                             (cond->
-                                 (= 1 (count @steps))
-                               (assoc-in [:drawing :display-mode]
-                                         :two-d))))]
+                         (util/deep-merge-with
+                          (fn [& xs]
+                            (let [last-non-nil (->> (reverse xs)
+                                                    (filter (complement nil?))
+                                                    first)]
+                              (if (coll? last-non-nil)
+                                last-non-nil
+                                (last xs))))
+                          base-opts
+                          opts))]
         (let [[region-key rgn] (-> @step-template :regions seq first)
               layer-id (-> rgn keys first)]
           (swap! selection assoc
