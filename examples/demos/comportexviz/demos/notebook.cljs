@@ -13,6 +13,7 @@
 (def local-targets (channel-proxy/registry))
 (def pipe-to-remote-target!
   (atom nil))
+(def target->chan (atom {}))
 
 (defn ^:export connect
   [url]
@@ -28,6 +29,7 @@
   (let [journal-target (read-transit-str serialized)
         into-journal (async/chan)
         response-c (async/chan)]
+    (swap! target->chan assoc journal-target into-journal)
     (@pipe-to-remote-target! journal-target into-journal)
     (put! into-journal [:get-steps (channel-proxy/register! local-targets
                                                             response-c)])
@@ -60,6 +62,12 @@
                          selection step-template viz-options nil nil
                          (atom into-journal) local-targets]
                         el)))))
+
+(defn ^:export release-viz [el serialized]
+  (reagent/unmount-component-at-node el)
+  (let [journal-target (read-transit-str serialized)]
+    (async/close! (get @target->chan journal-target))
+    (swap! target->chan dissoc journal-target)))
 
 (defn ^:export exported-viz [el]
   (let [cnv (-> el (.getElementsByTagName "canvas") (aget 0))]

@@ -56,7 +56,7 @@
         (recur)))
 
     (go-loop []
-      (when-let [c (<! commands-c)]
+      (if-let [c (<! commands-c)]
         (let [[[command & xs] client-info] c]
           (case command
             :client-disconnect
@@ -199,4 +199,5 @@
                     (if-let [htm (find-model id)]
                       (data/transitions-data htm region-key layer-id cell-sdr-fracs)
                       (id-missing-response id steps-offset)))))
-          (recur))))))
+          (recur))
+        (println "CLOSING JOURNAL" journal-id)))))

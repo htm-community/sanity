@@ -47,6 +47,11 @@
                            comportexviz.demos.notebook.add_viz(el, %s);
                        })"
                       (pr-str (transit-str target-id)))
+           :willUnmount (format
+                         "(function(el) {
+                            comportexviz.demos.notebook.release_viz(el, %s);
+                          })"
+                        (pr-str (transit-str target-id)))
            :saveHook "(function(el) {
                           return {
                             'type': 'html',
