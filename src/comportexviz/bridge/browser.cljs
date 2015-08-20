@@ -22,4 +22,4 @@
      (when models-out
        (async/tap models-mult models-out))
      (simulation/start models-in model-atom world-c into-sim*)
-     (journal/init (utilv/tap-c models-mult) into-journal* model-atom))))
+     (journal/init (utilv/tap-c models-mult) into-journal* model-atom 50))))

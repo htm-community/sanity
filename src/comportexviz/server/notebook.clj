@@ -33,7 +33,7 @@
             models-c (async/chan)
             into-j (async/chan)]
         (async/tap connection-changes-mult into-j)
-        (journal/init models-c into-j (atom (last models)))
+        (journal/init models-c into-j (atom (last models)) -1)
         (async/onto-chan models-c models)
         (let [ij (channel-proxy/register! local-targets into-j)
               ;; No need to send a channel-proxy. The client knows exactly what

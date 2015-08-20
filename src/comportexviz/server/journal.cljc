@@ -27,10 +27,10 @@
     {}))
 
 (defn init
-  [steps-c commands-c current-model]
+  [steps-c commands-c current-model n-keep]
   (let [steps-offset (atom 0)
         model-steps (atom [])
-        keep-steps (atom 50)
+        keep-steps (atom n-keep)
         steps-in (async/chan)
         steps-mult (async/mult steps-in)
         journal-id (random-uuid)
@@ -49,8 +49,12 @@
       (when-let [model (<! steps-c)]
         (let [model-id (+ @steps-offset (count @model-steps))
               added (conj @model-steps model)
-              to-drop (max 0 (- (count added) @keep-steps))]
-          (reset! model-steps (subvec added to-drop))
+              to-drop (if (not (neg? @keep-steps))
+                        (max 0 (- (count added) @keep-steps))
+                        0)]
+          (reset! model-steps (cond-> added
+                                (pos? to-drop)
+                                (subvec to-drop)))
           (swap! steps-offset + to-drop)
           (put! steps-in (make-step model model-id)))
         (recur)))
