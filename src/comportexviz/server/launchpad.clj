@@ -36,7 +36,8 @@
      (swap! runners assoc port runner)
      (println (str "Started server on port " port))
      (println (str "Navigate to http://localhost:" port
-                   "/demos/runner.html")))))
+                   "/demos/runner.html"))
+     runner)))
 
 (defn start-notebook
   []

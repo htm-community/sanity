@@ -28,13 +28,12 @@
     (transit/read reader)))
 
 (defn connection-persistor
-  [reconnect-blob connection-changes-c local-targets]
-  (let [connection-persist-c (async/chan)
-        reconnect-blob-subscribers (atom [])]
+  [client-info connection-changes-c local-targets]
+  (let [connection-persist-c (async/chan)]
     (channel-proxy/register! local-targets :connection-persistor
                              connection-persist-c)
     (go-loop []
-      (let [[command & xs] (<! connection-persist-c)]
+      (let [[[command & xs] client-info*] (<! connection-persist-c)]
         (when (not (nil? command))
           (case command
             :ping
@@ -42,16 +41,20 @@
 
             :subscribe-reconnect-blob
             (let [[subscriber-c] xs]
-              (swap! reconnect-blob-subscribers conj subscriber-c))
+              (swap! client-info update ::blob-subscribers conj
+                     subscriber-c))
 
             :restore-connection
-            (let [[recovered-reconnect-blob] xs]
-              (put! connection-changes-c [[:client-reconnected]
-                                          recovered-reconnect-blob])))
+            (let [[recovered-client-info] xs]
+              (swap! client-info assoc ::blob-subscribers
+                     (::blob-subscribers recovered-client-info))
+              (put! connection-changes-c [[:client-reconnect
+                                           recovered-client-info]
+                                          client-info*])))
           (recur))))
-    (add-watch reconnect-blob [(hash connection-persist-c) ::push-to-clients]
+    (add-watch client-info [(hash connection-persist-c) ::push-to-clients]
                (fn [_ _ _ v]
-                 (doseq [subscriber-c @reconnect-blob-subscribers]
+                 (doseq [subscriber-c (::blob-subscribers @client-info)]
                    (put! subscriber-c v))))
     connection-persist-c))
 
@@ -65,11 +68,19 @@
           (recur))))
     to-network-c))
 
+(def all-websockets-for-testing (atom #{}))
+(defn sever-all-connections-for-testing! []
+  (let [all-ws @all-websockets-for-testing]
+    (reset! all-websockets-for-testing (empty all-ws))
+    (doseq [ws all-ws]
+      (jetty/close! ws))))
+
 (defn ws-handler
   [local-targets connection-changes-c]
   (let [clients (atom {})]
    {:on-connect
     (fn [ws]
+      (swap! all-websockets-for-testing conj ws)
       (let [client-info (atom {})]
         (swap! clients assoc ws
                [client-info
@@ -82,6 +93,7 @@
 
     :on-close
     (fn [ws status-code reason]
+      (swap! all-websockets-for-testing disj ws)
       (let [[client-info to-network-c connection-persist-c] (get @clients ws)]
         (close! to-network-c)
         (close! connection-persist-c)

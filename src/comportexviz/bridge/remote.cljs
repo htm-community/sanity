@@ -45,7 +45,6 @@
                                          (put! to-network-c (target-put t v))
                                          (recur))
                                        (put! to-network-c (target-close t))))))
-        _ (pipe-to-remote-target! :connection-persistor connection-persistor-c)
         fconn (fn fconn []
                 (let [ws (js/WebSocket. ws-url)]
                   (doto ws
@@ -93,6 +92,15 @@
                                         ;; (dorun (tree-seq coll? seq msg))
                                         (put! ch msg))
                                 :close! (close! ch))))))))]
-
+    (pipe-to-remote-target! :connection-persistor connection-persistor-c)
+    (let [reconnect-blobs-c (async/chan)]
+      (put! connection-persistor-c [:subscribe-reconnect-blob
+                                    (channel-proxy/register! local-targets
+                                                             reconnect-blobs-c)])
+      (go-loop []
+        (let [new-blob (<! reconnect-blobs-c)]
+          (when-not (nil? new-blob)
+            (reset! reconnect-blob new-blob)
+            (recur)))))
     (fconn)
     pipe-to-remote-target!))
