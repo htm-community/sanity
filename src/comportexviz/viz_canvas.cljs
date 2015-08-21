@@ -18,10 +18,9 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
                    [comportexviz.macros :refer [with-cache]]))
 
-(def blank-selection {:region nil
-                      :layer nil
+(def blank-selection {:path nil
                       :dt nil
-                      :col nil
+                      :bit nil
                       :cell-seg nil
                       :model-id nil})
 
@@ -211,29 +210,27 @@
                          (all-layout-paths m))
                  (reset-layout-caches))))))
 
-(defn scroll-sel-layer!
-  [viz-layouts viz-options down? rgn-id lyr-id]
-  (swap! viz-layouts
-         update-in [:regions rgn-id lyr-id]
-         (fn [lay]
-           (lay/scroll lay down?)))
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
+(def path->invalidate-path
+  {:regions :columns
+   :inputs :input})
 
-(defn scroll-all-layers!
-  [viz-layouts viz-options down?]
+(defn invalidate!
+  [viz-options paths]
+  (swap! viz-options
+         #(reduce (fn [m [t]]
+                    (update-in m [(path->invalidate-path t) :refresh-index]
+                               inc))
+                  % paths)))
+
+(defn scroll!
+  [viz-layouts viz-options paths down?]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path lay/scroll down?))
                    m
-                   (all-layout-paths m))))
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options
-         (fn [m]
-           (-> m
-               (update-in [:columns :refresh-index] inc)
-               (update-in [:input :refresh-index] inc)))))
+                   paths)))
+  (invalidate! viz-options paths))
 
 (defn active-ids
   [viz-step path]
@@ -245,8 +242,8 @@
                :inputs :active-bits))
         sort)))
 
-(defn add-facet-to-layers!
-  [paths viz-layouts viz-options step]
+(defn add-facets!
+  [viz-layouts viz-options paths step]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
@@ -256,42 +253,21 @@
                                                  (active-ids step path)
                                                  (:timestep step)))))
                    m
-                   paths))))
+                   paths)))
+  (invalidate! viz-options paths))
 
-(defn add-facet-to-sel-layer!
-  [viz-layouts viz-options step rgn-id lyr-id]
-  (add-facet-to-layers! [[:regions rgn-id lyr-id]] viz-layouts viz-options step)
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
-
-(defn add-facet-to-all-layers!
-  [viz-layouts viz-options step]
-  (add-facet-to-layers! (all-layout-paths @viz-layouts) viz-layouts
-                        viz-options step)
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options
-         (fn [m]
-           (-> m
-               (update-in [:columns :refresh-index] inc)
-               (update-in [:input :refresh-index] inc)))))
-
-(defn clear-facets-on-sel-layer!
-  [viz-layouts rgn-id lyr-id]
-  (swap! viz-layouts
-         update-in [:regions rgn-id lyr-id]
-         lay/clear-facets))
-
-(defn clear-facets-on-all-layers!
-  [viz-layouts]
+(defn clear-facets!
+  [viz-layouts viz-options paths]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path lay/clear-facets))
                    m
-                   (all-layout-paths m)))))
+                   paths)))
+  (invalidate! viz-options paths))
 
-(defn sort-layers!
-  [paths viz-layouts viz-options viz-steps sel-dt]
+(defn sort!
+  [viz-layouts viz-options paths viz-steps sel-dt]
   (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
         viz-steps (->> viz-steps (drop sel-dt) (take use-steps))]
     (swap! viz-layouts
@@ -302,48 +278,18 @@
                                     (->> (map active-ids viz-steps (repeat path))
                                          (lay/sort-by-recent-activity lay)))))
                      m
-                     paths)))))
+                     paths))))
+  (invalidate! viz-options paths))
 
-(defn sort-sel-layer!
-  [viz-layouts viz-options viz-steps sel-dt rgn-id lyr-id]
-  (sort-layers! [[:regions rgn-id lyr-id]]
-                viz-layouts viz-options viz-steps sel-dt)
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
-
-(defn sort-all-layers!
-  [viz-layouts viz-options viz-steps sel-dt]
-  (sort-layers! (all-layout-paths @viz-layouts)
-                viz-layouts viz-options viz-steps sel-dt)
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options
-         (fn [m]
-           (-> m
-               (update-in [:columns :refresh-index] inc)
-               (update-in [:input :refresh-index] inc)))))
-
-(defn clear-sort-on-sel-layer!
-  [viz-layouts viz-options rgn-id lyr-id]
-  (swap! viz-layouts
-         update-in [:regions rgn-id lyr-id]
-         lay/clear-sort)
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options update-in [:columns :refresh-index] inc))
-
-(defn clear-sort-on-all-layers!
-  [viz-layouts viz-options]
+(defn clear-sort!
+  [viz-layouts viz-options paths]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path lay/clear-sort))
                    m
-                   (all-layout-paths m))))
-  ;; need this to invalidate the drawing cache
-  (swap! viz-options
-         (fn [m]
-           (-> m
-               (update-in [:columns :refresh-index] inc)
-               (update-in [:input :refresh-index] inc)))))
+                   paths)))
+  (invalidate! viz-options paths))
 
 (defn draw-ff-synapses
   [ctx ff-synapses-response steps r-lays i-lays]
@@ -351,9 +297,9 @@
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
 
-  (let [[sel ff-synapses] ff-synapses-response
-        {:keys [model-id]} sel
-        dt (utilv/index-of steps #(= model-id (:model-id %)))]
+  (doseq [[sel ff-synapses] (vals ff-synapses-response)
+          :let [{:keys [model-id]} sel
+                dt (utilv/index-of steps #(= model-id (:model-id %)))]]
     (doseq [[[rgn-id lyr-id col] synapses] ff-synapses
             :let [this-lay (get-in r-lays [rgn-id lyr-id])
                   [this-x this-y] (element-xy this-lay col dt)]]
@@ -440,15 +386,27 @@
                                  (+ seg-y seg-h-px 5))]
                    [ci si])))))))
 
+(defn input-path
+  [sel]
+  (let [[t p1] (:path sel)]
+    (when (= t :inputs)
+      [p1])))
+
+(defn layer-path
+  [sel]
+  (let [[t p1 p2] (:path sel)]
+    (when (= t :regions)
+      [p1 p2])))
+
 (defn draw-cell-segments
   [ctx cell-segments-response steps r-lays i-lays opts cells-left
    current-cell-segments-layout]
   (c/save ctx)
   (let [[sel cell-segments] cell-segments-response
-        {sel-rgn :region, sel-lyr :layer, col :col, sel-ci-si :cell-seg,
-         model-id :model-id} sel
+        {col :bit model-id :model-id sel-ci-si :cell-seg} sel
+        [sel-rgn sel-lyr] (layer-path sel)
         dt (utilv/index-of steps #(= model-id (:model-id %)))]
-    (when (and dt col)
+    (when (and dt col sel-lyr)
       (let [lay (get-in r-lays [sel-rgn sel-lyr])
             n-segs-by-cell (->> cell-segments
                                 (into (sorted-map))
@@ -684,10 +642,7 @@
 (defn draw-viz!
   [ctx viz-steps ff-synapses-response cell-segments-response layouts sel opts
    current-cell-segments-layout]
-  (let [{sel-dt :dt
-         sel-rgn :region
-         sel-lyr :layer
-         sel-col :col} sel
+  (let [{sel-lay-path :path sel-bit :bit sel-dt :dt} sel
         i-lays (:inputs layouts)
         r-lays (:regions layouts)
 
@@ -828,16 +783,19 @@
     (doseq [lay (mapcat vals (vals r-lays))]
       (lay/draw-facets lay ctx))
     ;; highlight selection
-    (when-let [lay (get-in r-lays [sel-rgn sel-lyr])]
+    (when-let [lay (and sel-lay-path
+                        (get-in layouts sel-lay-path))]
       (lay/highlight-layer lay ctx (:highlight state-colors)))
     (when (> draw-steps 1)
       (doseq [lay (vals i-lays)]
         (lay/highlight-dt lay ctx sel-dt (:highlight state-colors)))
       (doseq [lay (mapcat vals (vals r-lays))]
         (lay/highlight-dt lay ctx sel-dt (:highlight state-colors))))
-    (when sel-col
-      (let [lay (get-in r-lays [sel-rgn sel-lyr])]
-        (lay/highlight-element lay ctx sel-dt sel-col sel-col (:highlight state-colors))))
+    (when sel-bit
+      (let [lay (and sel-lay-path
+                     (get-in layouts sel-lay-path))]
+        (lay/highlight-element lay ctx sel-dt sel-bit sel-bit
+                               (:highlight state-colors))))
 
     ;; draw ff synapses
     (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays i-lays)
@@ -858,8 +816,8 @@
 (def key->control-k
   {:left :step-backward
    :right :step-forward
-   :up :column-up
-   :down :column-down
+   :up :bit-up
+   :down :bit-down
    :page-up :scroll-up
    :page-down :scroll-down
    :space :toggle-run})
@@ -883,32 +841,35 @@
     ;; check inputs
     (doseq [[k lay] i-lays
             :let [[dt id] (lay/clicked-id lay x y)]
-            :when dt]
+            :when dt
+            :let [dt (min dt max-dt)
+                  updates (cond-> {:path [:inputs k] :bit id}
+                            (== 1 (count (p/dims-of lay)))
+                            (assoc :dt dt
+                                   :model-id (:model-id (nth steps dt))))]]
       (reset! hit? true)
-      (when (== 1 (count (p/dims-of lay)))
-        (let [dt (min dt max-dt)]
-          (swap! selection assoc :dt dt :model-id (:model-id (nth steps dt))))))
+      (swap! selection merge updates))
     ;; check regions
     (doseq [[rgn-id lyr-lays] r-lays
             [lyr-id lay] lyr-lays
             :let [[dt col] (lay/clicked-id lay x y)]
-            :when dt]
+            :when dt
+            :let [dt (min dt max-dt)
+                  updates (cond-> {:path [:regions rgn-id lyr-id] :bit col}
+                            (== 1 (count (p/dims-of lay)))
+                            (assoc :dt dt
+                                   :model-id (:model-id (nth steps dt))))]]
       (reset! hit? true)
-      (if (== 1 (count (p/dims-of lay)))
-        (let [dt (min dt max-dt)]
-          (swap! selection assoc :region rgn-id :layer lyr-id :col col
-                 :cell-seg nil :dt dt :model-id (:model-id (nth steps dt))))
-        (swap! selection assoc :region rgn-id :layer lyr-id :col col
-               :cell-seg nil)))
+      (swap! selection merge updates))
     ;; check cells
-    (when (:col @selection)
+    (when (:bit @selection)
       (when-let [cslay @current-cell-segments-layout]
         (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
           (swap! selection assoc :cell-seg [ci si]))))
     (when-not @hit?
       ;; checked all, nothing clicked
-      (swap! selection assoc :col nil :cell-seg nil))))
+      (swap! selection assoc :bit nil :cell-seg nil))))
 
 (defn absorb-step-template [step-template viz-options viz-layouts]
   (reset! viz-layouts
@@ -917,35 +878,58 @@
 (defn fetch-ff-synapses!
   [into-journal ff-synapses-response sel opts viewport-token local-targets]
   (let [to (get-in opts [:ff-synapses :to])
-        {:keys [model-id region layer col]} sel
-        [continue? only-ids] (case to
-                               :all [true nil]
-                               :selected (if col
-                                           [true [col]]
-                                           [false])
-                               :default [false])]
-    (when continue?
-      (let [response-c (async/chan)]
-        (put! @into-journal [:get-ff-synapses model-id region layer only-ids
-                             viewport-token (channel-proxy/register!
-                                             local-targets response-c)])
-        (go
-          ;; dt may be outdated at this point
-          (reset! ff-synapses-response [(dissoc sel :dt) (<! response-c)]))))))
+        {:keys [path bit model-id]} sel]
+    ;; in-synapses
+    (when-not
+        (when-let [[rgn-id lyr-id] (layer-path sel)]
+          (let [[continue? only-ids] (case to
+                                       :all [true nil]
+                                       :selected (if bit
+                                                   [true [bit]]
+                                                   [false])
+                                       :default [false])]
+            (when continue?
+              (let [response-c (async/chan)]
+                (go
+                  ;; dt may be outdated at this point
+                  (swap! ff-synapses-response assoc :in-synapses
+                         [(dissoc sel :dt) (<! response-c)]))
+                (put! @into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
+                                     only-ids viewport-token
+                                     (channel-proxy/register! local-targets
+                                                              response-c)])
+                true))))
+      (swap! ff-synapses-response dissoc :in-synapses))
+    ;; out-synapses
+    (when-not
+        (and bit
+             (when-let [[inp-id] (input-path sel)]
+               (let [response-c (async/chan)]
+                 (go
+                   (swap! ff-synapses-response assoc :out-synapses
+                          [(dissoc sel :dt) (<! response-c)]))
+                 (put! @into-journal [:get-ff-out-synapses model-id inp-id bit
+                                      viewport-token
+                                      (channel-proxy/register! local-targets
+                                                               response-c)])
+                 true)))
+      (swap! ff-synapses-response dissoc :out-synapses))))
 
 (defn fetch-cell-segments!
   [into-journal cell-segments-response sel viewport-token local-targets]
-  (let [{:keys [model-id region layer col cell-seg]} sel]
-    (when col
+  (let [{:keys [path bit model-id cell-seg]} sel
+        [rgn-id lyr-id] (layer-path sel)]
+    (if (and rgn-id bit)
       (let [response-c (async/chan)]
-        (put! @into-journal [:get-cell-segments model-id region layer col
+        (put! @into-journal [:get-cell-segments model-id rgn-id lyr-id bit
                              cell-seg viewport-token
                              (channel-proxy/register! local-targets
                                                       response-c)])
         (go
           ;; dt may be outdated at this point
           (reset! cell-segments-response [(dissoc sel :dt)
-                                          (<! response-c)]))))))
+                                          (<! response-c)])))
+      (reset! cell-segments-response nil))))
 
 (defn fetch-inbits-cols!
   [into-journal steps-data steps viewport-token local-targets]
@@ -1017,42 +1001,30 @@
                                       into-viz ([v] v)
                                       :priority true)]
         (case command
-          :sort (let [[apply-to-all?] xs
-                      sel-dt (:dt @selection)
-                      sel-rgn (:region @selection)
-                      sel-lyr (:layer @selection)]
-                  (if apply-to-all?
-                    (sort-all-layers! viz-layouts viz-options
-                                      (make-viz-steps @steps @steps-data)
-                                      sel-dt)
-                    (sort-sel-layer! viz-layouts viz-options
-                                     (make-viz-steps @steps @steps-data) sel-dt
-                                     sel-rgn sel-lyr)))
-          :clear-sort (let [[apply-to-all?] xs
-                            sel-rgn (:region @selection)
-                            sel-lyr (:layer @selection)]
-                        (if apply-to-all?
-                          (clear-sort-on-all-layers! viz-layouts viz-options)
-                          (clear-sort-on-sel-layer! viz-layouts viz-options
-                                                    sel-rgn sel-lyr)))
-          :add-facet (let [[apply-to-all?] xs
-                           sel-dt (:dt @selection)
-                           sel-rgn (:region @selection)
-                           sel-lyr (:layer @selection)
-                           viz-step (make-viz-step (nth @steps sel-dt)
-                                                   @steps-data)]
-                       (if apply-to-all?
-                         (add-facet-to-all-layers! viz-layouts viz-options
-                                                   viz-step)
-                         (add-facet-to-sel-layer! viz-layouts viz-options
-                                                  viz-step sel-rgn sel-lyr)))
-          :clear-facets (let [[apply-to-all?] xs
-                              sel-rgn (:region @selection)
-                              sel-lyr (:layer @selection)]
-                          (if apply-to-all?
-                            (clear-facets-on-all-layers! viz-layouts)
-                            (clear-facets-on-sel-layer! viz-layouts sel-rgn
-                                                        sel-lyr)))
+          :sort (let [[apply-to-all?] xs]
+                  (sort! viz-layouts viz-options
+                         (if apply-to-all?
+                           (all-layout-paths @viz-layouts)
+                           [(:path @selection)])
+                         (make-viz-steps @steps @steps-data)
+                         (:dt @selection)))
+          :clear-sort (let [[apply-to-all?] xs]
+                        (clear-sort! viz-layouts viz-options
+                                     (if apply-to-all?
+                                       (all-layout-paths @viz-layouts)
+                                       [(:path @selection)])))
+          :add-facet (let [[apply-to-all?] xs]
+                       (add-facets! viz-layouts viz-options
+                                    (if apply-to-all?
+                                      (all-layout-paths @viz-layouts)
+                                      [(:path @selection)])
+                                    (make-viz-step (nth @steps (:dt @selection))
+                                                   @steps-data)))
+          :clear-facets (let [[apply-to-all?] xs]
+                          (clear-facets! viz-layouts viz-options
+                                         (if apply-to-all?
+                                           (all-layout-paths @viz-layouts)
+                                           [(:path @selection)])))
           :step-backward (let [ ;; we need to assume there is a previous step, so:
                                max-dt (max 0 (- (count @steps) 2))]
                            (swap! selection
@@ -1072,39 +1044,39 @@
                                             :dt dt
                                             :model-id (:model-id
                                                        (nth @steps dt)))))))
-          :column-up (when-let [col (:col @selection)]
-                       (let [sel-rgn (:region @selection)
-                             sel-lyr (:layer @selection)
-                             lay (get-in @viz-layouts [:regions sel-rgn sel-lyr])
-                             order (:order lay)
-                             idx (order col)]
-                         (if (zero? idx)
-                           (swap! selection assoc :col nil)
-                           (let [next-idx (dec idx)
-                                 next-col (key (first (subseq order >= next-idx <= next-idx)))]
-                             (swap! selection assoc :col next-col)))))
-          :column-down (let [sel-rgn (:region @selection)
-                             sel-lyr (:layer @selection)
-                             lay (get-in @viz-layouts [:regions sel-rgn sel-lyr])
-                             order (:order lay)
-                             idx (if-let [col (:col @selection)]
-                                   (order col)
-                                   -1) ;; start at zero (inc -1)
-                             next-idx (inc idx)
-                             next-col (key (first (subseq order >= next-idx <= next-idx)))]
-                         (swap! selection assoc :col next-col))
-          :scroll-down (let [[apply-to-all?] xs
-                             sel-rgn (:region @selection)
-                             sel-lyr (:layer @selection)]
-                         (if apply-to-all?
-                           (scroll-all-layers! viz-layouts viz-options true)
-                           (scroll-sel-layer! viz-layouts viz-options true sel-rgn sel-lyr)))
-          :scroll-up (let [[apply-to-all?] xs
-                           sel-rgn (:region @selection)
-                           sel-lyr (:layer @selection)]
-                       (if apply-to-all?
-                         (scroll-all-layers! viz-layouts viz-options false)
-                         (scroll-sel-layer! viz-layouts viz-options false sel-rgn sel-lyr)))
+          :bit-up (when-let [bit (:bit @selection)]
+                    (let [lay (get-in @viz-layouts (:path @selection))
+                          order (:order lay)
+                          idx (order bit)]
+                      (if (zero? idx)
+                        (swap! selection assoc :bit nil)
+                        (let [next-idx (dec idx)
+                              next-bit (key (first (subseq order >= next-idx
+                                                           <= next-idx)))]
+                          (swap! selection assoc :bit next-bit)))))
+          :bit-down (let [lay (get-in @viz-layouts (:path @selection))
+                          order (:order lay)
+                          idx (if-let [bit (:bit @selection)]
+                                (order bit)
+                                -1) ;; start at zero (inc -1)
+                          next-idx (inc idx)
+                          next-bit (if (< next-idx (p/size-of lay))
+                                     (key (first (subseq order >= next-idx <=
+                                                         next-idx)))
+                                     nil)]
+                      (swap! selection assoc :bit next-bit))
+          :scroll-down (let [[apply-to-all?] xs]
+                         (scroll! viz-layouts viz-options
+                                  (if apply-to-all?
+                                    (all-layout-paths @viz-layouts)
+                                    [(:path @selection)])
+                                  true))
+          :scroll-up (let [[apply-to-all?] xs]
+                       (scroll! viz-layouts viz-options
+                                (if apply-to-all?
+                                  (all-layout-paths @viz-layouts)
+                                  [(:path @selection)])
+                                false))
           :toggle-run (when (and into-sim @into-sim)
                         (put! @into-sim [:toggle])))
         (recur)))

@@ -210,14 +210,16 @@
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]
-  (when (:col sel)
-    (let [{:keys [model-id region layer col]} sel
-          response-c (async/chan)]
-      (put! @into-journal [:get-details-text model-id region layer col
-                           (channel-proxy/register! local-targets
-                                                    response-c)])
-      (go
-        (reset! text-response [sel (<! response-c)])))))
+  (let [{:keys [path model-id bit]} sel
+        [t rgn-id lyr-id] path]
+    (when (and bit
+               (= t :regions))
+      (let [response-c (async/chan)]
+        (put! @into-journal [:get-details-text model-id rgn-id lyr-id bit
+                             (channel-proxy/register! local-targets
+                                                      response-c)])
+        (go
+          (reset! text-response [sel (<! response-c)]))))))
 
 (defn details-tab
   [selection into-journal local-targets]

@@ -36,8 +36,7 @@
             layer-id (-> rgn keys first)]
         (swap! selection assoc
                :dt 0
-               :region region-key
-               :layer layer-id))
+               :path [:regions region-key layer-id]))
 
       (add-watch viz-options ::keep-steps
                  (fn [_ _ prev-opts opts]

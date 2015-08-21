@@ -39,7 +39,33 @@
           0
           (range depth)))
 
-(defn ff-synapses-data
+(defn ff-out-synapses-data
+  [htm inp-id bit opts]
+  (let [do-inactive? (get-in opts [:ff-synapses :inactive])
+        do-perm? (get-in opts [:ff-synapses :permanences])
+        [rgn-id] (core/region-keys htm)
+        rgn (get-in htm [:regions rgn-id])
+        [lyr-id] (core/layers rgn)
+        lyr (get rgn lyr-id)
+        sg (:proximal-sg lyr)
+        to-segs (p/targets-connected-from sg bit)
+        active-columns (p/active-columns lyr)]
+    (into
+     {}
+     (for [[col _ _ :as seg-path] to-segs
+           :let [active? (contains? active-columns col)]
+           :when (or do-inactive? active?)
+           :let [perm (get (p/in-synapses sg seg-path) bit)]]
+       [[rgn-id lyr-id col] [(cond-> {:src-id inp-id
+                                      :src-col bit
+                                      :syn-state (if active?
+                                                   :active
+                                                   :inactive-syn)}
+                               do-perm? (assoc :perm
+                                               (get (p/in-synapses sg seg-path)
+                                                    bit)))]]))))
+
+(defn ff-in-synapses-data
   [htm rgn-id lyr-id only-ids opts]
   (let [do-growing? (get-in opts [:ff-synapses :growing])
         do-inactive? (get-in opts [:ff-synapses :inactive])

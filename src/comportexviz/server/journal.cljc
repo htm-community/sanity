@@ -128,13 +128,20 @@
                       (data/inbits-cols-data htm prev-htm path->ids opts)
                       (id-missing-response id steps-offset))))
 
-            :get-ff-synapses
+            :get-ff-in-synapses
             (let [[id rgn-id lyr-id only-ids token response-c] xs
-                  [opts] (get-in @client-info [journal-id ::viewports token])
-                  to (get-in opts [:ff-synapses :to])]
+                  [opts] (get-in @client-info [journal-id ::viewports token])]
               (put! response-c
                     (if-let [htm (find-model id)]
-                      (data/ff-synapses-data htm rgn-id lyr-id only-ids opts)
+                      (data/ff-in-synapses-data htm rgn-id lyr-id only-ids opts)
+                      (id-missing-response id steps-offset))))
+
+            :get-ff-out-synapses
+            (let [[id inp-id bit token response-c] xs
+                  [opts] (get-in @client-info [journal-id ::viewports token])]
+              (put! response-c
+                    (if-let [htm (find-model id)]
+                      (data/ff-out-synapses-data htm inp-id bit opts)
                       (id-missing-response id steps-offset))))
 
             :get-cell-segments
