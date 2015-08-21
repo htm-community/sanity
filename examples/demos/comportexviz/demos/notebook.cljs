@@ -2,6 +2,7 @@
   (:require [cognitect.transit :as transit]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.bridge.remote :as remote]
+            [comportexviz.selection :as sel]
             [comportexviz.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
@@ -41,7 +42,7 @@
                        reverse
                        vec
                        atom)
-            selection (atom viz/blank-selection)
+            selection (atom sel/blank-selection)
             base-opts (cond-> viz/default-viz-options
                         (= 1 (count @steps))
                         (assoc-in [:drawing :display-mode]
@@ -59,11 +60,12 @@
                           opts))]
         (let [[region-key rgn] (-> @step-template :regions seq first)
               layer-id (-> rgn keys first)]
-          (swap! selection assoc
-                 :dt 0
-                 :region region-key
-                 :layer layer-id
-                 :model-id (:model-id (first @steps))))
+          (swap! selection
+                 #(conj (empty %)
+                        {:dt 0
+                         :region region-key
+                         :layer layer-id
+                         :model-id (:model-id (first @steps))})))
         (reagent/render [viz/viz-canvas {:style {:width "100%"
                                                  :height "100vh"}
                                          :tabIndex 0} steps

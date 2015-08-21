@@ -11,18 +11,13 @@
                                                       window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.util :as utilv :refer [tap-c]]
+            [comportexviz.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
                    [comportexviz.macros :refer [with-cache]]))
-
-(def blank-selection {:path nil
-                      :dt nil
-                      :bit nil
-                      :cell-seg nil
-                      :model-id nil})
 
 ;;; ## Colours
 
@@ -159,7 +154,7 @@
                                              true display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
-                [{} 6]
+                [{} 20]
                 (keys inputs))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
@@ -297,8 +292,9 @@
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
 
-  (doseq [[sel ff-synapses] (vals ff-synapses-response)
-          :let [{:keys [model-id]} sel
+  (doseq [ff-synapse-group (vals ff-synapses-response)
+          [sel1 ff-synapses] ff-synapse-group
+          :let [{:keys [model-id]} sel1
                 dt (utilv/index-of steps #(= model-id (:model-id %)))]]
     (doseq [[[rgn-id lyr-id col] synapses] ff-synapses
             :let [this-lay (get-in r-lays [rgn-id lyr-id])
@@ -386,25 +382,13 @@
                                  (+ seg-y seg-h-px 5))]
                    [ci si])))))))
 
-(defn input-path
-  [sel]
-  (let [[t p1] (:path sel)]
-    (when (= t :inputs)
-      [p1])))
-
-(defn layer-path
-  [sel]
-  (let [[t p1 p2] (:path sel)]
-    (when (= t :regions)
-      [p1 p2])))
-
 (defn draw-cell-segments
   [ctx cell-segments-response steps r-lays i-lays opts cells-left
    current-cell-segments-layout]
   (c/save ctx)
-  (let [[sel cell-segments] cell-segments-response
-        {col :bit model-id :model-id sel-ci-si :cell-seg} sel
-        [sel-rgn sel-lyr] (layer-path sel)
+  (let [[sel1 cell-segments] cell-segments-response
+        {col :bit model-id :model-id sel-ci-si :cell-seg} sel1
+        [sel-rgn sel-lyr] (sel/layer sel1)
         dt (utilv/index-of steps #(= model-id (:model-id %)))]
     (when (and dt col sel-lyr)
       (let [lay (get-in r-lays [sel-rgn sel-lyr])
@@ -587,8 +571,9 @@
         (zero? (mod t anim-every))))))
 
 (defn draw-timeline!
-  [ctx steps sel-dt opts]
-  (let [current-t (:timestep (first steps))
+  [ctx steps sel opts]
+  (let [sel-dts (into #{} (map :dt sel))
+        current-t (:timestep (first steps))
         keep-steps (:keep-steps opts)
         width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
@@ -603,12 +588,13 @@
     (doseq [dt (reverse (range keep-steps))
             :let [t (- current-t dt)
                   kept? (< dt (count steps))
+                  sel? (contains? sel-dts dt)
                   x-px (- (dec width-px) r-px (* dt t-width))]]
       (c/fill-style ctx "black")
-      (c/alpha ctx (cond (== dt sel-dt) 1.0 kept? 0.3 :else 0.1))
-      (c/circle ctx {:x x-px :y y-px :r (if (== dt sel-dt) sel-r-px r-px)})
+      (c/alpha ctx (cond sel? 1.0 kept? 0.3 :else 0.1))
+      (c/circle ctx {:x x-px :y y-px :r (if sel? sel-r-px r-px)})
       (c/fill ctx)
-      (when (or (== dt sel-dt)
+      (when (or sel?
                 (and kept? (< keep-steps 100)))
         (c/fill-style ctx "white")
         (c/text ctx {:x x-px :y y-px :text (str t)})))
@@ -617,14 +603,25 @@
 (defn timeline-click
   [e steps selection opts]
   (let [{:keys [x y]} (offset-from-target e)
+        append? (.-metaKey e)
         keep-steps (:keep-steps opts)
         width-px (.-width (.-target e))
         t-width (/ width-px keep-steps)
         click-dt (quot (- (dec width-px) x) t-width)]
     (when (< click-dt (count steps))
-      (swap! selection assoc
-             :dt click-dt
-             :model-id (:model-id (nth steps click-dt))))))
+      (let [sel1 {:dt click-dt
+                  :model-id (nth steps click-dt)}]
+       (if append?
+         (let [same-dt? #(= click-dt (:dt %))]
+           (if (some same-dt? @selection)
+             (if (> (count @selection) 1)
+               (swap! selection
+                      (fn [sel]
+                        (into (empty sel) (remove same-dt? sel))))
+               (swap! selection sel/clear))
+             (swap! selection conj sel1)))
+         (swap! selection #(conj (empty %)
+                                 (merge (peek @selection) sel1))))))))
 
 (defn viz-timeline [viz-steps selection viz-options]
   [resizing-canvas
@@ -636,14 +633,13 @@
      (let [steps @viz-steps
            opts @viz-options]
        (when (should-draw? steps opts)
-         (draw-timeline! ctx steps (:dt @selection) opts))))
+         (draw-timeline! ctx steps @selection opts))))
    nil])
 
 (defn draw-viz!
   [ctx viz-steps ff-synapses-response cell-segments-response layouts sel opts
    current-cell-segments-layout]
-  (let [{sel-lay-path :path sel-bit :bit sel-dt :dt} sel
-        i-lays (:inputs layouts)
+  (let [i-lays (:inputs layouts)
         r-lays (:regions layouts)
 
         d-opts (:drawing opts)
@@ -652,10 +648,11 @@
                      :one-d (:draw-steps d-opts)
                      :two-d 1)
 
-        draw-dts (if (== 1 draw-steps)
-                   [sel-dt]
+        center-dt (:dt (peek sel))
+        draw-dts (if (== 1 center-dt)
+                   [center-dt]
                    ;; in case scrolled back in history
-                   (let [dt0 (max 0 (- sel-dt (quot draw-steps 2)))]
+                   (let [dt0 (max 0 (- center-dt (quot draw-steps 2)))]
                      (range dt0 (min (+ dt0 draw-steps)
                                      (count viz-steps)))))
 
@@ -697,8 +694,9 @@
                    :x (:x (layout-bounds lay))
                    :y (+ label-top-px 10)}))
 
-    (c/text ctx {:text "Cells and distal dendrite segments."
-                 :x cells-left :y label-top-px})
+    (when cell-segments-response
+      (c/text ctx {:text "Cells and distal dendrite segments."
+                   :x cells-left :y label-top-px}))
 
     (doseq [dt draw-dts
             :let [{sc :cache inbits-cols :inbits-cols} (nth viz-steps dt)
@@ -783,19 +781,19 @@
     (doseq [lay (mapcat vals (vals r-lays))]
       (lay/draw-facets lay ctx))
     ;; highlight selection
-    (when-let [lay (and sel-lay-path
-                        (get-in layouts sel-lay-path))]
-      (lay/highlight-layer lay ctx (:highlight state-colors)))
-    (when (> draw-steps 1)
-      (doseq [lay (vals i-lays)]
-        (lay/highlight-dt lay ctx sel-dt (:highlight state-colors)))
-      (doseq [lay (mapcat vals (vals r-lays))]
-        (lay/highlight-dt lay ctx sel-dt (:highlight state-colors))))
-    (when sel-bit
-      (let [lay (and sel-lay-path
-                     (get-in layouts sel-lay-path))]
-        (lay/highlight-element lay ctx sel-dt sel-bit sel-bit
-                               (:highlight state-colors))))
+    (when (and (> draw-steps 1)
+               (= 1 (count sel)))
+      (doseq [dt (map :dt sel)]
+        (doseq [lay (vals i-lays)]
+          (lay/highlight-dt lay ctx dt (:highlight state-colors)))
+        (doseq [lay (mapcat vals (vals r-lays))]
+          (lay/highlight-dt lay ctx dt (:highlight state-colors)))))
+    (doseq [{:keys [path bit dt]} sel
+            :when path
+            :let [lay (get-in layouts path)]]
+      (lay/highlight-layer lay ctx (:highlight state-colors))
+      (when bit
+        (lay/highlight-element lay ctx dt bit bit (:highlight state-colors))))
 
     ;; draw ff synapses
     (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays i-lays)
@@ -833,43 +831,44 @@
 (defn viz-click
   [e steps selection layouts current-cell-segments-layout]
   (let [{:keys [x y]} (offset-from-target e)
+        append? (.-metaKey e)
         i-lays (:inputs layouts)
         r-lays (:regions layouts)
         ;; we need to assume there is a previous step, so:
         max-dt (max 0 (- (count steps) 2))
         hit? (atom false)]
-    ;; check inputs
-    (doseq [[k lay] i-lays
-            :let [[dt id] (lay/clicked-id lay x y)]
+    ;; check inputs and regions
+    (doseq [path (all-layout-paths layouts)
+            :let [lay (get-in layouts path)
+                  [dt id] (lay/clicked-id lay x y)]
             :when dt
-            :let [dt (min dt max-dt)
-                  updates (cond-> {:path [:inputs k] :bit id}
-                            (== 1 (count (p/dims-of lay)))
-                            (assoc :dt dt
-                                   :model-id (:model-id (nth steps dt))))]]
+            :let [dt (if (== 1 (count (p/dims-of lay)))
+                       (min dt max-dt)
+                       (:dt (peek @selection)))
+                  sel1 {:path path :bit id :dt dt
+                        :model-id (:model-id (nth steps dt))}]]
       (reset! hit? true)
-      (swap! selection merge updates))
-    ;; check regions
-    (doseq [[rgn-id lyr-lays] r-lays
-            [lyr-id lay] lyr-lays
-            :let [[dt col] (lay/clicked-id lay x y)]
-            :when dt
-            :let [dt (min dt max-dt)
-                  updates (cond-> {:path [:regions rgn-id lyr-id] :bit col}
-                            (== 1 (count (p/dims-of lay)))
-                            (assoc :dt dt
-                                   :model-id (:model-id (nth steps dt))))]]
-      (reset! hit? true)
-      (swap! selection merge updates))
+      (if append?
+        (let [same-bit? #(and (= dt (:dt %))
+                              (= id (:bit %))
+                              (= path (:path %)))]
+          (if (some same-bit? @selection)
+            (if (> (count @selection) 1)
+              (swap! selection #(into (empty %) (remove same-bit? %)))
+              (swap! selection sel/clear))
+            (swap! selection conj sel1)))
+        (swap! selection #(conj (empty %) sel1))))
     ;; check cells
-    (when (:bit @selection)
+    (when ((every-pred sel/layer #(pos? (:bit %))) (peek @selection))
       (when-let [cslay @current-cell-segments-layout]
         (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
-          (swap! selection assoc :cell-seg [ci si]))))
-    (when-not @hit?
+          (swap! selection #(conj (pop %)
+                                  (assoc (peek %)
+                                         :cell-seg [ci si]))))))
+    (when-not (or append? @hit?)
       ;; checked all, nothing clicked
-      (swap! selection assoc :bit nil :cell-seg nil))))
+      (swap! selection sel/clear))))
 
 (defn absorb-step-template [step-template viz-options viz-layouts]
   (reset! viz-layouts
@@ -877,59 +876,64 @@
 
 (defn fetch-ff-synapses!
   [into-journal ff-synapses-response sel opts viewport-token local-targets]
-  (let [to (get-in opts [:ff-synapses :to])
-        {:keys [path bit model-id]} sel]
-    ;; in-synapses
-    (when-not
-        (when-let [[rgn-id lyr-id] (layer-path sel)]
-          (let [[continue? only-ids] (case to
-                                       :all [true nil]
-                                       :selected (if bit
-                                                   [true [bit]]
-                                                   [false])
-                                       :default [false])]
-            (when continue?
-              (let [response-c (async/chan)]
-                (go
-                  ;; dt may be outdated at this point
-                  (swap! ff-synapses-response assoc :in-synapses
-                         [(dissoc sel :dt) (<! response-c)]))
-                (put! @into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
-                                     only-ids viewport-token
-                                     (channel-proxy/register! local-targets
-                                                              response-c)])
-                true))))
-      (swap! ff-synapses-response dissoc :in-synapses))
-    ;; out-synapses
-    (when-not
-        (and bit
-             (when-let [[inp-id] (input-path sel)]
-               (let [response-c (async/chan)]
-                 (go
-                   (swap! ff-synapses-response assoc :out-synapses
-                          [(dissoc sel :dt) (<! response-c)]))
-                 (put! @into-journal [:get-ff-out-synapses model-id inp-id bit
-                                      viewport-token
-                                      (channel-proxy/register! local-targets
-                                                               response-c)])
-                 true)))
-      (swap! ff-synapses-response dissoc :out-synapses))))
+  (let [;; dt may be outdated when this is consumed
+        sels (map #(dissoc % :dt) sel)]
+    (swap! ff-synapses-response
+           #(-> %
+                (update :in-synapses select-keys sels)
+                (update :out-synapses select-keys sels)))
+    (doseq [{:keys [bit model-id] :as sel1} sels]
+      ;; in-synapses
+      (when-let [[rgn-id lyr-id] (sel/layer sel1)]
+        (let [to (get-in opts [:ff-synapses :to])
+              [continue? only-ids] (case to
+                                     :all [true nil]
+                                     :selected (if bit
+                                                 [true [bit]]
+                                                 [false])
+                                     :default [false])]
+          (when continue?
+            (let [response-c (async/chan)]
+              (go
+                (swap! ff-synapses-response assoc-in
+                       [:in-synapses sel1] (<! response-c)))
+              (put! @into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
+                                   only-ids viewport-token
+                                   (channel-proxy/register! local-targets
+                                                            response-c)])
+              true))))
+      ;; out-synapses
+      (when bit
+        (when-let [inp-id (sel/input sel1)]
+          (let [response-c (async/chan)]
+            (go
+              (swap! ff-synapses-response assoc-in
+                     [:out-synapses sel1] (<! response-c)))
+            (put! @into-journal [:get-ff-out-synapses model-id inp-id bit
+                                 viewport-token
+                                 (channel-proxy/register! local-targets
+                                                          response-c)])
+            true))))))
 
 (defn fetch-cell-segments!
   [into-journal cell-segments-response sel viewport-token local-targets]
-  (let [{:keys [path bit model-id cell-seg]} sel
-        [rgn-id lyr-id] (layer-path sel)]
-    (if (and rgn-id bit)
-      (let [response-c (async/chan)]
-        (put! @into-journal [:get-cell-segments model-id rgn-id lyr-id bit
-                             cell-seg viewport-token
-                             (channel-proxy/register! local-targets
-                                                      response-c)])
-        (go
-          ;; dt may be outdated at this point
-          (reset! cell-segments-response [(dissoc sel :dt)
-                                          (<! response-c)])))
-      (reset! cell-segments-response nil))))
+  (when-not (and (= (count sel) 1)
+                 (let [sel1 (peek sel)
+                       {:keys [path bit model-id cell-seg]} sel1
+                       [rgn-id lyr-id] (sel/layer sel1)]
+                   (when (and rgn-id bit)
+                     (let [response-c (async/chan)]
+                       (go
+                         ;; dt may be outdated at this point
+                         (reset! cell-segments-response [(dissoc sel1 :dt)
+                                                         (<! response-c)]))
+                       (put! @into-journal
+                             [:get-cell-segments model-id rgn-id lyr-id bit
+                              cell-seg viewport-token
+                              (channel-proxy/register! local-targets
+                                                       response-c)])
+                       true))))
+    (reset! cell-segments-response nil)))
 
 (defn fetch-inbits-cols!
   [into-journal steps-data steps viewport-token local-targets]
@@ -1005,66 +1009,73 @@
                   (sort! viz-layouts viz-options
                          (if apply-to-all?
                            (all-layout-paths @viz-layouts)
-                           [(:path @selection)])
+                           (map :path @selection))
                          (make-viz-steps @steps @steps-data)
-                         (:dt @selection)))
+                         (:dt (peek @selection))))
           :clear-sort (let [[apply-to-all?] xs]
                         (clear-sort! viz-layouts viz-options
                                      (if apply-to-all?
                                        (all-layout-paths @viz-layouts)
-                                       [(:path @selection)])))
+                                       (map :path @selection))))
           :add-facet (let [[apply-to-all?] xs]
                        (add-facets! viz-layouts viz-options
                                     (if apply-to-all?
                                       (all-layout-paths @viz-layouts)
-                                      [(:path @selection)])
+                                      (map :path @selection))
                                     (make-viz-step (nth @steps (:dt @selection))
                                                    @steps-data)))
           :clear-facets (let [[apply-to-all?] xs]
                           (clear-facets! viz-layouts viz-options
                                          (if apply-to-all?
                                            (all-layout-paths @viz-layouts)
-                                           [(:path @selection)])))
+                                           (map :path @selection))))
           :step-backward (let [ ;; we need to assume there is a previous step, so:
                                max-dt (max 0 (- (count @steps) 2))]
-                           (swap! selection
-                                  (fn [sel]
-                                    (let [dt (min (inc (:dt sel)) max-dt)]
-                                      (assoc sel
-                                             :dt dt
-                                             :model-id (:model-id
-                                                        (nth @steps dt)))))))
-          :step-forward (if (zero? (:dt @selection))
+                          (swap! selection
+                                 #(conj (pop %)
+                                        (let [sel1 (peek %)
+                                              dt (min (inc (:dt sel1)) max-dt)]
+                                          (assoc sel1
+                                                 :dt dt
+                                                 :model-id (:model-id
+                                                            (nth @steps dt)))))))
+          :step-forward (if (some #(zero? (:dt %)) @selection)
                           (when (and into-sim @into-sim)
                             (put! @into-sim [:step]))
                           (swap! selection
-                                 (fn [sel]
-                                   (let [dt (max (dec (:dt sel)) 0)]
-                                     (assoc sel
-                                            :dt dt
-                                            :model-id (:model-id
-                                                       (nth @steps dt)))))))
-          :bit-up (when-let [bit (:bit @selection)]
-                    (let [lay (get-in @viz-layouts (:path @selection))
+                                 #(conj (pop %)
+                                        (let [sel1 (peek %)
+                                              dt (dec (:dt (peek %)))]
+                                          (assoc sel1
+                                                 :dt dt
+                                                 :model-id (:model-id
+                                                            (nth @steps dt)))))))
+          :bit-up (let [{:keys [path bit]} (peek @selection)]
+                    (when bit
+                      (let [lay (get-in @viz-layouts path)
+                            order (:order lay)
+                            idx (order bit)
+                            next-bit (if (zero? idx)
+                                       nil
+                                       (let [next-idx (dec idx)]
+                                         (key (first (subseq order >= next-idx
+                                                             <= next-idx)))))]
+                        (swap! selection #(conj (pop %)
+                                                (assoc (peek %)
+                                                       :bit next-bit))))))
+          :bit-down (let [{:keys [path bit]} (peek @selection)
+                          lay (get-in @viz-layouts path)
                           order (:order lay)
-                          idx (order bit)]
-                      (if (zero? idx)
-                        (swap! selection assoc :bit nil)
-                        (let [next-idx (dec idx)
-                              next-bit (key (first (subseq order >= next-idx
-                                                           <= next-idx)))]
-                          (swap! selection assoc :bit next-bit)))))
-          :bit-down (let [lay (get-in @viz-layouts (:path @selection))
-                          order (:order lay)
-                          idx (if-let [bit (:bit @selection)]
-                                (order bit)
-                                -1) ;; start at zero (inc -1)
-                          next-idx (inc idx)
+                          next-idx (if bit
+                                     (inc (order bit))
+                                     0)
                           next-bit (if (< next-idx (p/size-of lay))
                                      (key (first (subseq order >= next-idx <=
                                                          next-idx)))
                                      nil)]
-                      (swap! selection assoc :bit next-bit))
+                      (swap! selection #(conj (pop %)
+                                              (assoc (peek %)
+                                                     :bit next-bit))))
           :scroll-down (let [[apply-to-all?] xs]
                          (scroll! viz-layouts viz-options
                                   (if apply-to-all?
@@ -1146,8 +1157,8 @@
                               opts))))
         (add-watch selection ::update-dt-offsets
                    (fn dt-offsets<-selection [_ _ old-sel sel]
-                     (let [dt-sel (:dt sel)]
-                       (when (not= dt-sel (:dt old-sel))
+                     (let [dt-sel (:dt (peek sel))]
+                       (when (not= dt-sel (:dt (peek old-sel)))
                          (update-dt-offsets! viz-layouts dt-sel @viz-options)))))
         (add-watch selection ::syns-segments
                    (fn fetch-selection-change [_ _ _ sel]
@@ -1189,7 +1200,7 @@
                   opts @viz-options]
               (when (should-draw? viz-steps opts)
                 (draw-viz! ctx viz-steps @ff-synapses-response
-                           @cell-segments-response @viz-layouts @selection opts
-                           current-cell-segments-layout))))
+                           @cell-segments-response @viz-layouts @selection
+                           opts current-cell-segments-layout))))
           size-invalidates-c
           resizes]])})))

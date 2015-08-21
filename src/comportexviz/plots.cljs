@@ -5,6 +5,7 @@
             [comportexviz.helpers :refer [canvas resizing-canvas
                                           window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.selection :as sel]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [clojure.string :as str]
@@ -295,14 +296,17 @@
 
 (defn fetch-excitation-data!
   [excitation-data sel into-journal local-targets]
-  (let [{:keys [model-id region layer col]} sel
-        response-c (async/chan)]
-    (put! @into-journal
-          [:get-cell-excitation-data model-id region layer col
-           (channel-proxy/register! local-targets
-                                    response-c)])
-    (go
-      (reset! excitation-data (<! response-c)))))
+  (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
+        [region layer] (sel/layer sel1)]
+    (if layer
+      (let [response-c (async/chan)]
+        (put! @into-journal
+              [:get-cell-excitation-data model-id region layer bit
+               (channel-proxy/register! local-targets
+                                        response-c)])
+        (go
+          (reset! excitation-data (<! response-c))))
+      (reset! excitation-data {}))))
 
 (defn cell-excitation-plot-cmp
   [_ selection _ _ _ into-journal local-targets]
@@ -322,10 +326,12 @@
        240
        [excitation-data]
        (fn [ctx]
-         (let [dt (:dt @selection)
-               sel-col (when (and (= region-key (:region @selection))
-                                  (= layer-id (:layer @selection)))
-                         (:col @selection))]
+         (let [sel1 (first (filter sel/layer @selection))
+               [sel-rgn sel-lyr] (sel/layer sel1)
+               sel-col (when (and sel-lyr
+                                  (= region-key sel-rgn)
+                                  (= layer-id sel-lyr))
+                         (:bit sel1))]
            (draw-cell-excitation-plot! ctx @excitation-data step-template
                                        sel-col series-colors)))
        nil])))
@@ -460,7 +466,9 @@
     ;; (which would avoid continually sending cell-sdr-fracs to server)
     (add-watch sdr-label-counts ::fetch-transitions-data
                (fn [_ _ old AT-sdr-label-counts]
-                 (let [{:keys [model-id region layer]} @selection]
+                 (let [{:keys [model-id] :as sel1} (first (filter sel/layer
+                                                                  @selection))
+                       [region layer] (sel/layer sel1)]
                    (when (not= (get old [region layer])
                                (get AT-sdr-label-counts [region layer]))
                      (let [cell-sdr-fracs (->> (get @cell-sdr-counts [region layer])
