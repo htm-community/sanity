@@ -647,7 +647,7 @@
                      :two-d 1)
 
         center-dt (:dt (peek sel))
-        draw-dts (if (== 1 center-dt)
+        draw-dts (if (== 1 draw-steps)
                    [center-dt]
                    ;; in case scrolled back in history
                    (let [dt0 (max 0 (- center-dt (quot draw-steps 2)))]
