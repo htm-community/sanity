@@ -1,6 +1,7 @@
 (ns comportexviz.main
   (:require [comportexviz.controls-ui :as cui]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.selection :as sel]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -17,7 +18,7 @@
 
 (def steps (atom []))
 (def step-template (atom nil))
-(def selection (atom viz/blank-selection))
+(def selection (atom sel/blank-selection))
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
 
@@ -34,11 +35,9 @@
       (reset! step-template (<! response-c))
       (let [[region-key rgn] (-> @step-template :regions seq first)
             layer-id (-> rgn keys first)]
-        (swap! selection assoc
-               :dt 0
-               :region region-key
-               :layer layer-id))
-
+        (reset! selection
+                [{:dt 0
+                  :path [:regions region-key layer-id]}]))
       (add-watch viz-options ::keep-steps
                  (fn [_ _ prev-opts opts]
                    (let [n (:keep-steps opts)]
@@ -63,11 +62,11 @@
 
 (add-watch steps ::recalculate-selection
            (fn [_ _ _ steps]
-             (swap! selection
-                    (fn [sel]
-                      (assoc sel :model-id
-                             (:model-id
-                              (nth steps (:dt sel))))))))
+             (swap! selection #(mapv (fn [sel]
+                                       (assoc sel :model-id
+                                              (:model-id
+                                               (nth steps (:dt sel)))))
+                                     %))))
 
 (let [subscription-data (atom nil)]
   (add-watch into-journal ::subscribe-to-steps
@@ -102,5 +101,5 @@
 
 (defn selected-step
   []
-  (when-let [dt (:dt @selection)]
+  (when-let [dt (:dt (first @selection))]
     (nth @steps dt nil)))

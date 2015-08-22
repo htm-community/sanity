@@ -9,13 +9,7 @@
      :clj (format (str "%." digits "f") n)))
 
 (defn detail-text
-  [htm
-   prior-htm
-   {dt :dt
-    rgn-id :region
-    lyr-id :layer
-    col :col
-    :as selection}]
+  [htm prior-htm rgn-id lyr-id col]
   (let [rgn (get-in htm [:regions rgn-id])
         lyr (get rgn lyr-id)
         depth (p/layer-depth lyr)
@@ -24,8 +18,7 @@
         bits (p/bits-value inp)]
     (->>
      ["__Selection__"
-      (str "* timestep " (p/timestep rgn)
-           " (delay " dt ")")
+      (str "* timestep " (p/timestep rgn))
       (str "* column " (or col "nil"))
       ""
       "__Input__"

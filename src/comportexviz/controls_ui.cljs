@@ -10,6 +10,7 @@
             [comportexviz.helpers :as helpers]
             [comportexviz.plots :as plots]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.selection :as sel]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
@@ -51,91 +52,92 @@
 
   (let [partypes (cljs.core/atom {})] ;; immutable cache
     (fn [step-template selection into-sim local-targets]
-      [:div
-       [:p.text-muted "Read/write model parameters of the selected region layer,
+      (let [[sel-region sel-layer] (some sel/layer @selection)]
+        [:div
+         [:p.text-muted "Read/write model parameters of the selected region layer,
                     with immediate effect. Click a layer to select it."]
-       [:p.text-info.text-center (str (some-> (:region @selection) name) " "
-                                      (some-> (:layer @selection) name))]
-       (into
-        [:div.form-horizontal]
-        (when @step-template
-          (let [sel-region (:region @selection)
-                sel-layer (:layer @selection)
-                spec-path [:regions sel-region sel-layer :spec]
-                spec (get-in @step-template spec-path)]
-            (concat
-             (for [[k v] (sort spec)
-                   :let [typ (or (get @partypes k)
-                                 (get (swap! partypes assoc k (param-type v))
-                                      k))
-                         setv! (if @into-sim
-                                 #(swap! step-template assoc-in spec-path
-                                         (assoc spec k %))
-                                 identity)]]
-               [:div.row {:class (when (or (nil? v) (string? v))
-                                   "has-error")}
-                [:div.col-sm-8
-                 [:label.control-label.text-left (name k)]]
-                [:div.col-sm-4
-                 (case typ
-                   ;; boolean
-                   :boolean
-                   [:input.form-control.input-sm
-                    {:type :checkbox
-                     :checked (if v true)
-                     :on-change #(setv! (not v))}]
-                   ;; vector
-                   :vector
-                   [:input.form-control.input-sm
-                    {:value (str v)
-                     :on-change (fn [e]
-                                  (let [s (-> e .-target forms/getValue)
-                                        x (try (cljs.reader/read-string s)
-                                               (catch :default _ s))
-                                        newval (if (and (vector? x) (every? integer? x))
-                                                 x s)]
-                                    (setv! newval)))}]
-                   ;; number
-                   :number
-                   [:input.form-control.input-sm
-                    {:value v
-                     :on-change (fn [e]
-                                  (let [s (-> e .-target forms/getValue)
-                                        parsed (js/parseFloat s)
-                                        newval (if (or (empty? s)
-                                                       (js/isNaN parsed))
-                                                 nil
-                                                 (->> (if (not= s (str parsed))
-                                                        s
-                                                        parsed)))]
-                                    (setv! newval)))}])]])
-             [
-              [:div.panel.panel-default
-               [:div.panel-heading [:h4.panel-title "Note"]]
-               [:div.panel-body
-                [:p "Parameter values can be altered above, but some parameters
+         [:p.text-info.text-center
+          (when sel-layer
+            (str (name sel-region) " " (name sel-layer)))]
+         (into
+         [:div.form-horizontal]
+         (when @step-template
+           (let [spec-path [:regions sel-region sel-layer :spec]
+                 spec (get-in @step-template spec-path)]
+             (concat
+              (for [[k v] (sort spec)
+                    :let [typ (or (get @partypes k)
+                                  (get (swap! partypes assoc k (param-type v))
+                                       k))
+                          setv! (if @into-sim
+                                  #(swap! step-template assoc-in spec-path
+                                          (assoc spec k %))
+                                  identity)]]
+                [:div.row {:class (when (or (nil? v) (string? v))
+                                    "has-error")}
+                 [:div.col-sm-8
+                  [:label.control-label.text-left (name k)]]
+                 [:div.col-sm-4
+                  (case typ
+                    ;; boolean
+                    :boolean
+                    [:input.form-control.input-sm
+                     {:type :checkbox
+                      :checked (if v true)
+                      :on-change #(setv! (not v))}]
+                    ;; vector
+                    :vector
+                    [:input.form-control.input-sm
+                     {:value (str v)
+                      :on-change (fn [e]
+                                   (let [s (-> e .-target forms/getValue)
+                                         x (try (cljs.reader/read-string s)
+                                                (catch :default _ s))
+                                         newval (if (and (vector? x)
+                                                         (every? integer? x))
+                                                  x s)]
+                                     (setv! newval)))}]
+                    ;; number
+                    :number
+                    [:input.form-control.input-sm
+                     {:value v
+                      :on-change (fn [e]
+                                   (let [s (-> e .-target forms/getValue)
+                                         parsed (js/parseFloat s)
+                                         newval (if (or (empty? s)
+                                                        (js/isNaN parsed))
+                                                  nil
+                                                  (->> (if (not= s (str parsed))
+                                                         s
+                                                         parsed)))]
+                                     (setv! newval)))}])]])
+              [
+               [:div.panel.panel-default
+                [:div.panel-heading [:h4.panel-title "Note"]]
+                [:div.panel-body
+                 [:p "Parameter values can be altered above, but some parameters
                      must be in effect when the HTM regions are created.
                      Notable examples are "
-                 [:code "column-dimensions"] " and " [:code "depth"]
-                 ". After setting such parameter values, rebuild all regions
+                  [:code "column-dimensions"] " and " [:code "depth"]
+                  ". After setting such parameter values, rebuild all regions
                  (obviously losing any learned connections in the process):"
-                 ]
-                [:button.btn.btn-warning.btn-block
+                  ]
+                 [:button.btn.btn-warning.btn-block
 
-                 (if @into-sim
-                   {:on-click #(let [finished (async/chan)]
-                                 (put! @into-sim
-                                       [:restart (channel-proxy/register!
-                                                  local-targets finished)])
-                                 (helpers/ui-loading-message-until finished))}
-                   {:disabled "disabled"})
-                 "Rebuild model"]
-                [:p.small "This will not reset, or otherwise alter, the input stream."]]
-               ]
-              [:h4 "Current spec value"]
-              [:pre (str spec)]
-              ])
-            )))]))
+                  (if @into-sim
+                    {:on-click #(let [finished (async/chan)]
+                                  (put! @into-sim
+                                        [:restart (channel-proxy/register!
+                                                   local-targets finished)])
+                                  (helpers/ui-loading-message-until finished))}
+                    {:disabled "disabled"})
+                  "Rebuild model"]
+                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
+                ]
+               [:h4 "Current spec value"]
+               [:pre (str spec)]
+               ])
+             )))])))
   )
 
 (defn gather-col-state-history!
@@ -210,23 +212,25 @@
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]
-  (when (:col sel)
-    (let [response-c (async/chan)]
-      (put! @into-journal [:get-details-text sel
-                           (channel-proxy/register! local-targets
-                                                    response-c)])
-      (go
-        (reset! text-response [sel (<! response-c)])))))
+  (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
+        [rgn-id lyr-id] (sel/layer sel1)]
+    (when (and bit lyr-id)
+      (let [response-c (async/chan)]
+        (put! @into-journal [:get-details-text model-id rgn-id lyr-id bit
+                             (channel-proxy/register! local-targets
+                                                      response-c)])
+        (go
+          (reset! text-response (<! response-c)))))))
 
 (defn details-tab
   [selection into-journal local-targets]
-  (let [text-response (atom [nil ""])]
+  (let [text-response (atom "")]
     (reagent/create-class
      {:component-will-mount
       (fn [_]
         (add-watch selection :fetch-details-text
                    (fn [_ _ _ sel]
-                     (reset! text-response [sel ""])
+                     (reset! text-response "")
                      (fetch-details-text! into-journal text-response sel
                                           local-targets)))
 
@@ -242,25 +246,24 @@
         [:div
          [:p.text-muted "The details of model state on the selected time step, selected column."]
          [:pre.pre-scrollable {:style {:height "90vh" :resize "both"}}
-          (let [[sel-for-text text] @text-response]
-            (when (= sel-for-text @selection)
-              text))]
+          @text-response]
          [:p.text-muted [:small "(scrollable)"]]
          [:hr]
          [:p.text-muted "If you're brave:"]
-         [:button.btn.btn-warning.btn-block
-          {:on-click (fn [e]
-                       (let [response-c (async/chan)]
-                         (put! @into-journal
-                               [:get-model
-                                (:model-id @selection)
-                                (channel-proxy/register! local-targets
-                                                         response-c)
-                                true])
-                         (go
-                           (println (<! response-c))))
-                       (.preventDefault e))}
-          "Dump entire model to console"]
+         (let [{:keys [model-id]} (first (filter sel/layer @selection))]
+           [:button.btn.btn-warning.btn-block
+            (cond-> {:on-click (fn [e]
+                                 (let [response-c (async/chan)]
+                                   (put! @into-journal
+                                         [:get-model model-id
+                                          (channel-proxy/register! local-targets
+                                                                   response-c)
+                                          true])
+                                   (go
+                                     (println (<! response-c))))
+                                 (.preventDefault e))}
+              (not model-id) (assoc :disabled "disabled"))
+            "Dump entire model to console"])
          ])})))
 
 (def viz-options-template
