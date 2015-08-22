@@ -1078,13 +1078,13 @@
                          (scroll! viz-layouts viz-options
                                   (if apply-to-all?
                                     (all-layout-paths @viz-layouts)
-                                    [(:path @selection)])
+                                    (map :path @selection))
                                   true))
           :scroll-up (let [[apply-to-all?] xs]
                        (scroll! viz-layouts viz-options
                                 (if apply-to-all?
                                   (all-layout-paths @viz-layouts)
-                                  [(:path @selection)])
+                                  (map :path @selection))
                                 false))
           :toggle-run (when (and into-sim @into-sim)
                         (put! @into-sim [:toggle])))
