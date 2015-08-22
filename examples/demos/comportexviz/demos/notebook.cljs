@@ -66,11 +66,14 @@
                          :region region-key
                          :layer layer-id
                          :model-id (:model-id (first @steps))})))
-        (reagent/render [viz/viz-canvas {:style {:width "100%"
-                                                 :height "100vh"}
-                                         :tabIndex 0} steps
-                         selection step-template viz-options nil nil
-                         (atom into-journal) local-targets]
+        (reagent/render [:div
+                         (when (> (count @steps) 1)
+                           [viz/viz-timeline steps selection viz-options])
+                         [viz/viz-canvas {:style {:width "100%"
+                                                  :height "100vh"}
+                                          :tabIndex 0} steps
+                          selection step-template viz-options nil nil
+                          (atom into-journal) local-targets]]
                         el)))))
 
 (defn ^:export release-viz [el serialized]
@@ -80,6 +83,6 @@
     (swap! target->chan dissoc journal-target)))
 
 (defn ^:export exported-viz [el]
-  (let [cnv (-> el (.getElementsByTagName "canvas") (aget 0))]
-    (assert (= "CANVAS" (.-nodeName cnv)))
-    (str "<img src='" (.toDataURL cnv "image/png") "' />")))
+  (apply str
+         (for [cnv (-> el (.getElementsByTagName "canvas") array-seq)]
+           (str "<img src='" (.toDataURL cnv "image/png") "' />"))))

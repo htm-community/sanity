@@ -573,7 +573,6 @@
 (defn draw-timeline!
   [ctx steps sel opts]
   (let [sel-dts (into #{} (map :dt sel))
-        current-t (:timestep (first steps))
         keep-steps (:keep-steps opts)
         width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
@@ -586,8 +585,7 @@
     (c/text-baseline ctx :middle)
     (c/font-style ctx "bold 10px sans-serif")
     (doseq [dt (reverse (range keep-steps))
-            :let [t (- current-t dt)
-                  kept? (< dt (count steps))
+            :let [kept? (< dt (count steps))
                   sel? (contains? sel-dts dt)
                   x-px (- (dec width-px) r-px (* dt t-width))]]
       (c/fill-style ctx "black")
@@ -597,7 +595,7 @@
       (when (or sel?
                 (and kept? (< keep-steps 100)))
         (c/fill-style ctx "white")
-        (c/text ctx {:x x-px :y y-px :text (str t)})))
+        (c/text ctx {:x x-px :y y-px :text (str (:timestep (nth steps dt)))})))
     (c/alpha ctx 1.0)))
 
 (defn timeline-click
@@ -610,7 +608,7 @@
         click-dt (quot (- (dec width-px) x) t-width)]
     (when (< click-dt (count steps))
       (let [sel1 {:dt click-dt
-                  :model-id (nth steps click-dt)}]
+                  :model-id (:model-id (nth steps click-dt))}]
        (if append?
          (let [same-dt? #(= click-dt (:dt %))]
            (if (some same-dt? @selection)
@@ -619,7 +617,7 @@
                       (fn [sel]
                         (into (empty sel) (remove same-dt? sel))))
                (swap! selection sel/clear))
-             (swap! selection conj sel1)))
+             (swap! selection conj (merge (peek @selection) sel1))))
          (swap! selection #(conj (empty %)
                                  (merge (peek @selection) sel1))))))))
 
