@@ -1161,8 +1161,6 @@
 
         (add-watch cells-segs-response ::cells-segments-layout
                    (fn [_ _ _ [sel1 cells-segments]]
-                     ;; TODO solve the inconsistency of "cells-segments" or
-                     ;; multiple people will punch themselves
                      (swap! viz-layouts assoc :cells-segments
                             (when cells-segments
                               (let [n-segs-by-cell (->> cells-segments
