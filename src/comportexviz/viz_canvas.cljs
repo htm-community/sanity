@@ -7,7 +7,8 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [comportexviz.dom :refer [offset-from-target]]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas
+            [comportexviz.helpers :as helpers :refer [canvas
+                                                      resizing-canvas
                                                       window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.util :as utilv :refer [tap-c]]
@@ -85,8 +86,8 @@
    ;; triggers a rebuild & redraw of the layouts when changed:
    :drawing {:display-mode :one-d ;; :one-d, :two-d
              :draw-steps 16
-             :height-px nil ;; set on resize
-             :width-px nil ;; set on resize
+             :max-height-px 900
+             :max-width-px nil
              :top-px 30
              :bit-w-px 4
              :bit-h-px 3
@@ -106,23 +107,30 @@
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
+(defn input-layout-paths
+  [m]
+  (for [inp-id (keys (:inputs m))]
+    [:inputs inp-id]))
+
+(defn layer-layout-paths
+  [m]
+  (for [[rgn-id rgn] (:regions m)
+        lyr-id (keys rgn)]
+    [:regions rgn-id lyr-id]))
+
+(defn grid-layout-paths
+  [m]
+  (concat (input-layout-paths m) (layer-layout-paths m)))
+
 (defn all-layout-paths
   [m]
-  (let [input-paths (for [inp-id (keys (:inputs m))]
-                      [:inputs inp-id])
-        layer-paths (for [[rgn-id rgn] (:regions m)
-                          lyr-id (keys rgn)]
-                      [:regions rgn-id lyr-id])]
-    (concat input-paths layer-paths)))
+  (concat (grid-layout-paths m)
+          (when (:cells-segments m)
+            [[:cells-segments]])))
 
-(defn map-layouts
-  ([f layouts]
-   (map-layouts f (all-layout-paths layouts)))
-  ([f layouts paths]
-   (->> paths
-        (map (fn [path]
-               (get-in layouts path)))
-        (map f))))
+(defn grid-layout-vals
+  ([m]
+   (map (partial get-in m) (grid-layout-paths m))))
 
 (defn reset-layout-caches
   [m]
@@ -131,7 +139,7 @@
                        (fn [mm]
                          (assoc mm ::cache (atom {})))))
           m
-          (all-layout-paths m)))
+          (grid-layout-paths m)))
 
 (defn init-grid-layouts
   [step opts]
@@ -145,13 +153,12 @@
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
         top-px (:top-px d-opts)
-        height-px (- (:height-px d-opts) top-px)
         ;; for now draw inputs and layers in a horizontal stack
         [i-lays i-right]
         (reduce (fn [[lays left] inp-id]
                   (let [topo (:topology (inputs inp-id))
-                        lay (lay/grid-layout topo top-px left height-px d-opts
-                                             true display-mode)]
+                        lay (lay/grid-layout topo top-px left d-opts true
+                                             display-mode)]
                     [(assoc lays inp-id lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} 20]
@@ -159,8 +166,8 @@
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (:topology (get-in regions [rgn-id lyr-id]))
-                        lay (lay/grid-layout topo top-px left height-px d-opts
-                                             false display-mode)]
+                        lay (lay/grid-layout topo top-px left d-opts false
+                                             display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} i-right]
@@ -178,7 +185,7 @@
      (reduce (fn [m path]
                (update-in m path assoc :layout (get-in grid-layouts path)))
              viz-layouts
-             (all-layout-paths viz-layouts))
+             (grid-layout-paths viz-layouts))
      (reset-layout-caches))))
 
 (defn init-layouts
@@ -190,7 +197,7 @@
                           (fn [lay]
                             (lay/orderable-layout lay (p/size-of lay)))))
              grid-layouts
-             (all-layout-paths grid-layouts))
+             (grid-layout-paths grid-layouts))
      (reset-layout-caches))))
 
 (defn update-dt-offsets!
@@ -202,7 +209,7 @@
              (-> (reduce (fn [m path]
                            (update-in m path assoc-in [:layout :dt-offset] dt0))
                          m
-                         (all-layout-paths m))
+                         (grid-layout-paths m))
                  (reset-layout-caches))))))
 
 (def path->invalidate-path
@@ -325,12 +332,12 @@
 (defprotocol PCellsSegmentsLayout
   (seg-xy [this ci si])
   (cell-xy [this ci])
-  (col-cell-line [this ctx ci])
+  (col-cell-line [this ctx ci src-lay col dt])
   (cell-seg-line [this ctx ci si])
   (clicked-seg [this x y]))
 
 (defn cells-segments-layout
-  [col nsegbycell cols-lay dt cells-left opts]
+  [nsegbycell cells-left opts]
   (let [nsegbycell-pad (map (partial max 1) nsegbycell)
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
@@ -340,10 +347,17 @@
         cell-r-px (:cell-r-px d-opts)
         seg-h-px (:seg-h-px d-opts)
         seg-w-px (:seg-w-px d-opts)
-        our-height (:height-px d-opts)
+        max-height-px (:max-height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px)
-        [col-x col-y] (element-xy cols-lay col dt)]
-    (reify PCellsSegmentsLayout
+        our-height (cond-> (* nseg-pad (* 8 cell-r-px))
+                     max-height-px (min (- max-height-px our-top)))]
+    (reify
+      lay/PBox
+      (layout-bounds [_]
+        {:x cells-left :y our-top
+         :w 250 ;; not meticulous
+         :h our-height})
+      PCellsSegmentsLayout
       (seg-xy
         [_ ci si]
         (let [i-all (apply + si (take ci nsegbycell-pad))
@@ -355,8 +369,9 @@
         (let [[_ sy] (seg-xy this ci 0)]
           [cells-left sy]))
       (col-cell-line
-        [this ctx ci]
-        (let [[cell-x cell-y] (cell-xy this ci)]
+        [this ctx ci src-lay col dt]
+        (let [[col-x col-y] (element-xy src-lay col dt)
+              [cell-x cell-y] (cell-xy this ci)]
           (doto ctx
             (c/begin-path)
             (c/move-to (+ col-x col-r-px 1) col-y) ;; avoid obscuring colour
@@ -382,43 +397,35 @@
                                  (+ seg-y seg-h-px 5))]
                    [ci si])))))))
 
-(defn draw-cell-segments
-  [ctx cell-segments-response steps r-lays i-lays opts cells-left
-   current-cell-segments-layout]
+(defn draw-cells-segments
+  [ctx cells-segs-response steps layouts opts]
   (c/save ctx)
-  (let [[sel1 cell-segments] cell-segments-response
+  (let [[sel1 cells-segments] cells-segs-response
         {col :bit model-id :model-id sel-ci-si :cell-seg} sel1
-        [sel-rgn sel-lyr] (sel/layer sel1)
         dt (utilv/index-of steps #(= model-id (:model-id %)))]
-    (when (and dt col sel-lyr)
-      (let [lay (get-in r-lays [sel-rgn sel-lyr])
-            n-segs-by-cell (->> cell-segments
-                                (into (sorted-map))
-                                (map (fn [[_ d]]
-                                       (-> d :segments count))))
-            cslay (cells-segments-layout col n-segs-by-cell lay dt cells-left opts)
+    (when dt
+      (let [sel-lay (get-in layouts (:path sel1))
+            cslay (:cells-segments layouts)
             col-d-px (get-in opts [:drawing :col-d-px])
             cell-r-px (get-in opts [:drawing :cell-r-px])
             seg-h-px (get-in opts [:drawing :seg-h-px])
             seg-w-px (get-in opts [:drawing :seg-w-px])
             seg-r-px (* seg-w-px 0.5)]
-        ;; for the click handler to use
-        (reset! current-cell-segments-layout cslay)
-        (doseq [[ci cell-data] cell-segments
+        (doseq [[ci cell-data] cells-segments
                 :let [[cell-x cell-y] (cell-xy cslay ci)
                       {:keys [cell-active? cell-predictive? selected-cell?
                               cell-state segments]} cell-data]]
           ;; draw background lines to cell from column and from segments
           (c/stroke-width ctx col-d-px)
           (c/stroke-style ctx (:background state-colors))
-          (col-cell-line cslay ctx ci)
+          (col-cell-line cslay ctx ci sel-lay col dt)
           (doseq [si (range (count segments))]
             (cell-seg-line cslay ctx ci si))
           (when cell-active?
             (doto ctx
               (c/stroke-style (:active state-colors))
               (c/stroke-width 2))
-            (col-cell-line cslay ctx ci))
+            (col-cell-line cslay ctx ci sel-lay col dt))
           ;; draw the cell itself
           (when selected-cell?
             (doto ctx
@@ -491,8 +498,9 @@
             (doseq [[syn-state syns] syns-by-state]
               (c/stroke-style ctx (state-colors syn-state))
               (doseq [{:keys [src-col src-id src-lyr perm]} syns
-                      :let [src-lay (or (get i-lays src-id)
-                                        (get-in r-lays [src-id src-lyr]))
+                      :let [src-lay (get-in layouts (if src-lyr
+                                                      [:regions src-id src-lyr]
+                                                      [:inputs src-id]))
                             [src-x src-y] (element-xy src-lay src-col (inc dt))]]
                 (when perm (c/alpha ctx perm))
                 (doto ctx
@@ -564,9 +572,9 @@
            ""))))
 
 (defn should-draw? [steps opts]
-  (let [{:keys [anim-go? anim-every height-px]} (:drawing opts)
+  (let [{:keys [anim-go? anim-every]} (:drawing opts)
         most-recent (first steps)]
-    (when (and anim-go? most-recent height-px)
+    (when (and anim-go? most-recent)
       (let [t (:timestep most-recent)]
         (zero? (mod t anim-every))))))
 
@@ -609,34 +617,37 @@
     (when (< click-dt (count steps))
       (let [sel1 {:dt click-dt
                   :model-id (:model-id (nth steps click-dt))}]
-       (if append?
-         (let [same-dt? #(= click-dt (:dt %))]
-           (if (some same-dt? @selection)
-             (if (> (count @selection) 1)
-               (swap! selection
-                      (fn [sel]
-                        (into (empty sel) (remove same-dt? sel))))
-               (swap! selection sel/clear))
-             (swap! selection conj (merge (peek @selection) sel1))))
-         (swap! selection #(conj (empty %)
-                                 (merge (peek @selection) sel1))))))))
+        (if append?
+          (let [same-dt? #(= click-dt (:dt %))]
+            (if (some same-dt? @selection)
+              (if (> (count @selection) 1)
+                (swap! selection
+                       (fn [sel]
+                         (into (empty sel) (remove same-dt? sel))))
+                (swap! selection sel/clear))
+              (swap! selection conj (merge (peek @selection) sel1))))
+          (swap! selection #(conj (empty %)
+                                  (merge (peek @selection) sel1))))))))
 
-(defn viz-timeline [viz-steps selection viz-options]
-  [resizing-canvas
-   {:on-click #(timeline-click % @viz-steps selection @viz-options)
-    :style {:width "100%"
-            :height "2em"}}
-   [viz-steps selection viz-options]
-   (fn [ctx]
-     (let [steps @viz-steps
-           opts @viz-options]
-       (when (should-draw? steps opts)
-         (draw-timeline! ctx steps @selection opts))))
-   nil])
+(defn viz-timeline [_ _ _]
+  (let [size-invalidates-c (async/chan)]
+    (fn [viz-steps selection viz-options]
+      [:div
+       [window-resize-listener size-invalidates-c]
+       [resizing-canvas
+        {:on-click #(timeline-click % @viz-steps selection @viz-options)
+         :style {:width "100%"
+                 :height "2em"}}
+        [viz-steps selection viz-options]
+        (fn [ctx]
+          (let [steps @viz-steps
+                opts @viz-options]
+            (when (should-draw? steps opts)
+              (draw-timeline! ctx steps @selection opts))))
+        size-invalidates-c]])))
 
 (defn draw-viz!
-  [ctx viz-steps ff-synapses-response cell-segments-response layouts sel opts
-   current-cell-segments-layout]
+  [ctx viz-steps ff-synapses-response cells-segs-response layouts sel opts]
   (let [i-lays (:inputs layouts)
         r-lays (:regions layouts)
 
@@ -654,18 +665,12 @@
                      (range dt0 (min (+ dt0 draw-steps)
                                      (count viz-steps)))))
 
-        label-top-px 0
-        cells-left (->> (mapcat vals (vals r-lays))
-                        (map lay/right-px)
-                        (apply max)
-                        (+ (:seg-h-space-px d-opts)))]
-
+        label-top-px 0]
     ;; Draw whenever a new step appears, even when the step's inbits / column
     ;; data is not yet available. This keeps the viz-canvas in sync with the
     ;; timeline without having to share viz-canvas internal state, and it
     ;; handles cases where e.g. the ff-synapse data arrives before the
     ;; inbits-cols data.
-
     (c/clear-rect ctx {:x 0 :y 0
                        :w (.-width (.-canvas ctx))
                        :h (.-height (.-canvas ctx))})
@@ -691,10 +696,6 @@
       (c/text ctx {:text (scroll-status-str lay false)
                    :x (:x (layout-bounds lay))
                    :y (+ label-top-px 10)}))
-
-    (when cell-segments-response
-      (c/text ctx {:text "Cells and distal dendrite segments."
-                   :x cells-left :y label-top-px}))
 
     (doseq [dt draw-dts
             :let [{sc :cache inbits-cols :inbits-cols} (nth viz-steps dt)
@@ -755,10 +756,10 @@
                  (draw-image-dt ctx lay dt)))
           (when (and active-columns
                      (get-in opts [:columns :active]))
-                (->> active-columns
-                     (fill-ids-image lay (:active state-colors))
-                     (with-cache sc [::acols uniqix] opts #{:columns :drawing})
-                     (draw-image-dt ctx lay dt)))
+            (->> active-columns
+                 (fill-ids-image lay (:active state-colors))
+                 (with-cache sc [::acols uniqix] opts #{:columns :drawing})
+                 (draw-image-dt ctx lay dt)))
           (when pred-columns
             (->> pred-columns
                  (fill-ids-image lay (:predicted state-colors))
@@ -769,22 +770,18 @@
                  (fill-ids-image lay (:temporal-pooling state-colors))
                  (with-cache sc [::tpcols uniqix] opts #{:columns :drawing})
                  (draw-image-dt ctx lay dt)))
-          (when break?
+          (when (and break? (= :one-d (:display-mode d-opts)))
             (->> (break-image lay)
                  (draw-image-dt ctx lay dt))))))
 
     ;; mark facets
-    (doseq [lay (vals i-lays)]
-      (lay/draw-facets lay ctx))
-    (doseq [lay (mapcat vals (vals r-lays))]
+    (doseq [lay (grid-layout-vals layouts)]
       (lay/draw-facets lay ctx))
     ;; highlight selection
     (when (and (> draw-steps 1)
                (= 1 (count sel)))
       (doseq [dt (map :dt sel)]
-        (doseq [lay (vals i-lays)]
-          (lay/highlight-dt lay ctx dt (:highlight state-colors)))
-        (doseq [lay (mapcat vals (vals r-lays))]
+        (doseq [lay (grid-layout-vals layouts)]
           (lay/highlight-dt lay ctx dt (:highlight state-colors)))))
     (doseq [{:keys [path bit dt]} sel
             :when path
@@ -796,9 +793,12 @@
     ;; draw ff synapses
     (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays i-lays)
 
-    ;; draw selected cells and segments
-    (draw-cell-segments ctx cell-segments-response viz-steps r-lays i-lays opts
-                        cells-left current-cell-segments-layout)))
+    (when-let [cslay (:cells-segments layouts)]
+      (c/text ctx {:text "Cells and distal dendrite segments."
+                   :x (:x (layout-bounds cslay))
+                   :y label-top-px})
+      ;; draw selected cells and segments
+      (draw-cells-segments ctx cells-segs-response viz-steps layouts opts))))
 
 (def code-key
   {32 :space
@@ -827,7 +827,7 @@
     true))
 
 (defn viz-click
-  [e steps selection layouts current-cell-segments-layout]
+  [e steps selection layouts]
   (let [{:keys [x y]} (offset-from-target e)
         append? (.-metaKey e)
         i-lays (:inputs layouts)
@@ -836,7 +836,7 @@
         max-dt (max 0 (- (count steps) 2))
         hit? (atom false)]
     ;; check inputs and regions
-    (doseq [path (all-layout-paths layouts)
+    (doseq [path (grid-layout-paths layouts)
             :let [lay (get-in layouts path)
                   [dt id] (lay/clicked-id lay x y)]
             :when dt
@@ -858,7 +858,7 @@
         (swap! selection #(conj (empty %) sel1))))
     ;; check cells
     (when ((every-pred sel/layer #(pos? (:bit %))) (peek @selection))
-      (when-let [cslay @current-cell-segments-layout]
+      (when-let [cslay (:cells-segments layouts)]
         (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
           (swap! selection #(conj (pop %)
@@ -913,8 +913,8 @@
                                                           response-c)])
             true))))))
 
-(defn fetch-cell-segments!
-  [into-journal cell-segments-response sel viewport-token local-targets]
+(defn fetch-cells-segments!
+  [into-journal cells-segs-response sel viewport-token local-targets]
   (when-not (and (= (count sel) 1)
                  (let [sel1 (peek sel)
                        {:keys [path bit model-id cell-seg]} sel1
@@ -923,15 +923,15 @@
                      (let [response-c (async/chan)]
                        (go
                          ;; dt may be outdated at this point
-                         (reset! cell-segments-response [(dissoc sel1 :dt)
-                                                         (<! response-c)]))
+                         (reset! cells-segs-response [(dissoc sel1 :dt)
+                                                      (<! response-c)]))
                        (put! @into-journal
-                             [:get-cell-segments model-id rgn-id lyr-id bit
+                             [:get-cells-segments model-id rgn-id lyr-id bit
                               cell-seg viewport-token
                               (channel-proxy/register! local-targets
                                                        response-c)])
                        true))))
-    (reset! cell-segments-response nil)))
+    (reset! cells-segs-response nil)))
 
 (defn fetch-inbits-cols!
   [into-journal steps-data steps viewport-token local-targets]
@@ -946,9 +946,10 @@
 
 (defn push-new-viewport!
   [into-journal viewport-token step-template layouts opts local-targets]
-  (let [paths (all-layout-paths step-template)
-        path->ids-onscreen (zipmap paths (map-layouts lay/ids-onscreen layouts
-                                                      paths))
+  (let [paths (grid-layout-paths step-template)
+        path->ids-onscreen (zipmap paths
+                                   (->> (map (partial get-in layouts) paths)
+                                        (map lay/ids-onscreen)))
         viewport [opts path->ids-onscreen]
         response-c (async/chan)]
     (put! @into-journal [:register-viewport viewport
@@ -979,23 +980,19 @@
 
 (defn ids-onscreen-changed?
   [before after]
-  (let [paths (all-layout-paths after)
-        ;; TODO should also consider height
+  (let [;; TODO should also consider height
         extractor (juxt lay/scroll-position :order)]
-    (not= (map-layouts extractor before paths)
-          (map-layouts extractor after paths))))
+    (not= (map extractor (grid-layout-vals before))
+          (map extractor (grid-layout-vals after)))))
 
 (defn viz-canvas
   [_ steps selection step-template viz-options into-viz into-sim
    into-journal local-targets]
   (let [steps-data (atom {})
         ff-synapses-response (atom nil)
-        cell-segments-response (atom nil)
+        cells-segs-response (atom nil)
         viz-layouts (atom nil)
         viewport-token (atom nil)
-        current-cell-segments-layout (clojure.core/atom nil)
-        resizes (async/chan)
-        size-invalidates-c (async/chan)
         into-viz (or into-viz (async/chan))
         teardown-c (async/chan)]
     (go-loop []
@@ -1006,37 +1003,37 @@
           :sort (let [[apply-to-all?] xs]
                   (sort! viz-layouts viz-options
                          (if apply-to-all?
-                           (all-layout-paths @viz-layouts)
+                           (grid-layout-paths @viz-layouts)
                            (map :path @selection))
                          (make-viz-steps @steps @steps-data)
                          (:dt (peek @selection))))
           :clear-sort (let [[apply-to-all?] xs]
                         (clear-sort! viz-layouts viz-options
                                      (if apply-to-all?
-                                       (all-layout-paths @viz-layouts)
+                                       (grid-layout-paths @viz-layouts)
                                        (map :path @selection))))
           :add-facet (let [[apply-to-all?] xs]
                        (add-facets! viz-layouts viz-options
                                     (if apply-to-all?
-                                      (all-layout-paths @viz-layouts)
+                                      (grid-layout-paths @viz-layouts)
                                       (map :path @selection))
                                     (make-viz-step (nth @steps (:dt @selection))
                                                    @steps-data)))
           :clear-facets (let [[apply-to-all?] xs]
                           (clear-facets! viz-layouts viz-options
                                          (if apply-to-all?
-                                           (all-layout-paths @viz-layouts)
+                                           (grid-layout-paths @viz-layouts)
                                            (map :path @selection))))
           :step-backward (let [ ;; we need to assume there is a previous step, so:
                                max-dt (max 0 (- (count @steps) 2))]
-                          (swap! selection
-                                 #(conj (pop %)
-                                        (let [sel1 (peek %)
-                                              dt (min (inc (:dt sel1)) max-dt)]
-                                          (assoc sel1
-                                                 :dt dt
-                                                 :model-id (:model-id
-                                                            (nth @steps dt)))))))
+                           (swap! selection
+                                  #(conj (pop %)
+                                         (let [sel1 (peek %)
+                                               dt (min (inc (:dt sel1)) max-dt)]
+                                           (assoc sel1
+                                                  :dt dt
+                                                  :model-id (:model-id
+                                                             (nth @steps dt)))))))
           :step-forward (if (some #(zero? (:dt %)) @selection)
                           (when (and into-sim @into-sim)
                             (put! @into-sim [:step]))
@@ -1077,44 +1074,39 @@
           :scroll-down (let [[apply-to-all?] xs]
                          (scroll! viz-layouts viz-options
                                   (if apply-to-all?
-                                    (all-layout-paths @viz-layouts)
+                                    (grid-layout-paths @viz-layouts)
                                     (map :path @selection))
                                   true))
           :scroll-up (let [[apply-to-all?] xs]
                        (scroll! viz-layouts viz-options
                                 (if apply-to-all?
-                                  (all-layout-paths @viz-layouts)
+                                  (grid-layout-paths @viz-layouts)
                                   (map :path @selection))
                                 false))
           :toggle-run (when (and into-sim @into-sim)
                         (put! @into-sim [:toggle])))
         (recur)))
 
-    (go-loop []
-      (when-let [[width-px height-px] (<! resizes)]
-        (swap! viz-options (fn [opts]
-                             (-> opts
-                                 (assoc-in [:drawing :height-px] height-px)
-                                 (assoc-in [:drawing :width-px] width-px))))
-        (recur)))
-
     (reagent/create-class
      {:component-will-mount
       (fn [_]
         (when @step-template
-          (absorb-step-template @step-template viz-options viz-layouts))
+          (absorb-step-template @step-template viz-options viz-layouts)
+          (push-new-viewport! into-journal viewport-token
+                              @step-template @viz-layouts @viz-options
+                              local-targets))
 
         (when (not-empty @steps)
           (add-watch viewport-token ::initial-steps-fetch
                      (fn [_ _ _ token]
                        (remove-watch viewport-token ::initial-steps-fetch)
                        (absorb-new-steps! @steps steps-data into-journal token
-                                         local-targets))))
+                                          local-targets))))
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
                      (absorb-new-steps! xs steps-data into-journal
-                                       @viewport-token local-targets)))
+                                        @viewport-token local-targets)))
         (add-watch viewport-token ::fetch-everything
                    (fn fetch-everything [_ _ old-token token]
                      (fetch-inbits-cols! into-journal steps-data @steps token
@@ -1122,9 +1114,9 @@
                      (fetch-ff-synapses! into-journal ff-synapses-response
                                          @selection @viz-options @viewport-token
                                          local-targets)
-                     (fetch-cell-segments! into-journal cell-segments-response
-                                           @selection @viewport-token
-                                           local-targets)
+                     (fetch-cells-segments! into-journal cells-segs-response
+                                            @selection @viewport-token
+                                            local-targets)
                      (when old-token
                        (put! @into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
@@ -1163,9 +1155,33 @@
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
                                          @viz-options @viewport-token
                                          local-targets)
-                     (fetch-cell-segments! into-journal cell-segments-response
-                                           sel @viewport-token
-                                           local-targets))))
+                     (fetch-cells-segments! into-journal cells-segs-response
+                                            sel @viewport-token
+                                            local-targets)))
+
+        (add-watch cells-segs-response ::cells-segments-layout
+                   (fn [_ _ _ [sel1 cells-segments]]
+                     ;; TODO solve the inconsistency of "cells-segments" or
+                     ;; multiple people will punch themselves
+                     (swap! viz-layouts assoc :cells-segments
+                            (when cells-segments
+                              (let [n-segs-by-cell (->> cells-segments
+                                                        (into (sorted-map))
+                                                        (map (fn [[_ d]]
+                                                               (-> d
+                                                                   :segments
+                                                                   count))))
+                                    space-px (get-in @viz-options
+                                                     [:drawing
+                                                      :seg-h-space-px])
+                                    cells-left (->> @viz-layouts
+                                                    grid-layout-vals
+                                                    (map lay/right-px)
+                                                    (apply max)
+                                                    (+ space-px))]
+                                (cells-segments-layout n-segs-by-cell
+                                                       cells-left
+                                                       @viz-options)))))))
 
       :component-will-unmount
       (fn [_]
@@ -1177,28 +1193,42 @@
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)
         (remove-watch selection ::syns-segments)
+        (remove-watch cells-segs-response ::cells-segments-layout)
         (put! teardown-c :teardown))
 
       :display-name "viz-canvas"
 
       :reagent-render
-      (fn [props _ _ _ _ _]
-        [:div nil
-         [window-resize-listener size-invalidates-c]
-         [resizing-canvas
-          (cond-> props
-            @into-journal (assoc
-                           :on-click #(viz-click % @steps selection @viz-layouts
-                                                 current-cell-segments-layout)
-                           :on-key-down #(viz-key-down % into-viz)))
-          [selection steps steps-data ff-synapses-response
-           cell-segments-response viz-layouts viz-options]
-          (fn [ctx]
-            (let [viz-steps (make-viz-steps @steps @steps-data)
-                  opts @viz-options]
-              (when (should-draw? viz-steps opts)
-                (draw-viz! ctx viz-steps @ff-synapses-response
-                           @cell-segments-response @viz-layouts @selection
-                           opts current-cell-segments-layout))))
-          size-invalidates-c
-          resizes]])})))
+      (fn [props _ _ _ _ _ _ _]
+        (let [layouts @viz-layouts
+              [right bottom] (->> (all-layout-paths layouts)
+                                  (map (partial get-in layouts))
+                                  (map layout-bounds)
+                                  (map (fn [{:keys [x y w h]}]
+                                         [(+ x w) (+ y h)]))
+                                  (reduce (fn [result r-and-b]
+                                            (map max result r-and-b))
+                                          [0 0]))
+
+              width (or (when right
+                          (+ right lay/extra-px-for-highlight))
+                        0)
+              height (or (when bottom
+                           (+ bottom lay/extra-px-for-highlight))
+                         0)]
+          [canvas
+           (cond-> props
+             @into-journal (assoc
+                            :on-click #(viz-click % @steps selection
+                                                  @viz-layouts)
+                            :on-key-down #(viz-key-down % into-viz)))
+           width height
+           [selection steps steps-data ff-synapses-response
+            cells-segs-response viz-layouts viz-options]
+           (fn [ctx]
+             (let [viz-steps (make-viz-steps @steps @steps-data)
+                   opts @viz-options]
+               (when (should-draw? viz-steps opts)
+                 (draw-viz! ctx viz-steps @ff-synapses-response
+                            @cells-segs-response @viz-layouts @selection
+                            opts))))]))})))

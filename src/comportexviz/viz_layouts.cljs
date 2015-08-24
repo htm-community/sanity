@@ -4,9 +4,11 @@
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.topology :as topology]))
 
-(defprotocol PArrayLayout
+(defprotocol PBox
   (layout-bounds [this]
-    "Returns `{:x :y :w :h}` defining bounding box from top left.")
+    "Returns `{:x :y :w :h}` defining bounding box from top left."))
+
+(defprotocol PArrayLayout
   (origin-px-topleft [this dt]
     "Returns [x y] pixel coordinates for top left of time offset dt.")
   (local-dt-bounds [this dt]
@@ -84,6 +86,8 @@
   (let [r (* w 0.5)]
     (circle ctx (+ x r) (+ y r) r)))
 
+(def extra-px-for-highlight 4)
+
 (defn highlight-rect
   [ctx rect color]
   (doto ctx
@@ -149,17 +153,18 @@
      shrink
      left-px
      top-px
-     height-px
+     max-bottom-px
      circles?]
   p/PTopological
   (topology [_]
     topo)
-  PArrayLayout
+  PBox
   (layout-bounds [_]
     {:x left-px :y top-px
      :w (* draw-steps element-w)
-     :h (min height-px (* (p/size topo) element-h))})
-
+     :h (cond-> (* (p/size topo) element-h)
+          max-bottom-px (min (- max-bottom-px top-px)))})
+  PArrayLayout
   (origin-px-topleft [_ dt]
     (let [right (+ left-px (* draw-steps element-w))
           off-x-px (* (- (inc dt) dt-offset) element-w)
@@ -191,8 +196,9 @@
                (max 0 (- scroll-top page-n))))))
 
   (ids-onscreen-count [_]
-    (min (p/size topo)
-         (quot height-px element-h)))
+    (cond-> (p/size topo)
+      max-bottom-px (min (quot (- max-bottom-px top-px)
+                               element-h))))
 
   (ids-onscreen [this]
     (let [n0 scroll-top]
@@ -226,8 +232,9 @@
                (* element-h shrink))))))
 
 (defn grid-1d-layout
-  [topo top left height opts inbits?]
+  [topo top left opts inbits?]
   (let [{:keys [draw-steps
+                max-height-px
                 col-d-px
                 col-shrink
                 bit-w-px
@@ -243,7 +250,8 @@
       :shrink (if inbits? bit-shrink col-shrink)
       :top-px top
       :left-px left
-      :height-px height
+      :max-bottom-px (when max-height-px
+                       (- max-height-px extra-px-for-highlight))
       :circles? (if inbits? false true)})))
 
 (defrecord Grid2dLayout
@@ -254,18 +262,19 @@
      shrink
      left-px
      top-px
-     height-px
+     max-bottom-px
      circles?]
   p/PTopological
   (topology [_]
     topo)
-  PArrayLayout
+  PBox
   (layout-bounds [_]
     (let [[w h] (p/dimensions topo)]
       {:x left-px :y top-px
        :w (* w element-w)
-       :h (min height-px (* h element-h))}))
-
+       :h (cond-> (* h element-h)
+            max-bottom-px (min (- max-bottom-px top-px)))}))
+  PArrayLayout
   (origin-px-topleft [_ dt]
     [left-px top-px])
 
@@ -296,7 +305,10 @@
 
   (ids-onscreen-count [_]
     (let [[w h] (p/dimensions topo)]
-      (* w (min h (quot height-px element-h)))))
+      (* w
+         (cond-> h
+           max-bottom-px (min (quot (- max-bottom-px top-px)
+                                    element-h))))))
 
   (ids-onscreen [this]
     (let [n0 scroll-top]
@@ -329,8 +341,9 @@
                (* element-h shrink))))))
 
 (defn grid-2d-layout
-  [topo top left height opts inbits?]
-  (let [{:keys [col-d-px
+  [topo top left opts inbits?]
+  (let [{:keys [max-height-px
+                col-d-px
                 col-shrink
                 bit-w-px
                 bit-h-px
@@ -343,11 +356,12 @@
       :shrink (if inbits? bit-shrink col-shrink)
       :top-px top
       :left-px left
-      :height-px height
+      :max-bottom-px (when max-height-px
+                       (- max-height-px extra-px-for-highlight))
       :circles? (if inbits? false true)})))
 
 (defn grid-layout
-  [topo top left height opts inbits? display-mode]
+  [topo top left opts inbits? display-mode]
   (let [ndim (count (p/dimensions topo))
         lay-topo (case display-mode
                    :one-d (topology/one-d-topology (p/size topo))
@@ -356,8 +370,8 @@
                             (topology/two-d-topology 20 (quot (p/size topo) 20))))
         lay-ndim (count (p/dimensions lay-topo))]
     (case lay-ndim
-      1 (grid-1d-layout lay-topo top left height opts inbits?)
-      2 (grid-2d-layout lay-topo top left height opts inbits?))))
+      1 (grid-1d-layout lay-topo top left opts inbits?)
+      2 (grid-2d-layout lay-topo top left opts inbits?))))
 
 
 ;;; # Orderable layouts
@@ -379,6 +393,9 @@
   p/PTopological
   (topology [_]
     (p/topology layout))
+  PBox
+  (layout-bounds [_]
+    (layout-bounds layout))
   PArrayLayout
   (local-px-topleft [_ id]
     (let [idx (order id)]
@@ -411,8 +428,6 @@
       (draw-element layout ctx idx)))
 
   ;; the rest are identical to underlying layout methods
-  (layout-bounds [_]
-    (layout-bounds layout))
   (origin-px-topleft [_ dt]
     (origin-px-topleft layout dt))
   (local-dt-bounds [_ dt]

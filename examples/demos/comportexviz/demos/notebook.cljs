@@ -69,9 +69,7 @@
         (reagent/render [:div
                          (when (> (count @steps) 1)
                            [viz/viz-timeline steps selection viz-options])
-                         [viz/viz-canvas {:style {:width "100%"
-                                                  :height "100vh"}
-                                          :tabIndex 0} steps
+                         [viz/viz-canvas {:tabIndex 0} steps
                           selection step-template viz-options nil nil
                           (atom into-journal) local-targets]]
                         el)))))

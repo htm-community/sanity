@@ -1,6 +1,7 @@
 (ns comportexviz.main
   (:require [comportexviz.controls-ui :as cui]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.helpers :as helpers :refer [window-resize-listener]]
             [comportexviz.selection :as sel]
             [comportexviz.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
@@ -79,16 +80,23 @@
 
 ;;; ## Components
 
-(defn main-pane [world-pane into-sim]
-  [:div
-   [viz/viz-timeline steps selection viz-options]
-   [:div.row
-    [:div.col-sm-3.col-lg-2
-     [world-pane]]
-    [:div.col-sm-9.col-lg-10
-     [viz/viz-canvas {:style {:width "100%" :height "100vh"} :tabIndex 1} steps
-      selection step-template viz-options into-viz into-sim into-journal
-      local-targets]]]])
+(defn main-pane [_ _]
+  (let [size-invalidates-c (async/chan)]
+    (go-loop []
+      (swap! viz-options assoc-in [:drawing :max-height-px]
+             js/window.innerHeight)
+      (when-not (nil? (<! size-invalidates-c))
+        (recur)))
+    (fn [world-pane into-sim]
+      [:div
+       [viz/viz-timeline steps selection viz-options]
+       [:div.row
+        [:div.col-sm-3.col-lg-2
+         [world-pane]]
+        [:div.col-sm-9.col-lg-10
+         [window-resize-listener size-invalidates-c]
+         [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options
+          into-viz into-sim into-journal local-targets]]]])))
 
 (defn comportexviz-app
   [model-tab world-pane into-sim]

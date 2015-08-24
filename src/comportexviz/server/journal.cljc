@@ -144,13 +144,13 @@
                       (data/ff-out-synapses-data htm inp-id bit opts)
                       (id-missing-response id steps-offset))))
 
-            :get-cell-segments
+            :get-cells-segments
             (let [[id rgn-id lyr-id col ci-si token response-c] xs
                   [opts] (get-in @client-info [journal-id ::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (data/cell-segments-data htm prev-htm rgn-id lyr-id col
-                                               ci-si opts)
+                      (data/cells-segments-data htm prev-htm rgn-id lyr-id col
+                                                ci-si opts)
                       (id-missing-response id steps-offset))))
 
             :get-details-text
