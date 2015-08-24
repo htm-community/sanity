@@ -158,7 +158,7 @@
           (recur (first more) (next more) path->synapses)
           path->synapses)))))
 
-(defn cell-segments-data
+(defn cells-segments-data
   [htm prev-htm sel-rgn sel-lyr col sel-ci-si opts]
   (let [regions (:regions htm)
         lyr (get-in regions [sel-rgn sel-lyr])
