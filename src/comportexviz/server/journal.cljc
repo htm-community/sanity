@@ -43,7 +43,14 @@
                           (when (number? id)
                             (let [i (- id @steps-offset)]
                               (cond
-                                (pos? i) (subvec @model-steps (dec i) (inc i))
+                                (pos? i) (let [[prev-step step]
+                                               (subvec @model-steps (dec i)
+                                                       (inc i))]
+                                           ;; might be a sampling of steps
+                                           (if (= (inc (p/timestep prev-step))
+                                                  (p/timestep step))
+                                             [prev-step step]
+                                             [nil step]))
                                 (zero? i) [nil (nth @model-steps i nil)]))))]
     (go-loop []
       (when-let [model (<! steps-c)]
