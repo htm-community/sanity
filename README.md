@@ -3,7 +3,7 @@
 A web-based visualization layer for
 [Comportex](http://github.com/nupic-community/comportex/).
 
-See it in action in see [the online demos](https://nupic-community.github.io/comportexviz/).
+See it in action in [the online demos](https://nupic-community.github.io/comportexviz/).
 
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
@@ -37,7 +37,7 @@ form, similar to IPython Notebook or Mathematica. It builds on
 
 The notebook:
 
-- Provides an alternate way to drive and present HTM models
+- Is a fun-filled way to drive and present HTM models
 - Is a launchpad for ComportexViz runners
 - Is built for blogging. Use the
   [Gorilla REPL viewer service](http://gorilla-repl.org/viewer.html)
@@ -49,17 +49,20 @@ The notebook:
 
 Get [Leiningen](http://leiningen.org/) first.
 
-Clone [Comportex](http://github.com/nupic-community/comportex/),
-and install it to your local Maven repository (~/.m2):
+Clone [Comportex](http://github.com/nupic-community/comportex/), and
+install (this command installs to your local Maven repository,
+`~/.m2`. Once we make a release this step will not be needed.):
 
 ```
+cd comportex
 lein install
 ```
 
 Clone ComportexViz, and then build it:
 
 ```
-lein do cljsbuild clean, cljsbuild once demos
+cd comportexviz
+lein do clean, cljsbuild once demos
 ```
 
 Start a REPL:
@@ -83,14 +86,15 @@ to launch your own ComportexViz runner.
 To host [the online demos](https://nupic-community.github.io/comportexviz/) locally,
 do a `cljsbuild`, as above.
 
-Now open `public/demos/*.html` in a web browser, preferably Google
-Chrome. Each HTML page loads the corresponding model defined
+Now open `public/demos/*.html` in a web browser.
+Each HTML page loads the corresponding model defined
 in `examples/demos/comportexviz/demos/`.
 
 
 ## License
 
-Copyright © 2014-2015 Felix Andrews and contributors.
+Copyright © 2015 Marcus Lewis, Felix Andrews and contributors.
+Copyright © 2014 Felix Andrews and contributors.
 
 Distributed under your choice of
 * the Eclipse Public License, the same as Clojure.
