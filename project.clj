@@ -1,26 +1,26 @@
-(defproject comportexviz "0.0.9-SNAPSHOT"
+(defproject comportexviz "0.0.10-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
   :url "https://github.com/nupic-community/comportexviz"
 
-  :dependencies [[org.clojure/clojure "1.7.0-RC1"]
-                 [org.clojure/clojurescript "0.0-3308"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
+                 [org.clojure/clojurescript "1.7.107"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
-                 [org.nfrac/comportex "0.0.9-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.10-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
-                 [reagent-forms "0.5.1"]
+                 [reagent-forms "0.5.6"]
                  [ring/ring-core "1.4.0"]
                  [compojure "1.4.0"]
                  [info.sunng/ring-jetty9-adapter "0.9.1"]
-                 [com.cognitect/transit-clj "0.8.275"]
+                 [com.cognitect/transit-clj "0.8.281"]
                  [com.cognitect/transit-cljs "0.8.220"]
                  [com.mrcslws/gorilla-repl "0.3.5-004"
                   :exclusions [javax.servlet/servlet-api
                                org.slf4j/slf4j-api]]
-                 [org.clojure/data.csv "0.1.2"]]
+                 [org.clojure/data.csv "0.1.3"]]
 
-  :plugins [[lein-cljsbuild "1.0.6"]
+  :plugins [[lein-cljsbuild "1.1.0"]
             [com.cemerick/austin "0.1.6"]
             [org.clojure/tools.nrepl "0.2.10"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]
