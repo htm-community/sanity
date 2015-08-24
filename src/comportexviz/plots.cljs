@@ -7,7 +7,7 @@
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.selection :as sel]
             [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.util :as util]
+            [org.nfrac.comportex.util :as util :refer [round]]
             [clojure.string :as str]
             [goog.dom :as dom]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -387,7 +387,7 @@
         (c/text {:x 0 :y y :text (->> (for [[label frac] label-fracs]
                                         (if (== frac 1.0)
                                           label
-                                          (str label "(" frac ")")))
+                                          (str label "(" (round (* 100 frac)) "%)")))
                                       (interpose " ")
                                       (apply str))})))
     (c/text ctx {:x (quot mid-x 2)
