@@ -367,7 +367,13 @@
                    :one-d (topology/one-d-topology (p/size topo))
                    :two-d (if (== 2 ndim)
                             topo ;; keep actual topology if possible
-                            (topology/two-d-topology 20 (quot (p/size topo) 20))))
+                            (let [n (p/size topo)
+                                  w 20]
+                              (topology/two-d-topology (min 20 n)
+                                                       (-> n
+                                                           (/ w)
+                                                           Math/ceil
+                                                           int)))))
         lay-ndim (count (p/dimensions lay-topo))]
     (case lay-ndim
       1 (grid-1d-layout lay-topo top left opts inbits?)

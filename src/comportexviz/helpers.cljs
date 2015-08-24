@@ -102,7 +102,9 @@
     :reagent-render (fn [props width height canaries _]
                       ;; Need to deref all atoms consumed by draw function to
                       ;; subscribe to changes.
-                      (mapv deref canaries)
+                      (doseq [v canaries]
+                        (when (satisfies? IDeref v)
+                          @v))
                       [:canvas (assoc props
                                       :width width
                                       :height height)])}))
@@ -167,7 +169,9 @@
       :reagent-render (fn [props canaries _ _]
                         ;; Need to deref all atoms consumed by draw function to
                         ;; subscribe to changes.
-                        (mapv deref canaries)
+                        (doseq [v canaries]
+                          (when (satisfies? IDeref v)
+                            @v))
                         (let [w @width-px
                               h @height-px]
                           (when (or (zero? w) (zero? h))

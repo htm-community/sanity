@@ -10,7 +10,8 @@
 (def write-handlers
   (transit/record-write-handlers
    org.nfrac.comportex.topology.OneDTopology
-   org.nfrac.comportex.topology.TwoDTopology))
+   org.nfrac.comportex.topology.TwoDTopology
+   org.nfrac.comportex.topology.ThreeDTopology))
 
 (defn transit-str
   [m]

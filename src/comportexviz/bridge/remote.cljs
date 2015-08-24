@@ -3,12 +3,14 @@
             [cognitect.transit :as transit]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
-                                                  map->TwoDTopology]])
+                                                  map->TwoDTopology
+                                                  map->ThreeDTopology]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (def handlers
   {"org.nfrac.comportex.topology.OneDTopology" map->OneDTopology
-   "org.nfrac.comportex.topology.TwoDTopology" map->TwoDTopology})
+   "org.nfrac.comportex.topology.TwoDTopology" map->TwoDTopology
+   "org.nfrac.comportex.topology.ThreeDTopology" map->ThreeDTopology})
 
 (defn transit-str
   [m]

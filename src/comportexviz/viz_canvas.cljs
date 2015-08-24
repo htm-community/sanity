@@ -15,6 +15,7 @@
             [comportexviz.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
@@ -95,6 +96,7 @@
              :col-d-px 5
              :col-shrink 0.85
              :cell-r-px 10
+             :cells-segs-w-px 250
              :seg-w-px 30
              :seg-h-px 8
              :seg-h-space-px 55
@@ -122,11 +124,16 @@
   [m]
   (concat (input-layout-paths m) (layer-layout-paths m)))
 
+(defn non-grid-layout-paths
+  [m]
+  (for [k [:cells-segments :blank-cells-segments]
+        :when (get m k)]
+    [k]))
+
 (defn all-layout-paths
   [m]
   (concat (grid-layout-paths m)
-          (when (:cells-segments m)
-            [[:cells-segments]])))
+          (non-grid-layout-paths m)))
 
 (defn grid-layout-vals
   ([m]
@@ -141,7 +148,19 @@
           m
           (grid-layout-paths m)))
 
-(defn init-grid-layouts
+;; Preserve the width of the canvas. The whitespace behind the cell segments is
+;; still useful as a click-to-dismiss-selection target.
+(defn cells-segments-space-reserver
+  [r-right d-opts]
+  (let [{:keys [seg-h-space-px cells-segs-w-px]} d-opts
+        cells-left (+ r-right seg-h-space-px)]
+   (reify
+     lay/PBox
+     (layout-bounds [_]
+       {:x cells-left :y 0
+        :w cells-segs-w-px :h 0}))))
+
+(defn create-layouts
   [step opts]
   (let [inputs (:inputs step)
         regions (:regions step)
@@ -173,31 +192,37 @@
                 [{} i-right]
                 layerseq)]
     {:inputs i-lays
-     :regions r-lays}))
+     :regions r-lays
+     :blank-cells-segments (cells-segments-space-reserver
+                            r-right d-opts)}))
 
 (defn rebuild-layouts
   "Used when the model remains the same but the display has
   changed. Maintains any sorting and facets on each layer/input
   layout. I.e. replaces the GridLayout within each OrderableLayout."
   [viz-layouts step opts]
-  (let [grid-layouts (init-grid-layouts step opts)]
-    (->
-     (reduce (fn [m path]
-               (update-in m path assoc :layout (get-in grid-layouts path)))
-             viz-layouts
-             (grid-layout-paths viz-layouts))
-     (reset-layout-caches))))
+  (let [new-layouts (create-layouts step opts)
+        absorbed-grid (reduce (fn [m path]
+                                (update-in m path assoc :layout
+                                           (get-in new-layouts path)))
+                              viz-layouts
+                              (grid-layout-paths viz-layouts))
+        absorbed-remaining (reduce (fn [m path]
+                                     (assoc-in m path
+                                               (get-in new-layouts path)))
+                                   absorbed-grid
+                                   (non-grid-layout-paths new-layouts))]
+    (reset-layout-caches absorbed-remaining)))
 
 (defn init-layouts
   [step opts]
-  (let [grid-layouts (init-grid-layouts step opts)]
+  (let [layouts (create-layouts step opts)]
     (->
      (reduce (fn [m path]
                (update-in m path
                           (fn [lay]
                             (lay/orderable-layout lay (p/size-of lay)))))
-             grid-layouts
-             (grid-layout-paths grid-layouts))
+             layouts (grid-layout-paths layouts))
      (reset-layout-caches))))
 
 (defn update-dt-offsets!
@@ -347,6 +372,7 @@
         cell-r-px (:cell-r-px d-opts)
         seg-h-px (:seg-h-px d-opts)
         seg-w-px (:seg-w-px d-opts)
+        cells-segs-w-px (:cells-segs-w-px d-opts)
         max-height-px (:max-height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px)
         our-height (cond-> (* nseg-pad (* 8 cell-r-px))
@@ -355,8 +381,7 @@
       lay/PBox
       (layout-bounds [_]
         {:x cells-left :y our-top
-         :w 250 ;; not meticulous
-         :h our-height})
+         :w cells-segs-w-px :h our-height})
       PCellsSegmentsLayout
       (seg-xy
         [_ ci si]
@@ -1017,7 +1042,8 @@
                                     (if apply-to-all?
                                       (grid-layout-paths @viz-layouts)
                                       (map :path @selection))
-                                    (make-viz-step (nth @steps (:dt @selection))
+                                    (make-viz-step (nth @steps
+                                                        (:dt (peek @selection)))
                                                    @steps-data)))
           :clear-facets (let [[apply-to-all?] xs]
                           (clear-facets! viz-layouts viz-options
@@ -1207,9 +1233,10 @@
                                   (reduce (fn [result r-and-b]
                                             (map max result r-and-b))
                                           [0 0]))
-
+              max-width (get-in @viz-options [:drawing :max-width-px])
               width (or (when right
-                          (+ right lay/extra-px-for-highlight))
+                          (cond-> right
+                            max-width (min max-width)))
                         0)
               height (or (when bottom
                            (+ bottom lay/extra-px-for-highlight))
@@ -1230,3 +1257,15 @@
                  (draw-viz! ctx viz-steps @ff-synapses-response
                             @cells-segs-response @viz-layouts @selection
                             opts))))]))})))
+
+(defn inbits-display [topo state->bits d-opts]
+  (let [lay (lay/grid-layout topo 0 0 d-opts true :two-d)
+        {:keys [x y w h]} (layout-bounds lay)]
+    [canvas nil w h [topo state->bits]
+     (fn [ctx]
+       (c/clear-rect ctx {:x 0 :y 0 :w w :h h})
+       (c/fill-style ctx (:background state-colors))
+       (fill-elements lay ctx (lay/ids-onscreen lay))
+       (doseq [[state bits] state->bits]
+         (c/fill-style ctx (get state-colors state))
+         (fill-elements lay ctx bits)))]))
