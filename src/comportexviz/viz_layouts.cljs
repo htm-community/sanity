@@ -21,6 +21,8 @@
     "Current scroll position, giving the first element index visible on screen.")
   (scroll [this down?]
     "Updates the layout with scroll position adjusted up or down one page.")
+  (ids-count [_]
+    "Returns the total number of ids")
   (ids-onscreen-count [this]
     "Returns the number of ids onscreen in constant time")
   (ids-onscreen [this]
@@ -195,6 +197,9 @@
                  scroll-top)
                (max 0 (- scroll-top page-n))))))
 
+  (ids-count [_]
+    (p/size topo))
+
   (ids-onscreen-count [_]
     (cond-> (p/size topo)
       max-bottom-px (min (quot (- max-bottom-px top-px)
@@ -207,7 +212,8 @@
   (id-onscreen? [this id]
     (let [n (ids-onscreen-count this)
           n0 scroll-top]
-      (<= n0 id (+ n0 n -1))))
+      (and (<= n0 id)
+           (< id (+ n0 n)))))
 
   (clicked-id [this x y]
     (let [right (+ left-px (* draw-steps element-w))
@@ -255,7 +261,8 @@
       :circles? (if inbits? false true)})))
 
 (defrecord Grid2dLayout
-    [topo
+    [n-elements
+     topo
      scroll-top
      element-w
      element-h
@@ -303,20 +310,26 @@
                  scroll-top)
                (max 0 (- scroll-top page-n))))))
 
+  (ids-count [_]
+    ;; might not fill the w*h rectangle
+    n-elements)
+
   (ids-onscreen-count [_]
     (let [[w h] (p/dimensions topo)]
-      (* w
-         (cond-> h
-           max-bottom-px (min (quot (- max-bottom-px top-px)
-                                    element-h))))))
+      (min n-elements
+           (* w
+              (cond-> h
+                max-bottom-px (min (quot (- max-bottom-px top-px)
+                                         element-h)))))))
 
   (ids-onscreen [this]
     (let [n0 scroll-top]
-      (range n0 (+ n0 (ids-onscreen-count this) -1))))
+      (range n0 (+ n0 (ids-onscreen-count this)))))
 
   (id-onscreen? [this id]
     (let [n0 scroll-top]
-      (<= n0 id (+ n0 (ids-onscreen-count this) -1))))
+      (and (<= n0 id)
+           (< id (+ n0 (ids-onscreen-count this))))))
 
   (clicked-id [_ x y]
     (let [[w h] (p/dimensions topo)
@@ -327,7 +340,8 @@
         (if (>= y 0)
           (let [id* (p/index-of-coordinates topo [xi yi])
                 id (- id* scroll-top)]
-            [0 id])
+            (when (< id n-elements)
+              [0 id]))
           ;; check for click on header
           [0 nil]))))
 
@@ -341,7 +355,7 @@
                (* element-h shrink))))))
 
 (defn grid-2d-layout
-  [topo top left opts inbits?]
+  [n-elements topo top left opts inbits?]
   (let [{:keys [max-height-px
                 col-d-px
                 col-shrink
@@ -349,7 +363,8 @@
                 bit-h-px
                 bit-shrink]} opts]
     (map->Grid2dLayout
-     {:topo topo
+     {:n-elements n-elements
+      :topo topo
       :scroll-top 0
       :element-w (if inbits? bit-w-px col-d-px)
       :element-h (if inbits? bit-h-px col-d-px)
@@ -362,22 +377,21 @@
 
 (defn grid-layout
   [topo top left opts inbits? display-mode]
-  (let [ndim (count (p/dimensions topo))
-        lay-topo (case display-mode
-                   :one-d (topology/one-d-topology (p/size topo))
-                   :two-d (if (== 2 ndim)
-                            topo ;; keep actual topology if possible
-                            (let [n (p/size topo)
-                                  w 20]
-                              (topology/two-d-topology (min 20 n)
-                                                       (-> n
-                                                           (/ w)
-                                                           Math/ceil
-                                                           int)))))
-        lay-ndim (count (p/dimensions lay-topo))]
-    (case lay-ndim
-      1 (grid-1d-layout lay-topo top left opts inbits?)
-      2 (grid-2d-layout lay-topo top left opts inbits?))))
+  (let [n-elements (p/size topo)]
+    (case display-mode
+      :one-d (grid-1d-layout (topology/one-d-topology n-elements)
+                             top left opts inbits?)
+      :two-d (grid-2d-layout n-elements
+                             (if (= 2 (count (p/dimensions topo)))
+                               topo ;; keep actual topology if possible
+                               (let [w (-> (Math/sqrt n-elements)
+                                           Math/ceil
+                                           (min 20))
+                                     h (-> n-elements
+                                           (/ w)
+                                           Math/ceil)]
+                                 (topology/two-d-topology w h)))
+                             top left opts inbits?))))
 
 
 ;;; # Orderable layouts
@@ -409,6 +423,9 @@
 
   (scroll [this down?]
     (update this :layout scroll down?))
+
+  (ids-count [_]
+    (ids-count layout))
 
   (ids-onscreen-count [_]
     (ids-onscreen-count layout))

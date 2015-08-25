@@ -221,7 +221,7 @@
      (reduce (fn [m path]
                (update-in m path
                           (fn [lay]
-                            (lay/orderable-layout lay (p/size-of lay)))))
+                            (lay/orderable-layout lay (lay/ids-count lay)))))
              layouts (grid-layout-paths layouts))
      (reset-layout-caches))))
 
@@ -585,7 +585,7 @@
   [lay inbits?]
   (let [idx (lay/scroll-position lay)
         page-n (lay/ids-onscreen-count lay)
-        n-ids (p/size-of lay)]
+        n-ids (lay/ids-count lay)]
     (str page-n
          " of "
          n-ids
@@ -1090,7 +1090,7 @@
                           next-idx (if bit
                                      (inc (order bit))
                                      0)
-                          next-bit (if (< next-idx (p/size-of lay))
+                          next-bit (if (< next-idx (lay/ids-count lay))
                                      (key (first (subseq order >= next-idx <=
                                                          next-idx)))
                                      nil)]
