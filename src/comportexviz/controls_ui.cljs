@@ -306,10 +306,10 @@
          " Draw one step in 2D"]]
        ]]
      [:div.row
-      (group "Inputs"
+      (group "Inbits"
              [:div.panel-body
-              (chbox :input.active "Active bits")
-              (chbox :input.predicted "Predicted bits")
+              (chbox :inbits.active "Active bits")
+              (chbox :inbits.predicted "Predicted bits")
               ])
       (group "Columns"
              [:div.panel-body
@@ -652,7 +652,7 @@
             "ComportexViz"]
         " runs HTM models in the browser with interactive
        controls. The model state from recent timesteps is kept, so you can step
-       back in time. You can inspect input values, encoded input bits, and the
+       back in time. You can inspect input values, encoded sense bits, and the
        columns that make up cortical region layers. Within a column you can inspect
        cells and their distal dendrite segments. Feed-forward and distal synapses
        can be shown."]]
@@ -660,7 +660,7 @@
        [:h4 "Display"]
        [:p "Kept timesteps are shown in a row at the top of the display.
       Click one to jump to it.
-      Below that, the blocks represent input fields (squares) and
+      Below that, the blocks represent sensory fields (squares) and
       layers of cortical columns (circles). Depending on the display mode,
       these may be shown in 2D grids from a single time step, or as one
       vertical line per timestep, allowing several time steps to be shown

@@ -105,7 +105,7 @@
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (first (:input-values step))
+          (let [in-value (:input-value step)
                 DELTA (gstr/unescapeEntities "&Delta;")
                 TIMES (gstr/unescapeEntities "&times;")]
             [:div
@@ -135,7 +135,7 @@
               [main/selection selected-htm]
               (fn [ctx]
                 (let [step (main/selected-step)
-                      in-value (first (:input-values step))]
+                      in-value (:input-value step)]
                   (draw-world ctx in-value @selected-htm)))
               nil]
              [:small

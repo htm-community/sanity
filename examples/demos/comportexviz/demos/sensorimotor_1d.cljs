@@ -126,7 +126,7 @@
 (defn world-pane
   []
   (when-let [step (main/selected-step)]
-    (let [in-value (first (:input-values step))
+    (let [in-value (:input-value step)
           {:keys [field position next-saccade]} in-value]
       [:div
        [:p.muted [:small "Input on selected timestep."]]
@@ -140,7 +140,7 @@
         [main/selection]
         (fn [ctx]
           (let [step (main/selected-step)
-                in-value (first (:input-values step))]
+                in-value (:input-value step)]
             (draw-world ctx in-value)))
         nil]])))
 

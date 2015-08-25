@@ -55,7 +55,7 @@
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-         (let [in-value (first (:input-values step))]
+          (let [in-value (:input-value step)]
            [:div
             [:p.muted [:small "Input on selected timestep."]]
             [:div {:style {:min-height "40vh"}}

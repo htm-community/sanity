@@ -26,10 +26,9 @@
             syns))
 
 (defn active-bits
-  [inp]
-  (if (:encoder inp)
-    (p/bits-value inp)
-    (p/motor-bits-value inp)))
+  [sense-node]
+  (or (seq (p/bits-value sense-node))
+      (p/motor-bits-value sense-node)))
 
 (defn count-segs-in-column
   [distal-sg depth col]
@@ -40,7 +39,7 @@
           (range depth)))
 
 (defn ff-out-synapses-data
-  [htm inp-id bit opts]
+  [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
         do-perm? (get-in opts [:ff-synapses :permanences])
         [rgn-id] (core/region-keys htm)
@@ -56,7 +55,7 @@
            :let [active? (contains? active-columns col)]
            :when (or do-inactive? active?)
            :let [perm (get (p/in-synapses sg seg-path) bit)]]
-       [[rgn-id lyr-id col] [(cond-> {:src-id inp-id
+       [[rgn-id lyr-id col] [(cond-> {:src-id sense-id
                                       :src-col bit
                                       :syn-state (if active?
                                                    :active
@@ -285,25 +284,25 @@
 
 (defn inbits-cols-data
   [htm prev-htm path->ids opts]
-  {:inputs (into
+  {:senses (into
             {}
-            (for [inp-id (core/input-keys htm)
-                  :let [bits-subset (path->ids [:inputs inp-id])
-                        inp (get-in htm [:inputs inp-id])
-                        ;; region this input feeds to, for predictions
-                        ff-rgn-id (first (get-in htm [:fb-deps inp-id]))
-                        ;; TODO offset if multiple inputs feeding to region
-                        prev-ff-rgn (when (pos? (p/size (p/ff-topology inp)))
+            (for [sense-id (core/sense-keys htm)
+                  :let [bits-subset (path->ids [:senses sense-id])
+                        sense (get-in htm [:senses sense-id])
+                        ;; region this sense feeds to, for predictions
+                        ff-rgn-id (first (get-in htm [:fb-deps sense-id]))
+                        ;; TODO offset if multiple senses feeding to region
+                        prev-ff-rgn (when (pos? (p/size (p/ff-topology sense)))
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
-              [inp-id (cond-> {}
-                        (get-in opts [:input :active])
-                        (assoc :active-bits (active-bits inp))
+              [sense-id (cond-> {}
+                          (get-in opts [:inbits :active])
+                          (assoc :active-bits (active-bits sense))
 
-                        (and (get-in opts [:input :predicted]) prev-ff-rgn)
-                        (assoc :pred-bits-alpha
-                               (->> (core/predicted-bit-votes prev-ff-rgn)
-                                    (util/remap #(min 1.0
-                                                      (float (/ % 8)))))))]))
+                          (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
+                          (assoc :pred-bits-alpha
+                                 (->> (core/predicted-bit-votes prev-ff-rgn)
+                                      (util/remap #(min 1.0
+                                                        (float (/ % 8)))))))]))
 
    :regions (into
              {}
@@ -395,11 +394,11 @@
 
 (defn step-template-data
   [htm]
-  {:inputs (into
+  {:senses (into
             {}
-            (for [inp-id (core/input-keys htm)
-                  :let [inp (get-in htm [:inputs inp-id])]]
-              [inp-id {:topology (p/topology inp)}]))
+            (for [sense-id (core/sense-keys htm)
+                  :let [sense (get-in htm [:senses sense-id])]]
+              [sense-id {:topology (p/topology sense)}]))
 
    :regions (into
              {}

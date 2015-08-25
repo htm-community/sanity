@@ -62,9 +62,9 @@
    })
 
 (def default-viz-options
-  {:input {:active true
-           :predicted true
-           :refresh-index 0}
+  {:inbits {:active true
+            :predicted true
+            :refresh-index 0}
    :columns {:active true
              :overlaps nil
              :boosts nil
@@ -109,10 +109,10 @@
   (let [[x y] (lay/origin-px-topleft lay dt)]
     (c/draw-image ctx img x y)))
 
-(defn input-layout-paths
+(defn sense-layout-paths
   [m]
-  (for [inp-id (keys (:inputs m))]
-    [:inputs inp-id]))
+  (for [sense-id (keys (:senses m))]
+    [:senses sense-id]))
 
 (defn layer-layout-paths
   [m]
@@ -122,7 +122,7 @@
 
 (defn grid-layout-paths
   [m]
-  (concat (input-layout-paths m) (layer-layout-paths m)))
+  (concat (sense-layout-paths m) (layer-layout-paths m)))
 
 (defn non-grid-layout-paths
   [m]
@@ -162,7 +162,7 @@
 
 (defn create-layouts
   [step opts]
-  (let [inputs (:inputs step)
+  (let [senses (:senses step)
         regions (:regions step)
         layerseq (mapcat (fn [rgn-id]
                            (map vector (repeat rgn-id)
@@ -172,16 +172,16 @@
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
         top-px (:top-px d-opts)
-        ;; for now draw inputs and layers in a horizontal stack
-        [i-lays i-right]
-        (reduce (fn [[lays left] inp-id]
-                  (let [topo (:topology (inputs inp-id))
+        ;; for now draw senses and layers in a horizontal stack
+        [s-lays s-right]
+        (reduce (fn [[lays left] sense-id]
+                  (let [topo (:topology (senses sense-id))
                         lay (lay/grid-layout topo top-px left d-opts true
                                              display-mode)]
-                    [(assoc lays inp-id lay)
+                    [(assoc lays sense-id lay)
                      (+ (lay/right-px lay) spacer)]))
                 [{} 20]
-                (keys inputs))
+                (keys senses))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
                   (let [topo (:topology (get-in regions [rgn-id lyr-id]))
@@ -189,16 +189,16 @@
                                              display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
-                [{} i-right]
+                [{} s-right]
                 layerseq)]
-    {:inputs i-lays
+    {:senses s-lays
      :regions r-lays
      :blank-cells-segments (cells-segments-space-reserver
                             r-right d-opts)}))
 
 (defn rebuild-layouts
   "Used when the model remains the same but the display has
-  changed. Maintains any sorting and facets on each layer/input
+  changed. Maintains any sorting and facets on each layer/sense
   layout. I.e. replaces the GridLayout within each OrderableLayout."
   [viz-layouts step opts]
   (let [new-layouts (create-layouts step opts)
@@ -239,7 +239,7 @@
 
 (def path->invalidate-path
   {:regions :columns
-   :inputs :input})
+   :senses :inbits})
 
 (defn invalidate!
   [viz-options paths]
@@ -266,7 +266,7 @@
         (get-in path)
         (get (case lyr-type
                :regions :active-columns
-               :inputs :active-bits))
+               :senses :active-bits))
         sort)))
 
 (defn add-facets!
@@ -319,7 +319,7 @@
   (invalidate! viz-options paths))
 
 (defn draw-ff-synapses
-  [ctx ff-synapses-response steps r-lays i-lays]
+  [ctx ff-synapses-response steps r-lays s-lays]
   (c/save ctx)
   (c/stroke-width ctx 1)
   (c/alpha ctx 1)
@@ -332,7 +332,7 @@
             :let [this-lay (get-in r-lays [rgn-id lyr-id])
                   [this-x this-y] (element-xy this-lay col dt)]]
       (doseq [{:keys [src-id src-col perm src-lyr syn-state]} synapses
-              :let [src-lay (or (get i-lays src-id)
+              :let [src-lay (or (get s-lays src-id)
                                 (get-in r-lays [src-id src-lyr]))
                     [src-x src-y] (element-xy src-lay src-col dt)]]
         (doto ctx
@@ -525,7 +525,7 @@
               (doseq [{:keys [src-col src-id src-lyr perm]} syns
                       :let [src-lay (get-in layouts (if src-lyr
                                                       [:regions src-id src-lyr]
-                                                      [:inputs src-id]))
+                                                      [:senses src-id]))
                             [src-x src-y] (element-xy src-lay src-col (inc dt))]]
                 (when perm (c/alpha ctx perm))
                 (doto ctx
@@ -673,7 +673,7 @@
 
 (defn draw-viz!
   [ctx viz-steps ff-synapses-response cells-segs-response layouts sel opts]
-  (let [i-lays (:inputs layouts)
+  (let [s-lays (:senses layouts)
         r-lays (:regions layouts)
 
         d-opts (:drawing opts)
@@ -706,8 +706,8 @@
     (c/font-style ctx "10px sans-serif")
     (c/fill-style ctx "black")
 
-    (doseq [[inp-id lay] i-lays]
-      (c/text ctx {:text (name inp-id)
+    (doseq [[sense-id lay] s-lays]
+      (c/text ctx {:text (name sense-id)
                    :x (:x (layout-bounds lay))
                    :y label-top-px})
       (c/text ctx {:text (scroll-status-str lay true)
@@ -724,23 +724,23 @@
 
     (doseq [dt draw-dts
             :let [{sc :cache inbits-cols :inbits-cols} (nth viz-steps dt)
-                  {:keys [inputs regions]} inbits-cols]]
+                  {:keys [senses regions]} inbits-cols]]
       ;; draw encoded inbits
-      (doseq [[inp-id {:keys [active-bits pred-bits-alpha]}] inputs
-              :let [lay (i-lays inp-id)
+      (doseq [[sense-id {:keys [active-bits pred-bits-alpha]}] senses
+              :let [lay (s-lays sense-id)
                     lay-cache (::cache (meta lay))]]
         (->> (bg-image lay)
-             (with-cache lay-cache [::bg inp-id] opts #{:drawing})
+             (with-cache lay-cache [::bg sense-id] opts #{:drawing})
              (draw-image-dt ctx lay dt))
         (when active-bits
           (->> active-bits
                (fill-ids-image lay (:active state-colors))
-               (with-cache sc [::abits inp-id] opts #{:input :drawing})
+               (with-cache sc [::abits sense-id] opts #{:inbits :drawing})
                (draw-image-dt ctx lay dt)))
         (when pred-bits-alpha
           (->> pred-bits-alpha
                (fill-ids-alpha-image lay (:predicted state-colors))
-               (with-cache sc [::pbits inp-id] opts #{:input :drawing})
+               (with-cache sc [::pbits sense-id] opts #{:inbits :drawing})
                (draw-image-dt ctx lay dt))))
 
       ;; draw regions / layers
@@ -816,7 +816,7 @@
         (lay/highlight-element lay ctx dt bit bit (:highlight state-colors))))
 
     ;; draw ff synapses
-    (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays i-lays)
+    (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays s-lays)
 
     (when-let [cslay (:cells-segments layouts)]
       (c/text ctx {:text "Cells and distal dendrite segments."
@@ -855,12 +855,12 @@
   [e steps selection layouts]
   (let [{:keys [x y]} (offset-from-target e)
         append? (.-metaKey e)
-        i-lays (:inputs layouts)
+        s-lays (:senses layouts)
         r-lays (:regions layouts)
         ;; we need to assume there is a previous step, so:
         max-dt (max 0 (- (count steps) 2))
         hit? (atom false)]
-    ;; check inputs and regions
+    ;; check senses and regions
     (doseq [path (grid-layout-paths layouts)
             :let [lay (get-in layouts path)
                   [dt id] (lay/clicked-id lay x y)]
@@ -927,12 +927,12 @@
               true))))
       ;; out-synapses
       (when bit
-        (when-let [inp-id (sel/input sel1)]
+        (when-let [sense-id (sel/sense sel1)]
           (let [response-c (async/chan)]
             (go
               (swap! ff-synapses-response assoc-in
                      [:out-synapses sel1] (<! response-c)))
-            (put! @into-journal [:get-ff-out-synapses model-id inp-id bit
+            (put! @into-journal [:get-ff-out-synapses model-id sense-id bit
                                  viewport-token
                                  (channel-proxy/register! local-targets
                                                           response-c)])

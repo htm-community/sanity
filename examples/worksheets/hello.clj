@@ -2,7 +2,7 @@
 
 ;; **
 ;;; # Comportex
-;;; 
+;;;
 ;; **
 
 ;; **
@@ -45,7 +45,7 @@
 
 (def model (core/regions-in-series
             core/sensory-region
-            (core/sensory-input encoder) 1
+            encoder 1
             (repeat spec)))
 
 (def inputs (flatten (repeat (range 0 12))))
@@ -94,9 +94,7 @@
 ;; @@
 (defn t->input [t]
   (-> (nth timeline t)
-      core/input-seq
-      first
-      :value))
+      :input-value))
 
 (defn t->prediction [t]
   (when (> t 0)

@@ -76,10 +76,10 @@
 
 (defn text-world-predictions-component
   [in-value htm n-predictions]
-  (let [inp (first (core/input-seq htm))
+  (let [e (first (vals (:encoders htm)))
         rgn (first (core/region-seq htm))
         pr-votes (core/predicted-bit-votes rgn)
-        predictions (p/decode (:encoder inp) pr-votes n-predictions)]
+        predictions (p/decode e pr-votes n-predictions)]
     (predictions-table predictions)))
 
 ;;; canvas
