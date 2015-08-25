@@ -93,7 +93,7 @@
 (defn world-pane
   []
   (when-let [step (main/selected-step)]
-    (let [in-value (first (:input-values step))
+    (let [in-value (:input-value step)
           model-id (::model-id (meta in-value))
           {:keys [patterns mixed? xy?]} (model-info model-id)
           currs (pattern-index-map in-value mixed? model-id)]
@@ -117,7 +117,7 @@
         [main/selection]
         (fn [ctx]
           (let [step (main/selected-step)
-                in-value (first (:input-values step))
+                in-value (:input-value step)
                 model-id (::model-id (meta in-value))
                 {:keys [patterns mixed? xy?]} (model-info model-id)
                 currs (pattern-index-map in-value mixed? model-id)]

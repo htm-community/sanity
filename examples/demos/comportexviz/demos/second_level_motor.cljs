@@ -106,7 +106,7 @@
 (defn world-pane
   []
   (when-let [step (main/selected-step)]
-    (let [in-value (first (:input-values step))
+    (let [in-value (:input-value step)
           {:keys [sentences position]} in-value
           [i j k] position
           letter-sacc (:next-letter-saccade in-value)
@@ -134,7 +134,7 @@
         [main/selection]
         (fn [ctx]
           (let [step (main/selected-step)
-                in-value (first (:input-values step))]
+                in-value (:input-value step)]
             (draw-world ctx in-value)))
         nil]
        [:pre
@@ -199,7 +199,7 @@
    [:p "The world is a string of letters divided into words and
    sentences. Only one letter is received as direct sensory input at
    any one time. Motor actions (saccades) shift the focus to a new
-   letter. These motor actions are encoded in two separate inputs: "
+   letter. These motor actions are encoded in two separate senses: "
     [:code "letter-motor"] " and " [:code "word-motor"]
     ". The former is distal input to the first level region, while the
     latter is distal input to the second-level region."]

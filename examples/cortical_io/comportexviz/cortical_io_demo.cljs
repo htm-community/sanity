@@ -135,10 +135,10 @@ fox eat something.
 
 (defn load-predictions
   [in-value htm n-predictions predictions-cache]
-  (let [inp (first (core/input-seq htm))
+  (let [e (first (vals (:encoders htm)))
         rgn (first (core/region-seq htm))
         pr-votes (core/predicted-bit-votes rgn)
-        predictions (p/decode (:encoder inp) pr-votes n-predictions)]
+        predictions (p/decode e pr-votes n-predictions)]
     (if-let [c (:channel predictions)]
       ;; async call, return nil and await cache (like a promise)
       (do
@@ -157,31 +157,33 @@ fox eat something.
         predictions-cache (atom {})
         selected-htm (atom nil)]
     (add-watch main/selection ::fetch-selected-htm
-               (fn [_ _ _ sel]
+               (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
                      (put! @main/into-journal [:get-model model-id out-c])
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
-      (when-let [htm @selected-htm]
-        (let [in-value (:value (first (core/input-seq htm)))]
-          [:div
-           [:p.muted [:small "Input on selected timestep."]]
-           [:div {:style {:min-height "40vh"}}
-            (helpers/text-world-input-component in-value htm max-shown scroll-every " ")]
-           [:div
-            [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
-                                                :on-click (fn [e]
-                                                            (swap! show-predictions not)
-                                                            (.preventDefault e))}
-             "Compute predictions"]]
-           (when @show-predictions
-             (if-let [predictions (or (get @predictions-cache htm)
-                                      (load-predictions in-value htm 8 predictions-cache))]
-               (helpers/predictions-table predictions)
-               ;; not cached and not returned immediately
-               [:p.text-info "Loading predictions..."]))])))))
+      (when-let [step (main/selected-step)]
+        (when-let [htm @selected-htm]
+          (let [in-value (:input-value step)]
+            [:div
+             [:p.muted [:small "Input on selected timestep."]]
+             [:div {:style {:min-height "40vh"}}
+              (helpers/text-world-input-component in-value htm max-shown
+                                                  scroll-every " ")]
+             [:div
+              [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
+                                                  :on-click (fn [e]
+                                                              (swap! show-predictions not)
+                                                              (.preventDefault e))}
+               "Compute predictions"]]
+             (when @show-predictions
+               (if-let [predictions (or (get @predictions-cache htm)
+                                        (load-predictions in-value htm 8 predictions-cache))]
+                 (helpers/predictions-table predictions)
+                 ;; not cached and not returned immediately
+                 [:p.text-info "Loading predictions..."]))]))))))
 
 (defn split-sentences
   [text]
@@ -232,7 +234,7 @@ fox eat something.
         spec (case (:spec-choice @config)
                :a spec-global
                :b spec-local)
-        inp (->>
+        enc (->>
              (case (:encoder @config)
                :cortical-io
                (cortical-io-encoder (:api-key @config) fingerprint-cache
@@ -241,11 +243,10 @@ fox eat something.
                :random
                (enc/unique-encoder cio/retina-dim
                                    (apply * 0.02 cio/retina-dim)))
-             (enc/pre-transform :word)
-             (core/sensory-input))]
+             (enc/pre-transform :word))]
     (with-ui-loading-message
       (reset! model (core/regions-in-series
-                     core/sensory-region inp n-regions
+                     core/sensory-region enc n-regions
                      (list* spec (repeat (merge spec higher-level-spec-diff)))))
       (server/init model
                    world-c

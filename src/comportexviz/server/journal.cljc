@@ -16,7 +16,7 @@
   [model id]
   {:model-id id
    :timestep (p/timestep model)
-   :input-values (->> model core/input-seq (map :value))})
+   :input-value (:input-value model)})
 
 (defn id-missing-response
   [id steps-offset]
@@ -144,11 +144,11 @@
                       (id-missing-response id steps-offset))))
 
             :get-ff-out-synapses
-            (let [[id inp-id bit token response-c] xs
+            (let [[id sense-id bit token response-c] xs
                   [opts] (get-in @client-info [journal-id ::viewports token])]
               (put! response-c
                     (if-let [htm (find-model id)]
-                      (data/ff-out-synapses-data htm inp-id bit opts)
+                      (data/ff-out-synapses-data htm sense-id bit opts)
                       (id-missing-response id steps-offset))))
 
             :get-cells-segments

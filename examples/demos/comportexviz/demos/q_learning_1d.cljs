@@ -160,7 +160,7 @@
   []
   (let [selected-htm (atom nil)]
     (add-watch main/selection ::fetch-selected-htm
-               (fn [_ _ _ sel]
+               (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
                      (put! @main/into-journal [:get-model model-id out-c])
@@ -169,7 +169,7 @@
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (first (:input-values step))
+          (let [in-value (:input-value step)
                 DELTA (gstr/unescapeEntities "&Delta;")
                 TIMES (gstr/unescapeEntities "&times;")]
             [:div
@@ -201,7 +201,7 @@
               [main/selection]
               (fn [ctx]
                 (let [step (main/selected-step)
-                      in-value (first (:input-values step))]
+                      in-value (:input-value step)]
                   (draw-world ctx in-value)))
               nil]
              [:small

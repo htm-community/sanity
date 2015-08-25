@@ -213,7 +213,7 @@
 
 (defn viz-rgn-shades
   [step-template]
-  (let [srcs (concat (keys (:inputs @step-template))
+  (let [srcs (concat (keys (:senses @step-template))
                      (keys (:regions @step-template)))]
     (zipmap srcs (range -0.3 0.31 (/ 1.0 (count srcs))))))
 
@@ -452,7 +452,7 @@
                                 (fn [m]
                                   (util/update-each (or m {}) lc
                                                     #(merge-with + % {which-sdr 1}))))
-                         (let [label (:label (first (:input-values (first step))))]
+                         (let [label (:label (:input-value (first step)))]
                            (swap! sdr-label-counts
                                   update [region-key layer-id]
                                   (fn [m]

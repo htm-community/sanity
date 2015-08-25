@@ -13,9 +13,9 @@
   (let [rgn (get-in htm [:regions rgn-id])
         lyr (get rgn lyr-id)
         depth (p/layer-depth lyr)
-        inp (first (core/input-seq htm))
-        in (:value inp)
-        bits (p/bits-value inp)]
+        in (:input-value htm)
+        sense-node (first (vals (:senses htm)))
+        bits (p/bits-value sense-node)]
     (->>
      ["__Selection__"
       (str "* timestep " (p/timestep rgn))

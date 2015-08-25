@@ -2,10 +2,10 @@
 
 (def blank-selection [])
 
-(defn input
+(defn sense
   [sel1]
   (let [[t a1] (:path sel1)]
-    (when (= t :inputs)
+    (when (= t :senses)
       a1)))
 
 (defn layer
