@@ -157,7 +157,7 @@ fox eat something.
         predictions-cache (atom {})
         selected-htm (atom nil)]
     (add-watch main/selection ::fetch-selected-htm
-               (fn [_ _ _ sel]
+               (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
                      (put! @main/into-journal [:get-model model-id out-c])
