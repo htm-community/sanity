@@ -40,40 +40,43 @@
       (reset! sim-closed? true))))
 
 (defn handle-commands [commands model options sim-closed?]
-  (let [status-in (async/chan)
-        status-mult (async/mult status-in)
-        simulation-id (random-uuid)]
-    (add-watch options ::push-to-subscribers
+  (let [status (atom (:go? @options))
+        status-subscribers (atom #{})
+        client-infos (atom {})
+        all-client-infos (atom #{})]
+    (add-watch options ::extract-status-change
                (fn [_ _ oldv newv]
                  (let [{:keys [go?]} newv]
                    (when (not= go? (:go? oldv))
-                     (put! status-in [go?])))))
+                     (reset! status go?)))))
+    (add-watch status ::push-to-subscribers
+               (fn [_ _ _ v]
+                 (doseq [ch @status-subscribers]
+                   (put! ch [v]))))
     (go-loop []
       (if-not @sim-closed?
-        (when-let [c (<! commands)]
-          (let [[[command & xs] client-info] c]
+        (if-let [c (<! commands)]
+          (let [[[command & xs] client-id] c
+                client-info (or (get @client-infos client-id)
+                                (let [v (atom {})]
+                                  (swap! client-infos assoc client-id v)
+                                  v))]
             (case command
               :client-disconnect (do
                                    (println "SIMULATION: Client disconnected.")
-                                   (async/untap status-mult
-                                                (get-in @client-info
-                                                        [simulation-id
-                                                         ::status-subscriber])))
-              :client-reconnect (let [[old-client-info] xs
-                                      {status-subscriber
-                                       ::status-subscriber} (get old-client-info
-                                                                 simulation-id)]
-                                  (println "SIMULATION: Client reconnected.")
-                                  (when status-subscriber
-                                    (println (str "SIMULATION: Client "
-                                                  "resubscribed to status."))
-                                    (async/tap status-mult status-subscriber))
-                                  (swap! client-info
-                                         #(cond-> %
-                                            status-subscriber
-                                            (assoc-in [simulation-id
-                                                       ::status-subscriber]
-                                                      status-subscriber))))
+                                   (swap! status-subscribers disj
+                                          (::status-subscriber @client-info)))
+              :connect (let [[old-client-info subscriber-c] xs]
+                         (add-watch client-info ::push-to-client
+                                    (fn [_ _ _ v]
+                                      (put! subscriber-c v)))
+                         (when-let [subscriber-c (::status-subscriber
+                                                  old-client-info)]
+                           (println "SIMULATION: Client resubscribed"
+                                    "to status.")
+                           (swap! status-subscribers conj subscriber-c)
+                           (swap! client-info assoc ::status-subscriber
+                                  subscriber-c)))
               :step (swap! options update :force-n-steps inc)
               :set-spec (let [[path v] xs]
                           (swap! model assoc-in path v))
@@ -93,15 +96,16 @@
                      (swap! options assoc :go? true))
               :set-step-ms (let [[t] xs]
                              (swap! options assoc :step-ms t))
-              :subscribe-to-status (let [[ch] xs]
+              :subscribe-to-status (let [[subscriber-c] xs]
                                      (println (str "SIMULATION: Client "
                                                    "subscribed to status."))
-                                     (async/tap status-mult ch)
-                                     (swap! client-info assoc-in
-                                            [simulation-id ::status-subscriber]
-                                            ch))))
-          (recur))
-        (reset! sim-closed? true)))))
+                                     (swap! status-subscribers conj
+                                            subscriber-c)
+                                     (swap! client-info assoc
+                                            ::status-subscriber subscriber-c)
+                                     (put! subscriber-c [@status])))
+            (recur))
+          (reset! sim-closed? true))))))
 
 ;; To end the simulation, close `world-c` and/or `commands-c`. If only one is
 ;; closed, the simulation may consume another value from the other before

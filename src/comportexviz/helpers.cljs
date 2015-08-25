@@ -163,7 +163,7 @@
 
       :component-did-update #(resizing-canvas$call-draw-fn %)
 
-      :component-will-unmount #(put! teardown-c :teardown)
+      :component-will-unmount #(async/close! teardown-c)
 
       :display-name "resizing-canvas"
       :reagent-render (fn [props canaries _ _]

@@ -970,8 +970,9 @@
       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
 
 (defn push-new-viewport!
-  [into-journal viewport-token step-template layouts opts local-targets]
-  (let [paths (grid-layout-paths step-template)
+  [into-journal viewport-token layouts opts local-targets]
+  (assert (not-empty layouts))
+  (let [paths (grid-layout-paths layouts)
         path->ids-onscreen (zipmap paths
                                    (->> (map (partial get-in layouts) paths)
                                         (map lay/ids-onscreen)))
@@ -1000,8 +1001,9 @@
            #(into (select-keys % steps-v) ;; remove old steps
                   (for [step new-steps] ;; insert new caches
                     [step {:cache (atom {})}])))
-    (fetch-inbits-cols! into-journal steps-data new-steps
-                        viewport-tok local-targets)))
+    (when viewport-tok
+      (fetch-inbits-cols! into-journal steps-data new-steps
+                          viewport-tok local-targets))))
 
 (defn ids-onscreen-changed?
   [before after]
@@ -1118,9 +1120,8 @@
       (fn [_]
         (when @step-template
           (absorb-step-template @step-template viz-options viz-layouts)
-          (push-new-viewport! into-journal viewport-token
-                              @step-template @viz-layouts @viz-options
-                              local-targets))
+          (push-new-viewport! into-journal viewport-token @viz-layouts
+                              @viz-options local-targets))
 
         (when (not-empty @steps)
           (add-watch viewport-token ::initial-steps-fetch
@@ -1147,9 +1148,9 @@
                        (put! @into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
                    (fn viewport<-opts [_ _ _ opts]
-                     (when @into-journal
+                     (when (and @into-journal @viz-layouts)
                        (push-new-viewport! into-journal viewport-token
-                                           @step-template @viz-layouts opts
+                                           @viz-layouts opts
                                            local-targets))))
         (add-watch viz-layouts ::viewport
                    (fn viewport<-layouts [_ _ prev layouts]
@@ -1157,13 +1158,13 @@
                                 prev
                                 (ids-onscreen-changed? prev layouts))
                        (push-new-viewport! into-journal viewport-token
-                                           @step-template layouts @viz-options
+                                           layouts @viz-options
                                            local-targets))))
         (add-watch step-template ::absorb-step-template
                    (fn step-template-changed [_ _ _ template]
                      (absorb-step-template template viz-options viz-layouts)
                      (push-new-viewport! into-journal viewport-token
-                                         template @viz-layouts @viz-options
+                                         @viz-layouts @viz-options
                                          local-targets)))
         (add-watch viz-options ::rebuild-layouts
                    (fn layouts<-viz-options [_ _ old-opts opts]
@@ -1218,7 +1219,7 @@
         (remove-watch selection ::update-dt-offsets)
         (remove-watch selection ::syns-segments)
         (remove-watch cells-segs-response ::cells-segments-layout)
-        (put! teardown-c :teardown))
+        (async/close! teardown-c))
 
       :display-name "viz-canvas"
 

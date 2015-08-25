@@ -33,7 +33,7 @@
         keep-steps (atom n-keep)
         steps-in (async/chan)
         steps-mult (async/mult steps-in)
-        journal-id (random-uuid)
+        client-infos (atom {})
         find-model (fn [id]
                      (when (number? id)
                        (let [i (- id @steps-offset)]
@@ -68,30 +68,36 @@
 
     (go-loop []
       (if-let [c (<! commands-c)]
-        (let [[[command & xs] client-info] c]
+        (let [[[command & xs] client-id] c
+              client-info (or (get @client-infos client-id)
+                              (let [v (atom {})]
+                                (swap! client-infos assoc client-id v)
+                                v))]
           (case command
+            :ping
+            nil
+
             :client-disconnect
             (do
               (println "JOURNAL: Client disconnected.")
-              (async/untap steps-mult (get-in @client-info
-                                              [journal-id ::steps-subscriber])))
+              (async/untap steps-mult (::steps-subscriber @client-info)))
 
-            :client-reconnect
-            (let [[old-client-info] xs
-                  {viewports ::viewports
-                   steps-subscriber ::steps-subscriber} (get old-client-info
-                                                             journal-id)]
-              (println "JOURNAL: Client reconnected.")
-              (when steps-subscriber
-                (println "JOURNAL: Client resubscribed to steps.")
-                (async/tap steps-mult steps-subscriber))
-              (swap! client-info
-                     #(cond-> %
-                        steps-subscriber (assoc-in [journal-id
-                                                    ::steps-subscriber]
-                                                   steps-subscriber)
-                        viewports (assoc-in [journal-id
-                                             ::viewports] viewports))))
+            :connect
+            (let [[old-client-info subscriber-c] xs]
+              (add-watch client-info ::push-to-client
+                         (fn [_ _ _ v]
+                           (put! subscriber-c v)))
+              (when-let [{viewports ::viewports
+                          steps-subscriber ::steps-subscriber} old-client-info]
+                (println "JOURNAL: Client reconnected.")
+                (when steps-subscriber
+                  (println "JOURNAL: Client resubscribed to steps.")
+                  (async/tap steps-mult steps-subscriber))
+                (swap! client-info
+                       #(cond-> %
+                          steps-subscriber (assoc ::steps-subscriber
+                                                  steps-subscriber)
+                          viewports (assoc ::viewports viewports)))))
 
             :get-steps
             (let [[response-c] xs]
@@ -104,8 +110,7 @@
             (let [[keep-n-steps steps-c response-c] xs]
               (reset! keep-steps keep-n-steps)
               (async/tap steps-mult steps-c)
-              (swap! client-info assoc-in [journal-id ::steps-subscriber]
-                     steps-c)
+              (swap! client-info assoc ::steps-subscriber steps-c)
               (println "JOURNAL: Client subscribed to steps.")
               (->> (data/step-template-data @current-model)
                    (put! response-c)))
@@ -113,14 +118,12 @@
             :register-viewport
             (let [[viewport response-c] xs]
               (let [token (random-uuid)]
-                (swap! client-info update-in [journal-id ::viewports]
-                       assoc token viewport)
+                (swap! client-info update ::viewports assoc token viewport)
                 (put! response-c token)))
 
             :unregister-viewport
             (let [[token] xs]
-              (swap! client-info update-in [journal-id ::viewports]
-                     dissoc token))
+              (swap! client-info update ::viewports dissoc token))
 
             :set-keep-steps
             (let [[keep-n-steps] xs]
@@ -128,8 +131,7 @@
 
             :get-inbits-cols
             (let [[id token response-c] xs
-                  [opts path->ids] (get-in @client-info [journal-id ::viewports
-                                                         token])]
+                  [opts path->ids] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
                       (data/inbits-cols-data htm prev-htm path->ids opts)
@@ -137,7 +139,7 @@
 
             :get-ff-in-synapses
             (let [[id rgn-id lyr-id only-ids token response-c] xs
-                  [opts] (get-in @client-info [journal-id ::viewports token])]
+                  [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [htm (find-model id)]
                       (data/ff-in-synapses-data htm rgn-id lyr-id only-ids opts)
@@ -145,7 +147,7 @@
 
             :get-ff-out-synapses
             (let [[id sense-id bit token response-c] xs
-                  [opts] (get-in @client-info [journal-id ::viewports token])]
+                  [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [htm (find-model id)]
                       (data/ff-out-synapses-data htm sense-id bit opts)
@@ -153,7 +155,7 @@
 
             :get-cells-segments
             (let [[id rgn-id lyr-id col ci-si token response-c] xs
-                  [opts] (get-in @client-info [journal-id ::viewports token])]
+                  [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
                       (data/cells-segments-data htm prev-htm rgn-id lyr-id col
@@ -212,4 +214,4 @@
                       (data/transitions-data htm region-key layer-id cell-sdr-fracs)
                       (id-missing-response id steps-offset)))))
           (recur))
-        (println "CLOSING JOURNAL" journal-id)))))
+        (println "CLOSING JOURNAL")))))

@@ -28,37 +28,6 @@
         reader (transit/reader in :json {:handlers extra-handlers})]
     (transit/read reader)))
 
-(defn connection-persistor
-  [client-info connection-changes-c local-targets]
-  (let [connection-persist-c (async/chan)]
-    (channel-proxy/register! local-targets :connection-persistor
-                             connection-persist-c)
-    (go-loop []
-      (let [[[command & xs] client-info*] (<! connection-persist-c)]
-        (when (not (nil? command))
-          (case command
-            :ping
-            nil
-
-            :subscribe-reconnect-blob
-            (let [[subscriber-c] xs]
-              (swap! client-info update ::blob-subscribers conj
-                     subscriber-c))
-
-            :restore-connection
-            (let [[recovered-client-info] xs]
-              (swap! client-info assoc ::blob-subscribers
-                     (::blob-subscribers recovered-client-info))
-              (put! connection-changes-c [[:client-reconnect
-                                           recovered-client-info]
-                                          client-info*])))
-          (recur))))
-    (add-watch client-info [(hash connection-persist-c) ::push-to-clients]
-               (fn [_ _ _ v]
-                 (doseq [subscriber-c (::blob-subscribers @client-info)]
-                   (put! subscriber-c v))))
-    connection-persist-c))
-
 (defn ws-output-chan
   [ws]
   (let [to-network-c (async/chan)]
@@ -82,12 +51,9 @@
    {:on-connect
     (fn [ws]
       (swap! all-websockets-for-testing conj ws)
-      (let [client-info (atom {})]
-        (swap! clients assoc ws
-               [client-info
-                (ws-output-chan ws)
-                (connection-persistor client-info connection-changes-c
-                                      local-targets)])))
+      (swap! clients assoc ws
+             [(java.util.UUID/randomUUID)
+              (ws-output-chan ws)]))
 
     :on-error
     (fn [ws e] (println e))
@@ -95,15 +61,14 @@
     :on-close
     (fn [ws status-code reason]
       (swap! all-websockets-for-testing disj ws)
-      (let [[client-info to-network-c connection-persist-c] (get @clients ws)]
+      (let [[client-id to-network-c] (get @clients ws)]
         (close! to-network-c)
-        (close! connection-persist-c)
-        (put! connection-changes-c [[:client-disconnect] client-info]))
+        (put! connection-changes-c [[:client-disconnect] client-id]))
       (swap! clients dissoc ws))
 
     :on-text
     (fn [ws text]
-      (let [[client-info to-network-c] (get @clients ws)
+      (let [[client-id to-network-c] (get @clients ws)
             [target op msg] (read-transit-str
                              text
                              (channel-proxy/read-handler
@@ -115,7 +80,7 @@
                                                     [t :close!])))))]
         (if-let [ch (get (channel-proxy/as-map local-targets) target)]
           (case op
-            :put! (put! ch [msg client-info])
+            :put! (put! ch [msg client-id])
             :close! (close! ch))
           (do
             (println "ERROR: Unrecognized target" target)
