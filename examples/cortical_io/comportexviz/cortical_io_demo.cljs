@@ -234,20 +234,20 @@ fox eat something.
         spec (case (:spec-choice @config)
                :a spec-global
                :b spec-local)
-        enc (->>
-             (case (:encoder @config)
-               :cortical-io
-               (cortical-io-encoder (:api-key @config) fingerprint-cache
-                                    :decode-locally? (:decode-locally? @config)
-                                    :spatial-scramble? (:spatial-scramble? @config))
-               :random
-               (enc/unique-encoder cio/retina-dim
-                                   (apply * 0.02 cio/retina-dim)))
-             (enc/pre-transform :word))]
+        e (case (:encoder @config)
+            :cortical-io
+            (cortical-io-encoder (:api-key @config) fingerprint-cache
+                                 :decode-locally? (:decode-locally? @config)
+                                 :spatial-scramble? (:spatial-scramble? @config))
+            :random
+            (enc/unique-encoder cio/retina-dim
+                                (apply * 0.02 cio/retina-dim)))
+        sensor [:word e]]
     (with-ui-loading-message
       (reset! model (core/regions-in-series
-                     core/sensory-region enc n-regions
-                     (list* spec (repeat (merge spec higher-level-spec-diff)))))
+                     n-regions core/sensory-region
+                     (list* spec (repeat (merge spec higher-level-spec-diff)))
+                     {:input sensor}))
       (server/init model
                    world-c
                    @main/into-journal

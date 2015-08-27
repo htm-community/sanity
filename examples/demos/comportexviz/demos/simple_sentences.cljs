@@ -77,11 +77,11 @@
   (utilv/close-and-reset! main/into-journal (async/chan))
 
   (let [n-regions (:n-regions @config)
-        encoder (case (:encoder @config)
-                  :block (demo/make-block-encoder (:text @config))
-                  :random demo/random-encoder)]
+        sensor (case (:encoder @config)
+                 :block (demo/make-block-sensor (:text @config))
+                 :random demo/random-sensor)]
     (with-ui-loading-message
-      (reset! model (demo/n-region-model n-regions demo/spec encoder))
+      (reset! model (demo/n-region-model n-regions demo/spec sensor))
       (server/init model
                    world-c
                    @main/into-journal

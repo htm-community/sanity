@@ -44,9 +44,8 @@
 (def encoder (e/linear-encoder 200 10 [0 24]))
 
 (def model (core/regions-in-series
-            core/sensory-region
-            encoder 1
-            (repeat spec)))
+            1 core/sensory-region
+            (repeat spec) {:input [[] encoder]}))
 
 (def inputs (flatten (repeat (range 0 12))))
 ;; @@

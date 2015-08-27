@@ -34,7 +34,7 @@
     (cond (satisfies? p/PHTM arg1) p/PHTM
           (and (sequential? arg1)
                (satisfies? p/PHTM (first arg1))) p/PHTM
-          (satisfies? p/PEncodable arg1) p/PEncodable
+          (satisfies? p/PEncoder arg1) p/PEncoder
           (empty? arg1) :empty)))
 
 (defmethod viz :empty
@@ -81,7 +81,7 @@
                          (pr-str (transit-str target-id)))
            :saveHook save-canvases})))))
 
-(defmethod viz p/PEncodable
+(defmethod viz p/PEncoder
   [enc & [input]]
   (reify
     renderable/Renderable
