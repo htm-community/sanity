@@ -150,10 +150,10 @@
         n-steps (:n-steps @config)
         field (demo/fields field-key)]
     (async/onto-chan world-c
-                     (take n-steps (iterate demo/input-transform
-                                            {:field field
-                                             :position (quot (count field) 2)
-                                             :next-saccade 1}))
+                     (take n-steps (demo/input-seq
+                                    {:field field
+                                     :position (quot (count field) 2)
+                                     :next-saccade 1}))
                      false)
     (swap! config assoc :world-buffer-count (count world-buffer))))
 

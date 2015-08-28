@@ -76,7 +76,7 @@
 
 (defn text-world-predictions-component
   [in-value htm n-predictions]
-  (let [e (first (vals (:encoders htm)))
+  (let [[_ e] (first (vals (:sensors htm)))
         rgn (first (core/region-seq htm))
         pr-votes (core/predicted-bit-votes rgn)
         predictions (p/decode e pr-votes n-predictions)]

@@ -29,23 +29,23 @@
 
 (def model-info
   {:directional-steps-1d {:model-fn demo-dir/n-region-model
-                          :world-fn demo-dir/world-seq
+                          :world-fn demo-dir/input-seq
                           :patterns {:dir [[0 1] [0 -1]]
                                      :pos (plt/indexed (range (inc demo-dir/numb-max)))}
                           :mixed? true
                           :xy? true}
    :isolated-1d {:model-fn demo-i1d/n-region-model
-                 :world-fn demo-i1d/world-seq
+                 :world-fn demo-i1d/input-seq
                  :patterns demo-i1d/patterns
                  :mixed? false
                  :xy? false}
    :mixed-gaps-1d {:model-fn demo-mix/n-region-model
-                   :world-fn demo-mix/world-seq
+                   :world-fn demo-mix/input-seq
                    :patterns demo-mix/patterns
                    :mixed? true
                    :xy? false}
    :isolated-2d {:model-fn demo-i2d/n-region-model
-                 :world-fn demo-i2d/world-seq
+                 :world-fn demo-i2d/input-seq
                  :patterns demo-i2d/patterns
                  :mixed? false
                  :xy? true}})
