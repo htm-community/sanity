@@ -3,7 +3,8 @@
             [compojure.route :as route]
             [comportexviz.server.runner :as runner]
             [comportexviz.server.notebook :as notebook]
-            [comportexviz.server.websocket :as server-ws]))
+            [comportexviz.server.websocket :as server-ws]
+            [org.nfrac.comportex.protocols :as p]))
 
 (defonce runners (atom {}))
 
@@ -22,14 +23,15 @@
   ([model inputs opts]
    (let [input-c (async/chan)]
      (async/onto-chan input-c inputs)
-     (start-runner model input-c nil opts)))
-  ([model input-c models-out-c {:keys [port local-targets]}]
+     (start-runner
+      model input-c p/htm-step nil opts)))
+  ([model input-c htm-step models-out-c {:keys [port local-targets]}]
    (let [model-atom (if (instance? clojure.lang.Ref model)
                       model
                       (atom model))
          port (or port
                   (random-port))
-         runner (runner/start model-atom input-c models-out-c
+         runner (runner/start model-atom input-c htm-step models-out-c
                               {:port port
                                :block? false
                                :local-targets local-targets})]
