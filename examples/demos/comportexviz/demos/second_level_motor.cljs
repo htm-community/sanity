@@ -21,9 +21,7 @@
 
 (def world-c
   (async/chan (async/buffer 1)
-              (map (fn [{:keys [sentences position] :as v}]
-                     (let [label (str (get-in sentences position))]
-                       (assoc v :label label))))))
+              (map (fn [m] (assoc m :label (:value m))))))
 
 (def control-c (async/chan))
 
@@ -31,18 +29,9 @@
 
 (def model (atom nil))
 
-(def raw-models-c
-  (async/chan))
-
-(defn feed-world!
-  "Feed the world input channel continuously, selecting actions from
-  state of model itself."
-  []
-  (demo/feed-world-c-with-actions! raw-models-c control-c world-c model))
-
 (defn draw-world
-  [ctx in-value]
-  (let [{:keys [sentences position]} in-value
+  [ctx inval]
+  (let [{:keys [sentences position]} inval
         [i j k] position
         sentence (get sentences i)
         word-n-letters (map (comp inc count) sentence)
@@ -65,8 +54,8 @@
     (doseq [[y letter] (map-indexed vector sentence-flat)]
       (c/text ctx {:x 5 :y (y-scale (+ y 0.5)) :text (str letter)}))
     (let [curr-index (apply + k (take j word-n-letters))
-          [ni nj nk] (demo/next-position in-value)
-          sentence-sacc (:next-sentence-saccade in-value)
+          [ni nj nk] (demo/next-position position (:action inval))
+          sentence-sacc (:next-sentence-saccade (:action inval))
           next-index (cond
                        (neg? sentence-sacc) -1
                        (pos? sentence-sacc) (inc n-letters)
@@ -106,17 +95,17 @@
 (defn world-pane
   []
   (when-let [step (main/selected-step)]
-    (let [in-value (:input-value step)
-          {:keys [sentences position]} in-value
+    (let [inval (:input-value step)
+          {:keys [sentences position action]} inval
           [i j k] position
-          letter-sacc (:next-letter-saccade in-value)
-          word-sacc (:next-word-saccade in-value)
-          sentence-sacc (:next-sentence-saccade in-value)]
+          letter-sacc (:next-letter-saccade action)
+          word-sacc (:next-word-saccade action)
+          sentence-sacc (:next-sentence-saccade action)]
       [:div
        [:p.muted [:small "Input on selected timestep."]]
        [:table.table
         [:tr [:th "value"]
-         [:td (str (get-in sentences position))]]
+         [:td (str (:value inval))]]
         [:tr [:th "next move"]
          [:td (cond
                 (not (zero? sentence-sacc)) "sentence"
@@ -134,8 +123,8 @@
         [main/selection]
         (fn [ctx]
           (let [step (main/selected-step)
-                in-value (:input-value step)]
-            (draw-world ctx in-value)))
+                inval (:input-value step)]
+            (draw-world ctx inval)))
         nil]
        [:pre
         (->> (drop (inc i) sentences)
@@ -154,13 +143,15 @@
                    world-c
                    @main/into-journal
                    @into-sim
-                   raw-models-c))))
+                   (demo/htm-step-with-action-selection world-c
+                                                        control-c))
+      (put! world-c demo/initial-inval))))
 
 (defn set-text!
   []
   (let [sentences (demo/parse-sentences (:text @config))]
     (when (seq sentences)
-      (put! control-c #(assoc demo/initial-input-val
+      (put! control-c #(assoc demo/initial-inval
                               :sentences sentences)))))
 
 (def config-template
@@ -224,5 +215,4 @@
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
 
-  (set-model!)
-  (feed-world!))
+  (set-model!))

@@ -30,17 +30,8 @@
 (def model
   (atom nil))
 
-(def raw-models-c
-  (async/chan))
-
-(defn feed-world!
-  "Feed the world input channel continuously, selecting actions from
-  state of model itself."
-  []
-  (demo/feed-world-c-with-actions! raw-models-c world-c model))
-
 (defn draw-world
-  [ctx in-value]
+  [ctx inval]
   (let [surface demo/surface
         surface-xy (mapv vector (range) surface)
         x-max (count surface)
@@ -58,8 +49,9 @@
           qplot-lim [0 2]
           qplot (plt/xy-plot ctx qplot-size x-lim qplot-lim)]
       (plt/frame! qplot)
-      (doseq [[state-action q] (:Q-map in-value)
-              :let [{:keys [x dx]} state-action]]
+      (doseq [[state-action q] (:Q-map inval)
+              :let [{:keys [x action]} state-action
+                    dx (:dx action)]]
         (c/fill-style ctx (if (pos? q) "green" "red"))
         (c/alpha ctx (abs q))
         (cond
@@ -77,7 +69,7 @@
         (plt/line! qplot [[x 0] [x 2]]))
       )
     (c/alpha ctx 1)
-    ;; draw surface and current position
+    ;; draw surface
     (c/translate ctx 0 40)
     (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
       (plt/frame! plot)
@@ -85,12 +77,21 @@
       (plt/grid! plot {})
       (c/stroke-style ctx "black")
       (plt/line! plot surface-xy)
-      (c/stroke-style ctx "yellow")
-      (c/fill-style ctx "#6666ff")
-      (plt/point! plot (:x in-value) (:y in-value) 4))
+      ;; current position
+      (let [dx-1 (:dx (:prev-action inval))
+            x (:x inval)
+            y (:y inval)
+            x-1 (- x dx-1)
+            y-1 (surface x-1)]
+        (c/stroke-style ctx "#888")
+        (c/fill-style ctx "white")
+        (plt/point! plot x-1 y-1 3)
+        (c/stroke-style ctx "black")
+        (c/fill-style ctx "yellow")
+        (plt/point! plot x y 4)))
     ;; histogram
     (c/translate ctx 0 (:h plot-size))
-    (let [freqs (:freqs (meta in-value))
+    (let [freqs (:freqs (meta inval))
           hist-lim [0 (inc (apply max (vals freqs)))]
           histogram (plt/xy-plot ctx plot-size x-lim hist-lim)]
       ;; draw the plot
@@ -107,34 +108,24 @@
         qinfo (:Q-info alyr)
         {:keys [q-alpha q-discount]} (:spec alyr)
         Q_T [:var "Q" [:sub "t"]]
-        Q_T+1 [:var.text-nowrap "Q" [:sub "t+1"]]
-        R_T+1 [:var.text-nowrap "R" [:sub "t+1"]]
+        Q_T-1 [:var.text-nowrap "Q" [:sub "t-1"]]
+        R_T [:var.text-nowrap "R" [:sub "t"]]
         ]
     [:div
      [:h4 "Q learning"]
-     [:small.text-muted
-      "This is from 2 time steps back "
-      [:abbr {:title
-              (str "1. We wait one step (+1) to see the reward and Q
-              value resulting from an action. "
-                   "2. This display shows on the following step (+2)
-                   ... because the Q-learning algorithm is applied
-                   only after the time step has already been recorded
-                   for display.")}
-       "(why?)"]]
      [:table.table.table-condensed
       [:tr
-       [:th R_T+1]
+       [:th R_T]
        [:td [:small "reward"]]
        [:td (-> (:reward qinfo 0) (.toFixed 2))]]
       [:tr
-       [:th Q_T+1]
-       [:td [:small "goodness"]]
-       [:td (-> (:Q-prev qinfo 0) (.toFixed 3))]]
-      [:tr
        [:th Q_T]
-       [:td [:small "current"]]
+       [:td [:small "goodness"]]
        [:td (-> (:Q-val qinfo 0) (.toFixed 3))]]
+      [:tr
+       [:th Q_T-1]
+       [:td [:small "previous"]]
+       [:td (-> (:Q-old qinfo 0) (.toFixed 3))]]
       [:tr
        [:th [:var "n"]]
        [:td [:small "active synapses"]]
@@ -144,12 +135,12 @@
       [:b "adjustment: "] [:br]
       [:abbr {:title (str "learning rate, alpha")} q-alpha]
       "("
-      R_T+1
+      R_T
       " + "
       [:abbr {:title "discount factor"} q-discount]
-      Q_T+1
-      " - "
       Q_T
+      " - "
+      Q_T-1
       ") = "
       [:mark
        (->> (:adj qinfo 0)
@@ -169,31 +160,29 @@
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (:input-value step)
+          (let [inval (:input-value step)
                 DELTA (gstr/unescapeEntities "&Delta;")
                 TIMES (gstr/unescapeEntities "&times;")]
             [:div
              [:p.muted [:small "Input on selected timestep."]]
+             [:p.muted [:small "Reward " [:var "R"] " = " DELTA "y " TIMES " 0.5"]]
              [:table.table.table-condensed
               [:tr
                [:th "x"]
                [:td [:small "position"]]
-               [:td (:x in-value)]]
-              [:tr
-               [:th "y"]
-               [:td [:small "objective"]]
-               [:td (-> (:y in-value) (.toFixed 1))]]
+               [:td (:x inval)]]
               [:tr
                [:th (str DELTA "x")]
                [:td [:small "action"]]
-               [:td (signed-str (:dx in-value))]]
+               [:td (signed-str (:dx (:prev-action inval)))]]
               [:tr
                [:th (str DELTA "y")]
                [:td [:small "~reward"]]
-               [:td (signed-str (:dy in-value))]]
+               [:td (signed-str (:dy inval))]]
               [:tr
-               [:td {:colSpan 3}
-                [:small DELTA "y " TIMES " 0.5 = " [:var "R"]]]]]
+               [:th (str DELTA "x") [:sub "t+1"]]
+               [:td [:small "action"]]
+               [:td (signed-str (:dx (:action inval)))]]]
              (q-learning-sub-pane htm)
              ;; plot
              [resizing-canvas {:style {:width "100%"
@@ -201,8 +190,8 @@
               [main/selection]
               (fn [ctx]
                 (let [step (main/selected-step)
-                      in-value (:input-value step)]
-                  (draw-world ctx in-value)))
+                      inval (:input-value step)]
+                  (draw-world ctx inval)))
               nil]
              [:small
               [:p [:b "top: "]
@@ -225,7 +214,8 @@
                  world-c
                  @main/into-journal
                  @into-sim
-                 raw-models-c)))
+                 (demo/htm-step-with-action-selection world-c))
+    (put! world-c demo/initial-inval)))
 
 (def config-template
   [:div.form-horizontal
@@ -288,5 +278,4 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (set-model!)
-  (feed-world!))
+  (set-model!))
