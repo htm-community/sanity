@@ -199,12 +199,14 @@
                                                  sel-col)
                       (id-missing-response id steps-offset))))
 
-            :get-learn-cells
+            :get-cells-by-state
             (let [[id region-key layer-id response-c] xs]
               (put! response-c
                     (if-let [htm (find-model id)]
-                      (-> (get-in htm [:regions region-key layer-id])
-                          (p/learnable-cells))
+                      (let [layer (get-in htm [:regions region-key layer-id])]
+                        {:learn-cells (p/learnable-cells layer)
+                         :active-cells (p/active-cells layer)
+                         :pred-cells (p/predictive-cells layer)})
                       (id-missing-response id steps-offset))))
 
             :get-transitions-data

@@ -337,18 +337,43 @@
        nil])))
 
 (defn draw-transitions-plot!
-  [ctx {:keys [sdr-transitions sdr-label-fracs curr-sdr]}]
-  (let [width-px (.-width (.-canvas ctx))
-        height-px (.-height (.-canvas ctx))
-        y-scale (/ height-px (max 24 (inc (count sdr-label-fracs))))
+  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs title]}]
+  (let [lc-sdrs (set (:learn matching-sdrs))
+        ac-sdrs (set (:active matching-sdrs))
+        pc-sdrs (set (:pred matching-sdrs))
+        title-px 20
+        width-px (.-width (.-canvas ctx))
+        height-px (- (.-height (.-canvas ctx)) title-px)
+        y-scale (/ height-px (max 24 (inc (count sdr-label-counts))))
+        sdr-max (->> (vals sdr-label-counts)
+                     (map (fn [label-counts]
+                            (reduce + (vals label-counts))))
+                     (reduce max)
+                     (max 5))
+        x-scale (/ width-px sdr-max)
         mid-x (quot width-px 2)
         label-width 50
         label-height 14]
     (c/save ctx)
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    (c/translate ctx mid-x (quot label-height 2))
+    (c/translate ctx mid-x (+ title-px (quot label-height 2)))
+    ;; draw title
+    (let [title-y (- 0 (quot label-height 2) 4)]
+      (c/text-align ctx :center)
+      (c/text-baseline ctx :bottom)
+      (c/text ctx {:x 0
+                   :y title-y
+                   :text title})
+      (c/text ctx {:x (* mid-x 0.8)
+                   :y title-y
+                   :text "forward"})
+      (c/text ctx {:x (- (* mid-x 0.8))
+                   :y title-y
+                   :text "back"}))
+    ;; draw transitions
     (c/stroke-style ctx "hsl(210,50%,50%)")
     (c/stroke-width ctx 4)
+    (c/alpha ctx 0.4)
     (doseq [[from-sdr to-sdrs] sdr-transitions
             :let [from-y (* y-scale from-sdr)]
             to-sdr to-sdrs
@@ -357,9 +382,6 @@
                   off-x (* 1.0 width-px
                            (/ (- to-y from-y)
                               height-px))]]
-      (if (= from-sdr curr-sdr)
-        (c/alpha ctx 1.0)
-        (c/alpha ctx 0.3))
       (doto ctx
         (c/begin-path)
         (c/move-to 0 from-y)
@@ -368,46 +390,43 @@
         (c/stroke)))
     (c/alpha ctx 1.0)
     (c/stroke-width ctx 1)
-    (c/stroke-style ctx "#ccc")
-    (c/text-align ctx :center)
+    ;; draw states
+    (c/stroke-style ctx "#aaa")
     (c/text-baseline ctx :middle)
-    (doseq [[sdr label-fracs] sdr-label-fracs
-            :let [y (* y-scale sdr)]]
+    (doseq [[sdr label-counts] sdr-label-counts
+            :let [y (* y-scale sdr)
+                  sdr-total (reduce + (vals label-counts))
+                  sdr-width (* x-scale sdr-total)]]
       (doto ctx
-        (c/fill-style (if (= sdr curr-sdr)
-                        "#fdd"
-                        "#eee"))
-        (c/rounded-rect {:x (- (quot label-width 2))
+        (c/fill-style (cond
+                        (lc-sdrs sdr) "#bfb"
+                        (ac-sdrs sdr) "#fbb"
+                        (pc-sdrs sdr) "#bbf"
+                        :else "#ddd"))
+        (c/alpha 0.6)
+        (c/rounded-rect {:x (- (quot sdr-width 2))
                          :y (- y (quot label-height 2))
-                         :w label-width
+                         :w sdr-width
                          :h label-height
                          :r (quot label-height 2)})
         (c/fill)
-        (c/fill-style "#000")
-        (c/text {:x 0 :y y :text (->> (for [[label frac] label-fracs]
-                                        (if (== frac 1.0)
-                                          label
-                                          (str label "(" (round (* 100 frac)) "%)")))
-                                      (interpose " ")
-                                      (apply str))})))
-    (c/text ctx {:x (quot mid-x 2)
-                 :y 0
-                 :text "forward"})
-    (c/text ctx {:x (- (quot mid-x 2))
-                 :y 0
-                 :text "back"})
+        (c/alpha 1.0)
+        (c/fill-style "#000"))
+      (reduce (fn [offset [label n]]
+                (c/text ctx {:x (* x-scale (+ offset (quot n 2)))
+                             :y y
+                             :text (str label)})
+                (+ offset n))
+              (- (quot sdr-total 2))
+              label-counts))
     (c/restore ctx)))
 
-(defn matching-sdr
+(defn find-matching-sdrs
   [cells cell-sdr-fracs threshold]
-  (let [votes (->> (map cell-sdr-fracs cells)
-                   (apply merge-with +)
-                   (seq))
-        [sdr-idx vote] (when votes (apply max-key val votes))]
-    (println "votes" votes "so sdr-idx " sdr-idx "(" vote ">=" threshold ")")
-    (if (and vote (>= vote threshold))
-      sdr-idx
-      nil)))
+  (->> (map cell-sdr-fracs cells)
+       (apply merge-with +)
+       (filter (fn [[_ vote]] (>= vote threshold)))
+       (sort-by val <)))
 
 (defn- freqs->fracs
   [freqs]
@@ -416,76 +435,112 @@
 
 (defn transitions-plot-builder
   [steps step-template selection into-journal local-targets]
-  (let [cell-sdr-counts (atom {})
-        sdr-label-counts (atom {})
-        curr-sdr (atom {})
+  (let [fetch-transitions-data
+        (fn [state-val sel]
+          (when-let [[region layer] (sel/layer sel)]
+            (let [model-id (:model-id sel)
+                  cell-sdr-counts (get-in state-val [:cell-sdr-counts
+                                                     [region layer]])
+                  response-c (async/chan)]
+              (put! @into-journal [:get-transitions-data
+                                   model-id region layer cell-sdr-counts
+                                   (channel-proxy/register!
+                                    local-targets response-c)])
+              response-c)))
+        state (atom {:cell-sdr-counts {}
+                     :sdr-label-counts {}
+                     :matching-sdrs {}})
         plot-data (atom nil)]
-    (add-watch steps ::count-sdrs-and-labels
-               (fn [_ _ _ step]
-                 (when-let [model-id (:model-id (first step))]
-                   (doseq [[region-key rgn] (:regions @step-template)
-                           layer-id (keys rgn)
-                           :let [response-c (async/chan)]]
-                     (put! @into-journal [:get-learn-cells model-id
-                                          region-key layer-id
-                                          (channel-proxy/register! local-targets
-                                                                   response-c)])
-                     (go
-                       (let [lc (<! response-c)
-                             threshold (get-in @step-template [:regions
-                                                               region-key
-                                                               layer-id
-                                                               :spec
-                                                               :seg-learn-threshold])
-                             cell-sdr-fracs (->> (get @cell-sdr-counts [region-key layer-id])
-                                                 (util/remap freqs->fracs))
-                             _ (println "count-sdrs" region-key layer-id)
-                             which-sdr* (matching-sdr lc cell-sdr-fracs threshold)
-                             which-sdr (or which-sdr*
-                                           (count (get @sdr-label-counts
-                                                       [region-key layer-id])))]
-                         (swap! curr-sdr
-                                assoc [region-key layer-id]
-                                which-sdr)
-                         (swap! cell-sdr-counts
-                                update [region-key layer-id]
-                                (fn [m]
-                                  (util/update-each (or m {}) lc
-                                                    #(merge-with + % {which-sdr 1}))))
-                         (let [label (:label (:input-value (first step)))]
-                           (swap! sdr-label-counts
-                                  update [region-key layer-id]
-                                  (fn [m]
-                                    (if-not (get m which-sdr)
-                                      (assoc m which-sdr {label 1})
-                                      (update m which-sdr
-                                              #(update % label (fnil inc 0)))))))
-                         ))))))
-    ;; TODO: keep history of values by dt. watch selection and/or sdr-label-counts?
-    ;; or maybe should do all this accounting on the server side.
-    ;; (which would avoid continually sending cell-sdr-fracs to server)
-    (add-watch sdr-label-counts ::fetch-transitions-data
-               (fn [_ _ old AT-sdr-label-counts]
-                 (let [{:keys [model-id] :as sel1} (first (filter sel/layer
-                                                                  @selection))
-                       [region layer] (sel/layer sel1)]
-                   (when (not= (get old [region layer])
-                               (get AT-sdr-label-counts [region layer]))
-                     (let [cell-sdr-fracs (->> (get @cell-sdr-counts [region layer])
-                                               (util/remap freqs->fracs))
-                           sdr-label-fracs (->> (get AT-sdr-label-counts [region layer])
-                                                (util/remap freqs->fracs))
-                           response-c (async/chan)]
-                       (put! @into-journal [:get-transitions-data
-                                            model-id region layer cell-sdr-fracs
-                                            (channel-proxy/register!
-                                             local-targets response-c)])
+    (add-watch
+     steps ::update-sdrs-transitions-and-labels
+     (fn [_ _ _ [step]]
+       (when-let [model-id (:model-id step)]
+         (doseq [[region layer-map] (:regions @step-template)
+                 layer (keys layer-map)
+                 :let [response-c (async/chan)]]
+           (put! @into-journal [:get-cells-by-state model-id
+                                region layer
+                                (channel-proxy/register! local-targets
+                                                         response-c)])
+           (go
+             (let [cells-by-state (<! response-c)
+                   lc (:learn-cells cells-by-state)
+                   ac (:active-cells cells-by-state)
+                   pc (:pred-cells cells-by-state)
+                   threshold (get-in @step-template [:regions region layer
+                                                     :spec :seg-learn-threshold])
+                   cell-sdr-fracs (->> (get-in @state [:cell-sdr-counts
+                                                       [region layer]])
+                                       (util/remap freqs->fracs))
+                   sdrs-lc-votes (find-matching-sdrs lc cell-sdr-fracs threshold)
+                   sdrs-ac-votes (find-matching-sdrs ac cell-sdr-fracs threshold)
+                   sdrs-pc-votes (find-matching-sdrs pc cell-sdr-fracs threshold)
+                   learn-sdrs (or (seq (map key sdrs-lc-votes))
+                                  [(count (get-in @state [:sdr-label-counts
+                                                          [region layer]]))])]
+               (swap! state
+                      (fn [state-val]
+                        (let [inc-learn-sdrs (partial merge-with +
+                                                      (zipmap learn-sdrs
+                                                              (repeat 1)))
+                              label (:label (:input-value step))
+                              inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})]
+                          (-> state-val
+                              (assoc-in [:matching-sdrs
+                                         [region layer model-id]]
+                                        {:learn learn-sdrs
+                                         :active (map key sdrs-ac-votes)
+                                         :pred (map key sdrs-pc-votes)})
+                              (update-in [:cell-sdr-counts
+                                          [region layer]]
+                                         (fn [m]
+                                           (util/update-each (or m {}) lc
+                                                             inc-learn-sdrs)))
+                              (update-in [:sdr-label-counts
+                                          [region layer]]
+                                         (fn [m]
+                                           (reduce (fn [m learn-sdr]
+                                                     (update m learn-sdr
+                                                             inc-label))
+                                                   m
+                                                   learn-sdrs)))))))
+               (let [sel (first @selection)
+                     model-id (:model-id sel)]
+                 (when (= [region layer] (sel/layer sel))
+                   (go
+                     (let [x (<! (fetch-transitions-data @state sel))]
+                       (swap! plot-data assoc
+                              :sdr-transitions x
+                              :sdr-label-counts (get-in @state [:sdr-label-counts
+                                                                [region layer]])
+                              :matching-sdrs (get-in @state [:matching-sdrs
+                                                             [region layer model-id]])
+                              :title (str (name region) " " (name layer)))))))
+               ))))))
+    (add-watch selection ::transitions-plot
+               (fn [_ _ [old] [sel]]
+                 (when-let [[region layer] (sel/layer sel)]
+                   (let [model-id (:model-id sel)
+                         matching-sdrs (get-in @state [:matching-sdrs
+                                                       [region layer model-id]])
+                         sdr-label-counts (get-in @state [:sdr-label-counts
+                                                          [region layer]])]
+                     (if (not= (sel/layer sel) (sel/layer old))
+                       ;; switching layers, request new data
                        (go
-                         (let [sdr-transitions (<! response-c)]
-                           (reset! plot-data {:sdr-transitions sdr-transitions
-                                              :sdr-label-fracs sdr-label-fracs
-                                              :curr-sdr (get @curr-sdr [region layer])}))))))))
-
+                         ;; immediate update from local state while waiting:
+                         (swap! plot-data assoc
+                                :sdr-transitions {}
+                                :sdr-label-counts sdr-label-counts
+                                :matching-sdrs matching-sdrs
+                                :title (str (name region) " " (name layer)))
+                         ;; another update when receive server data
+                         (let [x (<! (fetch-transitions-data @state sel))]
+                           (swap! plot-data assoc
+                                  :sdr-transitions x)))
+                       ;; same layer, just update matching sdrs
+                       (swap! plot-data assoc
+                              :matching-sdrs matching-sdrs))))))
     (fn transitions-plot []
       [canvas
        {}
