@@ -573,12 +573,11 @@
   (let [el (image-buffer (layout-bounds lay))]
     (doto (c/get-context el "2d")
       (c/stroke-style "black")
-      (c/stroke-width 2)
+      (c/stroke-width 1)
       (c/begin-path)
       (c/move-to 0.5 0)
       (c/line-to 0.5 (.-height el))
-      (c/stroke)
-      (c/stroke-width 1))
+      (c/stroke))
     el))
 
 (defn scroll-status-str
