@@ -30,17 +30,8 @@
 (def model
   (atom nil))
 
-(def raw-models-c
-  (async/chan))
-
-(defn feed-world!
-  "Feed the world input channel continuously, selecting actions from
-   state of model itself."
-  []
-  (demo/feed-world-c-with-actions! raw-models-c world-c model))
-
 (defn draw-world
-  [ctx in-value htm]
+  [ctx inval htm]
   (let [surface demo/surface
         x-max (count surface)
         y-max (count (first surface))
@@ -54,6 +45,7 @@
         plot (plt/xy-plot ctx plot-size x-lim y-lim)]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (plt/frame! plot)
+    ;; draw grid with terminal positions
     (doseq [y (range (count surface))
             x (range (count (first surface)))
             :let [v (get-in surface [x y])]]
@@ -65,8 +57,10 @@
         (do (c/fill-style ctx "black")
             (plt/rect! plot x y 1 1))
         ))
-    (doseq [[state-action q] (:Q-map in-value)
-            :let [{:keys [x y dx dy]} state-action]]
+    ;; show Q values for transitions as colour-coded edges
+    (doseq [[state-action q] (:Q-map inval)
+            :let [{:keys [x y action]} state-action
+                  {:keys [dx dy]} action]]
       (c/fill-style ctx (if (pos? q) "green" "red"))
       (c/alpha ctx (abs q))
       (cond
@@ -84,9 +78,29 @@
         (plt/rect! plot x (+ y 1) 1 0.25)
         ))
     (c/alpha ctx 1)
-    (c/stroke-style ctx "yellow")
-    (c/fill-style ctx "#6666ff")
-    (plt/point! plot (+ 0.5 (:x in-value)) (+ 0.5 (:y in-value)) 4)
+    ;; draw position and action
+    (let [x= (+ 0.5 (:x inval))
+          y= (+ 0.5 (:y inval))
+          dx-1 (:dx (:prev-action inval))
+          dy-1 (:dy (:prev-action inval))
+          dx (:dx (:action inval))
+          dy (:dy (:action inval))]
+      ;; previous action
+      (c/stroke-style ctx "black")
+      (plt/line! plot [[(- x= dx-1) (- y= dy-1)]
+                       [x= y=]])
+      ;; next action
+      (c/stroke-style ctx "#888")
+      (plt/line! plot [[x= y=]
+                       [(+ x= dx) (+ y= dy)]])
+      ;; previous position
+      (c/stroke-style ctx "#888")
+      (c/fill-style ctx "white")
+      (plt/point! plot (- x= dx-1) (- y= dy-1) 3)
+      ;; current position
+      (c/stroke-style ctx "black")
+      (c/fill-style ctx "yellow")
+      (plt/point! plot x= y= 4))
     (c/stroke-style ctx "black")
     (plt/grid! plot {})))
 
@@ -105,29 +119,33 @@
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (:input-value step)
+          (let [inval (:input-value step)
                 DELTA (gstr/unescapeEntities "&Delta;")
                 TIMES (gstr/unescapeEntities "&times;")]
             [:div
              [:p.muted [:small "Input on selected timestep."]]
+             [:p.muted [:small "Reward " [:var "R"] " = z " TIMES " 0.01"]]
              [:table.table.table-condensed
               [:tr
                [:th "x,y"]
                [:td [:small "position"]]
-               [:td (:x in-value) "," (:y in-value)]]
+               [:td (:x inval) "," (:y inval)]]
               [:tr
                [:th (str DELTA "x," DELTA "y")]
                [:td [:small "action"]]
-               [:td (str (signed-str (:dx in-value))
+               [:td (str (signed-str (:dx (:prev-action inval)))
                          ","
-                         (signed-str (:dy in-value)))]]
+                         (signed-str (:dy (:prev-action inval))))]]
               [:tr
                [:th [:var "z"]]
                [:td [:small "~reward"]]
-               [:td (signed-str (:z in-value))]]
+               [:td (signed-str (:z inval))]]
               [:tr
-               [:td {:colSpan 3}
-                [:small "z " TIMES " 0.01 = " [:var "R"]]]]]
+               [:th (str DELTA "x," DELTA "y") [:sub "t+1"]]
+               [:td [:small "action"]]
+               [:td (str (signed-str (:dx (:action inval)))
+                         ","
+                         (signed-str (:dy (:action inval))))]]]
              (q-learning-sub-pane htm)
              ;; plot
              [resizing-canvas {:style {:width "100%"
@@ -135,8 +153,8 @@
               [main/selection selected-htm]
               (fn [ctx]
                 (let [step (main/selected-step)
-                      in-value (:input-value step)]
-                  (draw-world ctx in-value @selected-htm)))
+                      inval (:input-value step)]
+                  (draw-world ctx inval @selected-htm)))
               nil]
              [:small
               [:p
@@ -157,7 +175,8 @@
                  world-c
                  @main/into-journal
                  @into-sim
-                 raw-models-c)))
+                 (demo/htm-step-with-action-selection world-c))
+    (put! world-c demo/initial-inval)))
 
 (def config-template
   [:div.form-horizontal
@@ -223,5 +242,4 @@
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (set-model!)
-  (feed-world!))
+  (set-model!))

@@ -10,10 +10,6 @@
    (defn random-uuid []
      (java.util.UUID/randomUUID)))
 
-(defn- sim-step! [model in-value out]
-  (->> (swap! model p/htm-step in-value)
-       (put! out)))
-
 (defn should-go?! [options]
   (let [{:keys [go? force-n-steps step-ms]} @options]
     (cond
@@ -23,20 +19,21 @@
                              0)
       :else false)))
 
-(defn simulation-loop [model world out options sim-closed?]
+(defn simulation-loop [model world out options sim-closed? htm-step]
   (go
     (if (loop []
           (when (not @sim-closed?)
             (if-let [t (should-go?! options)]
               (when-let [in-value (<! world)]
-                (sim-step! model in-value out)
+                (->> (swap! model htm-step in-value)
+                     (put! out))
                 (<! (async/timeout t))
                 (recur))
               true)))
       (add-watch options :run-sim
                  (fn [_ _ _ _]
                    (remove-watch options :run-sim)
-                   (simulation-loop model world out options sim-closed?)))
+                   (simulation-loop model world out options sim-closed? htm-step)))
       (reset! sim-closed? true))))
 
 (defn handle-commands [commands model options sim-closed?]
@@ -111,12 +108,12 @@
 ;; closed, the simulation may consume another value from the other before
 ;; closing.
 (defn start
-  [steps-c model-atom world-c commands-c]
+  [steps-c model-atom world-c commands-c htm-step]
   (let [options (atom {:go? false
                        :step-ms 20
                        :force-n-steps 0})
         sim-closed? (atom false)]
     (when commands-c
       (handle-commands commands-c model-atom options sim-closed?))
-    (simulation-loop model-atom world-c steps-c options sim-closed?))
+    (simulation-loop model-atom world-c steps-c options sim-closed? htm-step))
   nil)

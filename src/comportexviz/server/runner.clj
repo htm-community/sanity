@@ -11,7 +11,7 @@
   (stop [_]))
 
 (defn start
-  ([model-atom input-c models-out-c opts]
+  ([model-atom input-c htm-step models-out-c opts]
    (let [into-journal (async/chan)
          into-sim (async/chan)
          models-in (async/chan)
@@ -28,7 +28,7 @@
        (async/tap models-mult models-out-c))
      (async/tap connection-changes-mult into-journal)
      (async/tap connection-changes-mult into-sim)
-     (simulation/start models-in model-atom input-c into-sim)
+     (simulation/start models-in model-atom input-c into-sim htm-step)
      (journal/init (utilv/tap-c models-mult) into-journal model-atom 50)
      (reify
        PStoppable
