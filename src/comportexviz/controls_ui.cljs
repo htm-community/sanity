@@ -176,7 +176,7 @@
            [:legend (str (name region-key) " " (name layer-id))]
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
-(defn cell-plots-tab
+(defn excitation-tab
   [step-template selection series-colors into-journal local-targets]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
@@ -711,7 +711,7 @@
            [:params [parameters-tab step-template selection into-sim
                      local-targets]]
            [:ts-plots [ts-plots-tab series-colors]]
-           [:cell-plots [cell-plots-tab step-template selection series-colors
+           [:excitation [excitation-tab step-template selection series-colors
                          into-journal local-targets]]
            [:transitions [transitions-tab]]
            [:details [details-tab selection into-journal local-targets]]]]
