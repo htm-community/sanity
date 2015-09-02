@@ -664,7 +664,8 @@
       layers of cortical columns (circles). Depending on the display mode,
       these may be shown in 2D grids from a single time step, or as one
       vertical line per timestep, allowing several time steps to be shown
-      in series. Also, summarised time series are shown in the 'plots' tab."]]
+      in series."]
+       [:p "Don't miss the various complementary displays in the other tabs."]]
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Selection"]
        [:p "Click on the main canvas to select one column of cells,
@@ -672,8 +673,20 @@
       and their distal dendrite segments will be shown.
       If you click off the layer, the column will be de-selected, but
       the layer will remain selected. Its parameters can be seen and edited in
-      the 'params' tab."]]
+      the 'params' tab."]
+       [:p "Input bits can also be selected. For multiple selections,
+       hold Command / Windows key while clicking."]]
       [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Colour legend"]
+       [:ul
+        [:li [:b {:style {:color "red"}} "Red"]
+         ": active"]
+        [:li [:b {:style {:color "blue"}} "Blue"]
+         ": predicted"]
+        [:li [:b {:style {:color "purple"}} "Purple"]
+         ": active+predicted (i.e. recognised)"]
+        [:li [:b {:style {:color "green"}} "Green"]
+         ": growing (new synapses)"]]
        [:h4 "Key controls"]
        [:p "When the main canvas is in focus, "
         [:kbd "up"] "/" [:kbd "down"]
