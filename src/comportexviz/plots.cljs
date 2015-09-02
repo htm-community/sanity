@@ -449,8 +449,9 @@
               response-c)))
         state (atom {:cell-sdr-counts {}
                      :sdr-label-counts {}
-                     :matching-sdrs {}})
-        plot-data (atom nil)]
+                     :matching-sdrs {}
+                     :title ""})
+        plot-data (atom @state)]
     (add-watch
      steps ::update-sdrs-transitions-and-labels
      (fn [_ _ _ [step]]
