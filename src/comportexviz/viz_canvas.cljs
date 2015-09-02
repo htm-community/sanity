@@ -471,7 +471,7 @@
           (doseq [[si seg] segments
                   :let [[sx sy] (seg-xy cslay ci si)
                         {:keys [learn-seg? selected-seg? n-conn-act n-conn-tot
-                                n-dis-act n-dis-tot stimulus-th learning-th
+                                n-disc-act n-disc-tot stimulus-th learning-th
                                 syns-by-state]} seg
                         scale-factor (/ seg-w-px stimulus-th)
                         scale #(-> % (* scale-factor) int)
@@ -483,8 +483,8 @@
                         conn-act-r (assoc conn-th-r :w (scale n-conn-act))
                         disc-th-r {:x sx :y (+ sy h2)
                                    :w (scale learning-th) :h seg-h-px}
-                        disc-tot-r (assoc disc-th-r :w (scale n-dis-tot))
-                        disc-act-r (assoc disc-th-r :w (scale n-dis-act))]]
+                        disc-tot-r (assoc disc-th-r :w (scale n-disc-tot))
+                        disc-act-r (assoc disc-th-r :w (scale n-disc-act))]]
             ;; draw segment as a rectangle
             (when selected-seg?
               (doto ctx
