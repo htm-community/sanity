@@ -4,6 +4,7 @@
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
+            [goog.string :as gstr]
             [clojure.string :as str]
             [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
@@ -190,22 +191,22 @@
          [plots/cell-excitation-plot-cmp step-template selection series-colors
           region-key layer-id into-journal local-targets]]))]])
 
-(defn transitions-tab-builder
+(defn cell-sdrs-tab-builder
   [steps step-template selection into-journal local-targets]
   (let [hide-below-count (atom 1)
         component (atom nil)
         enable! (fn []
                   (reset!
                    component
-                   (plots/transitions-plot-builder steps step-template selection
-                                                   into-journal local-targets
-                                                   hide-below-count)))
+                   (plots/cell-sdrs-plot-builder steps step-template selection
+                                                 into-journal local-targets
+                                                 hide-below-count)))
         disable! (fn []
                    (let [teardown! (:teardown @component)]
                      (teardown!))
                    (reset! component nil))
         ]
-    (fn transitions-tab []
+    (fn cell-sdrs-tab []
       [:div
        [:p.text-muted "Cell SDRs and their transitions meeting
    seg-learn-threshold. Labelled with inputs for interpretability."]
@@ -224,7 +225,10 @@
             [:div.col-sm-6
              [:label.small
               (if (> @hide-below-count 1)
-                (str "Hiding any seen < " @hide-below-count " times")
+                (gstr/unescapeEntities
+                 (str "Seen &ge; "
+                      @hide-below-count
+                      " times"))
                 "Showing all states")]]
             [:div.col-sm-6
              [:input {:type :range
@@ -736,8 +740,8 @@
   (let [show-help (atom false)
         viz-expanded (atom false)
         ts-plots-tab (ts-plots-tab-builder steps into-journal local-targets)
-        transitions-tab (transitions-tab-builder steps step-template selection
-                                                 into-journal local-targets)]
+        cell-sdrs-tab (cell-sdrs-tab-builder steps step-template selection
+                                             into-journal local-targets)]
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal local-targets]
      [:div
@@ -755,9 +759,9 @@
            [:params [parameters-tab step-template selection into-sim
                      local-targets]]
            [:ts-plots [ts-plots-tab series-colors]]
+           [:cell-sdrs [cell-sdrs-tab]]
            [:excitation [excitation-tab step-template selection series-colors
                          into-journal local-targets]]
-           [:transitions [transitions-tab]]
            [:details [details-tab selection into-journal local-targets]]]]
          ]]
        [:div#loading-message "loading"]]])))

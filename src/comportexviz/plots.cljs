@@ -336,7 +336,7 @@
                                        sel-col series-colors)))
        nil])))
 
-(defn draw-transitions-plot!
+(defn draw-cell-sdrs-plot!
   [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs title]}
    hide-below-count]
   (let [lc-sdrs (set (:learn matching-sdrs))
@@ -458,7 +458,7 @@
   (let [total (reduce + (vals freqs))]
     (util/remap #(/ % total) freqs)))
 
-(defn transitions-plot-builder
+(defn cell-sdrs-plot-builder
   [steps step-template selection into-journal local-targets hide-below-count]
   (let [fetch-transitions-data
         (fn [state-val sel]
@@ -543,7 +543,7 @@
                                                              [region layer model-id]])
                               :title (str (name region) " " (name layer)))))))
                ))))))
-    (add-watch selection ::transitions-plot
+    (add-watch selection ::cell-sdrs-plot
                (fn [_ _ [old] [sel]]
                  (when-let [[region layer] (sel/layer sel)]
                    (let [model-id (:model-id sel)
@@ -568,7 +568,7 @@
                        (swap! plot-data assoc
                               :matching-sdrs matching-sdrs))))))
     {:content
-     (fn transitions-plot []
+     (fn cell-sdrs-plot []
        [canvas
         {}
         300
@@ -576,10 +576,10 @@
         [plot-data
          hide-below-count]
         (fn [ctx]
-          (draw-transitions-plot! ctx @plot-data @hide-below-count))
+          (draw-cell-sdrs-plot! ctx @plot-data @hide-below-count))
         nil]
        )
      :teardown
      (fn []
        (remove-watch steps ::update-sdrs-transitions-and-labels)
-       (remove-watch selection ::transitions-plot))}))
+       (remove-watch selection ::cell-sdrs-plot))}))
