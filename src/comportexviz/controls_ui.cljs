@@ -721,7 +721,7 @@
         [:li [:b {:style {:color "purple"}} "Purple"]
          ": active+predicted (i.e. recognised)"]
         [:li [:b {:style {:color "green"}} "Green"]
-         ": growing (new synapses)"]]
+         ": growing (new synapses) or temporal pooling"]]
        [:h4 "Key controls"]
        [:p "When the main canvas is in focus, "
         [:kbd "up"] "/" [:kbd "down"]
