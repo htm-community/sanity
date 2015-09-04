@@ -192,23 +192,54 @@
 
 (defn transitions-tab-builder
   [steps step-template selection into-journal local-targets]
-  (let [enable (async/chan)
-        transitions-plot (atom
-                          (fn []
-                            [:button.btn.btn-warning.btn-block
-                             {:on-click #(put! enable :enable)}
-                             "Enable"]))]
-    (go
-      (when (<! enable)
-        (reset! transitions-plot
-                (plots/transitions-plot-builder steps step-template selection
-                                                into-journal local-targets))))
+  (let [hide-below-count (atom 1)
+        component (atom nil)
+        enable! (fn []
+                  (reset!
+                   component
+                   (plots/transitions-plot-builder steps step-template selection
+                                                   into-journal local-targets
+                                                   hide-below-count)))
+        disable! (fn []
+                   (let [teardown! (:teardown @component)]
+                     (teardown!))
+                   (reset! component nil))
+        ]
     (fn transitions-tab []
       [:div
        [:p.text-muted "Cell SDRs and their transitions meeting
-   seg-learn-threshold. Labelled by inputs for interpretability."]
+   seg-learn-threshold. Labelled with inputs for interpretability."]
        [:div
-        [@transitions-plot]]])))
+        (if-not @component
+          ;; placeholder
+          [:div
+           [:button.btn.btn-warning.btn-block
+                 {:on-click (fn [e]
+                              (enable!)
+                              (.preventDefault e))}
+            "Enable"]]
+          ;; enabled content
+          [:div
+           [:div.row
+            [:div.col-sm-6
+             [:label.small
+              (if (> @hide-below-count 1)
+                (str "Hiding any seen < " @hide-below-count " times")
+                "Showing all states")]]
+            [:div.col-sm-6
+             [:input {:type :range
+                      :min 1
+                      :max 10
+                      :value @hide-below-count
+                      :on-change (fn [e]
+                                   (reset! hide-below-count
+                                           (-> e .-target forms/getValue)))}]]]
+           [(:content @component)]
+           [:button.btn.btn-warning.btn-block
+            {:on-click (fn [e]
+                         (disable!)
+                         (.preventDefault e))}
+            "Disable and reset"]])]])))
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]

@@ -337,15 +337,27 @@
        nil])))
 
 (defn draw-transitions-plot!
-  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs title]}]
+  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs title]}
+   hide-below-count]
   (let [lc-sdrs (set (:learn matching-sdrs))
         ac-sdrs (set (:active matching-sdrs))
         pc-sdrs (set (:pred matching-sdrs))
+        sdr-label-counts* (if (> hide-below-count 1)
+                            (into {} (filter (fn [[sdr label-counts]]
+                                               (or (lc-sdrs sdr)
+                                                   (>= (reduce + (vals label-counts))
+                                                       hide-below-count))))
+                                  sdr-label-counts)
+                            sdr-label-counts)
+        sdr-ordinate (if (> hide-below-count 1)
+                       (zipmap (sort (keys sdr-label-counts*)) (range))
+                       identity)
         title-px 20
         width-px (.-width (.-canvas ctx))
-        height-px (- (.-height (.-canvas ctx)) title-px)
-        y-scale (/ height-px (max 24 (inc (count sdr-label-counts))))
-        sdr-max (->> (vals sdr-label-counts)
+        full-height-px (.-height (.-canvas ctx))
+        height-px (- full-height-px title-px)
+        y-scale (/ height-px (max 24 (inc (count sdr-label-counts*))))
+        sdr-max (->> (vals sdr-label-counts*)
                      (map (fn [label-counts]
                             (reduce + (vals label-counts))))
                      (reduce max)
@@ -355,7 +367,7 @@
         label-width 50
         label-height 14]
     (c/save ctx)
-    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h full-height-px})
     (c/translate ctx mid-x (+ title-px (quot label-height 2)))
     ;; draw title
     (let [title-y (- 0 (quot label-height 2) 4)]
@@ -375,9 +387,11 @@
     (c/stroke-width ctx 4)
     (c/alpha ctx 0.4)
     (doseq [[from-sdr to-sdrs] sdr-transitions
-            :let [from-y (* y-scale from-sdr)]
+            :when (contains? sdr-label-counts* from-sdr)
+            :let [from-y (* y-scale (sdr-ordinate from-sdr))]
             to-sdr to-sdrs
-            :let [to-y (* y-scale to-sdr)
+            :when (contains? sdr-label-counts* to-sdr)
+            :let [to-y (* y-scale (sdr-ordinate to-sdr))
                   mid-y (/ (+ to-y from-y) 2)
                   off-x (* 1.0 width-px
                            (/ (- to-y from-y)
@@ -393,13 +407,15 @@
     ;; draw states
     (c/stroke-style ctx "#aaa")
     (c/text-baseline ctx :middle)
-    (doseq [[sdr label-counts] sdr-label-counts
-            :let [y (* y-scale sdr)
+    (doseq [[sdr label-counts] sdr-label-counts*
+            :let [y (* y-scale (sdr-ordinate sdr))
                   sdr-total (reduce + (vals label-counts))
-                  sdr-width (* x-scale sdr-total)]]
+                  sdr-width (* x-scale sdr-total)
+                  new-sdr? (and (lc-sdrs sdr)
+                                (not (ac-sdrs sdr)))]]
       (doto ctx
         (c/fill-style (cond
-                        (lc-sdrs sdr) "#bfb"
+                        new-sdr? "#bfb"
                         (ac-sdrs sdr) "#fbb"
                         (pc-sdrs sdr) "#bbf"
                         :else "#ddd"))
@@ -409,6 +425,15 @@
                          :w sdr-width
                          :h label-height
                          :r (quot label-height 2)})
+        (and (when (lc-sdrs sdr)
+               (doto ctx
+                 (c/stroke-style "yellow")
+                 (c/stroke-width 3)
+                 (c/stroke)
+                 (c/stroke-style "black")
+                 (c/stroke-width 1)
+                 (c/stroke)
+                 (c/stroke-style "#aaa"))))
         (c/fill)
         (c/alpha 1.0)
         (c/fill-style "#000"))
@@ -434,7 +459,7 @@
     (util/remap #(/ % total) freqs)))
 
 (defn transitions-plot-builder
-  [steps step-template selection into-journal local-targets]
+  [steps step-template selection into-journal local-targets hide-below-count]
   (let [fetch-transitions-data
         (fn [state-val sel]
           (when-let [[region layer] (sel/layer sel)]
@@ -542,13 +567,19 @@
                        ;; same layer, just update matching sdrs
                        (swap! plot-data assoc
                               :matching-sdrs matching-sdrs))))))
-    (fn transitions-plot []
-      [canvas
-       {}
-       300
-       800
-       [plot-data]
-       (fn [ctx]
-         (draw-transitions-plot! ctx @plot-data))
-       nil]
-      )))
+    {:content
+     (fn transitions-plot []
+       [canvas
+        {}
+        300
+        800
+        [plot-data
+         hide-below-count]
+        (fn [ctx]
+          (draw-transitions-plot! ctx @plot-data @hide-below-count))
+        nil]
+       )
+     :teardown
+     (fn []
+       (remove-watch steps ::update-sdrs-transitions-and-labels)
+       (remove-watch selection ::transitions-plot))}))
