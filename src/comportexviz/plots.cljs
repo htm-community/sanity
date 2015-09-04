@@ -337,40 +337,47 @@
        nil])))
 
 (defn draw-cell-sdrs-plot!
-  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs title]}
+  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs sdr-sizes threshold title]}
    hide-below-count]
-  (let [lc-sdrs (set (:learn matching-sdrs))
-        ac-sdrs (set (:active matching-sdrs))
-        pc-sdrs (set (:pred matching-sdrs))
+  (let [lc-sdrv (:learn matching-sdrs)
+        ac-sdrv (:active matching-sdrs)
+        pc-sdrv (:pred matching-sdrs)
         sdr-label-counts* (if (> hide-below-count 1)
                             (into {} (filter (fn [[sdr label-counts]]
-                                               (or (lc-sdrs sdr)
+                                               (or (lc-sdrv sdr)
                                                    (>= (reduce + (vals label-counts))
                                                        hide-below-count))))
                                   sdr-label-counts)
                             sdr-label-counts)
-        sdr-ordinate (if (> hide-below-count 1)
-                       (zipmap (sort (keys sdr-label-counts*)) (range))
-                       identity)
-        title-px 20
+        [sdr-ordinate y-max] (loop [sdrs (sort (keys sdr-label-counts*))
+                                    m {}
+                                    offset 0]
+                               (if-let [sdr (first sdrs)]
+                                 (let [dy (/ (sdr-sizes sdr)
+                                             threshold)
+                                       ord (+ offset 1 (/ dy 2))]
+                                   (recur (rest sdrs)
+                                          (assoc m sdr ord)
+                                          (+ offset 1 dy)))
+                                 [m offset]))
+        title-px 16
         width-px (.-width (.-canvas ctx))
         full-height-px (.-height (.-canvas ctx))
         height-px (- full-height-px title-px)
-        y-scale (/ height-px (max 24 (inc (count sdr-label-counts*))))
-        sdr-max (->> (vals sdr-label-counts*)
-                     (map (fn [label-counts]
-                            (reduce + (vals label-counts))))
-                     (reduce max)
-                     (max 5))
-        x-scale (/ width-px sdr-max)
+        y-scale (/ height-px (max 50 (inc y-max)))
+        sdr-max-count (->> (vals sdr-label-counts*)
+                           (map (fn [label-counts]
+                                  (reduce + (vals label-counts))))
+                           (reduce max)
+                           (max 5))
+        x-scale (/ width-px sdr-max-count)
         mid-x (quot width-px 2)
-        label-width 50
-        label-height 14]
+        label-width 50]
     (c/save ctx)
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h full-height-px})
-    (c/translate ctx mid-x (+ title-px (quot label-height 2)))
+    (c/translate ctx mid-x title-px)
     ;; draw title
-    (let [title-y (- 0 (quot label-height 2) 4)]
+    (let [title-y 0]
       (c/text-align ctx :center)
       (c/text-baseline ctx :bottom)
       (c/text ctx {:x 0
@@ -385,7 +392,6 @@
     ;; draw transitions
     (c/stroke-style ctx "hsl(210,50%,50%)")
     (c/stroke-width ctx 4)
-    (c/alpha ctx 0.4)
     (doseq [[from-sdr to-sdrs] sdr-transitions
             :when (contains? sdr-label-counts* from-sdr)
             :let [from-y (* y-scale (sdr-ordinate from-sdr))]
@@ -402,47 +408,61 @@
         (c/quadratic-curve-to off-x mid-y
                               0 to-y)
         (c/stroke)))
-    (c/alpha ctx 1.0)
     (c/stroke-width ctx 1)
     ;; draw states
     (c/stroke-style ctx "#aaa")
     (c/text-baseline ctx :middle)
     (doseq [[sdr label-counts] sdr-label-counts*
-            :let [y (* y-scale (sdr-ordinate sdr))
-                  sdr-total (reduce + (vals label-counts))
-                  sdr-width (* x-scale sdr-total)
-                  new-sdr? (and (lc-sdrs sdr)
-                                (not (ac-sdrs sdr)))]]
+            :let [new-sdr? (and (lc-sdrv sdr)
+                                (not (ac-sdrv sdr)))
+                  y (* y-scale (sdr-ordinate sdr))
+                  sdr-tot-count (reduce + (vals label-counts))
+                  sdr-width (* x-scale sdr-tot-count)
+                  sdr-height (* y-scale (/ (sdr-sizes sdr)
+                                           threshold))
+                  active-color (cond
+                                new-sdr? "#bfb"
+                                (ac-sdrv sdr) "#fbb"
+                                (pc-sdrv sdr) "#bbf"
+                                :else nil)
+                  active-size (if new-sdr? (lc-sdrv sdr)
+                                  (or (ac-sdrv sdr)
+                                      (pc-sdrv sdr)))
+                  sdr-rect {:x (- (quot sdr-width 2))
+                            :y (- y (quot sdr-height 2))
+                            :w sdr-width
+                            :h sdr-height
+                            :r 5}]]
       (doto ctx
-        (c/fill-style (cond
-                        new-sdr? "#bfb"
-                        (ac-sdrs sdr) "#fbb"
-                        (pc-sdrs sdr) "#bbf"
-                        :else "#ddd"))
-        (c/alpha 0.6)
-        (c/rounded-rect {:x (- (quot sdr-width 2))
-                         :y (- y (quot label-height 2))
-                         :w sdr-width
-                         :h label-height
-                         :r (quot label-height 2)})
-        (and (when (lc-sdrs sdr)
-               (doto ctx
-                 (c/stroke-style "yellow")
-                 (c/stroke-width 3)
-                 (c/stroke)
-                 (c/stroke-style "black")
-                 (c/stroke-width 1)
-                 (c/stroke)
-                 (c/stroke-style "#aaa"))))
-        (c/fill)
+        (c/stroke-style "#aaa")
+        (c/rounded-rect sdr-rect)
+        (c/alpha 0.8)
+        (c/fill-style "#ddd")
+        (c/fill))
+      (when active-color
+        (doto ctx
+          (c/alpha 0.5)
+          (c/fill-style active-color)
+          (c/rounded-rect (assoc sdr-rect
+                                 :h (* y-scale (/ active-size
+                                                  threshold))))
+          (c/fill)))
+      (doto ctx
         (c/alpha 1.0)
         (c/fill-style "#000"))
+      (when (lc-sdrv sdr)
+        (doto ctx
+          (c/stroke-style "#000")
+          (c/stroke-width 2)
+          (c/rounded-rect (assoc sdr-rect
+                                 :h (* y-scale (/ (lc-sdrv sdr)
+                                                  threshold))))))
       (reduce (fn [offset [label n]]
-                (c/text ctx {:x (* x-scale (+ offset (quot n 2)))
+                (c/text ctx {:x (* x-scale (+ offset (/ n 2)))
                              :y y
                              :text (str label)})
                 (+ offset n))
-              (- (quot sdr-total 2))
+              (- (/ sdr-tot-count 2))
               label-counts))
     (c/restore ctx)))
 
@@ -450,8 +470,7 @@
   [cells cell-sdr-fracs threshold]
   (->> (map cell-sdr-fracs cells)
        (apply merge-with +)
-       (filter (fn [[_ vote]] (>= vote threshold)))
-       (sort-by val <)))
+       (into {} (filter (fn [[_ vote]] (>= vote threshold))))))
 
 (defn- freqs->fracs
   [freqs]
@@ -474,7 +493,9 @@
               response-c)))
         state (atom {:cell-sdr-counts {}
                      :sdr-label-counts {}
+                     :sdr-sizes {}
                      :matching-sdrs {}
+                     :threshold {}
                      :title ""})
         plot-data (atom @state)]
     (add-watch
@@ -495,15 +516,30 @@
                    pc (:pred-cells cells-by-state)
                    threshold (get-in @step-template [:regions region layer
                                                      :spec :seg-learn-threshold])
+                   ;; for each cell, represents its specificity to each SDR
                    cell-sdr-fracs (->> (get-in @state [:cell-sdr-counts
                                                        [region layer]])
                                        (util/remap freqs->fracs))
-                   sdrs-lc-votes (find-matching-sdrs lc cell-sdr-fracs threshold)
-                   sdrs-ac-votes (find-matching-sdrs ac cell-sdr-fracs threshold)
-                   sdrs-pc-votes (find-matching-sdrs pc cell-sdr-fracs threshold)
-                   learn-sdrs (or (seq (map key sdrs-lc-votes))
-                                  [(count (get-in @state [:sdr-label-counts
-                                                          [region layer]]))])]
+                   ac-sdrv (find-matching-sdrs ac cell-sdr-fracs threshold)
+                   pc-sdrv (find-matching-sdrs pc cell-sdr-fracs threshold)
+                   lc-sdrv* (find-matching-sdrs lc cell-sdr-fracs threshold)
+                   lc-sdrv (if (seq lc-sdrv*)
+                             lc-sdrv*
+                             (let [new-sdr (count (get-in @state [:sdr-label-counts
+                                                                  [region layer]]))]
+                               {new-sdr (count lc)}))
+                   learn-sdrs (keys lc-sdrv)
+                   sdr-sizes* (persistent!
+                               (reduce-kv (fn [m cell-id sdr-fracs]
+                                            (reduce-kv (fn [m sdr frac]
+                                                         (assoc! m sdr
+                                                                 (+ (get m sdr 0)
+                                                                    frac)))
+                                                       m
+                                                       sdr-fracs))
+                                          (transient {})
+                                          cell-sdr-fracs))
+                   sdr-sizes (merge-with max sdr-sizes* lc-sdrv)]
                (swap! state
                       (fn [state-val]
                         (let [inc-learn-sdrs (partial merge-with +
@@ -514,9 +550,12 @@
                           (-> state-val
                               (assoc-in [:matching-sdrs
                                          [region layer model-id]]
-                                        {:learn learn-sdrs
-                                         :active (map key sdrs-ac-votes)
-                                         :pred (map key sdrs-pc-votes)})
+                                        {:learn lc-sdrv
+                                         :active ac-sdrv
+                                         :pred pc-sdrv})
+                              (assoc-in [:sdr-sizes
+                                         [region layer model-id]]
+                                        sdr-sizes)
                               (update-in [:cell-sdr-counts
                                           [region layer]]
                                          (fn [m]
@@ -529,7 +568,9 @@
                                                      (update m learn-sdr
                                                              inc-label))
                                                    m
-                                                   learn-sdrs)))))))
+                                                   learn-sdrs)))
+                              (assoc-in [:threshold
+                                         [region layer]] threshold)))))
                (let [sel (first @selection)
                      model-id (:model-id sel)]
                  (when (= [region layer] (sel/layer sel))
@@ -541,6 +582,9 @@
                                                                 [region layer]])
                               :matching-sdrs (get-in @state [:matching-sdrs
                                                              [region layer model-id]])
+                              :sdr-sizes (get-in @state [:sdr-sizes
+                                                         [region layer model-id]])
+                              :threshold (get-in @state [:threshold [region layer]])
                               :title (str (name region) " " (name layer)))))))
                ))))))
     (add-watch selection ::cell-sdrs-plot
@@ -549,8 +593,11 @@
                    (let [model-id (:model-id sel)
                          matching-sdrs (get-in @state [:matching-sdrs
                                                        [region layer model-id]])
+                         sdr-sizes (get-in @state [:sdr-sizes
+                                                   [region layer model-id]])
                          sdr-label-counts (get-in @state [:sdr-label-counts
-                                                          [region layer]])]
+                                                          [region layer]])
+                         threshold (get-in @state [:threshold [region layer]])]
                      (if (not= (sel/layer sel) (sel/layer old))
                        ;; switching layers, request new data
                        (go
@@ -559,14 +606,18 @@
                                 :sdr-transitions {}
                                 :sdr-label-counts sdr-label-counts
                                 :matching-sdrs matching-sdrs
+                                :sdr-sizes sdr-sizes
+                                :threshold threshold
                                 :title (str (name region) " " (name layer)))
                          ;; another update when receive server data
                          (let [x (<! (fetch-transitions-data @state sel))]
                            (swap! plot-data assoc
                                   :sdr-transitions x)))
-                       ;; same layer, just update matching sdrs
+                       ;; same layer, just update view
                        (swap! plot-data assoc
-                              :matching-sdrs matching-sdrs))))))
+                              :matching-sdrs matching-sdrs
+                              :sdr-sizes sdr-sizes
+                              :threshold threshold))))))
     {:content
      (let [size-invalidates-c (async/chan)]
        (fn []
