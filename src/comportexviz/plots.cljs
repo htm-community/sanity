@@ -568,17 +568,18 @@
                        (swap! plot-data assoc
                               :matching-sdrs matching-sdrs))))))
     {:content
-     (fn cell-sdrs-plot []
-       [canvas
-        {}
-        300
-        800
-        [plot-data
-         hide-below-count]
-        (fn [ctx]
-          (draw-cell-sdrs-plot! ctx @plot-data @hide-below-count))
-        nil]
-       )
+     (let [size-invalidates-c (async/chan)]
+       (fn []
+         [:div nil
+          [window-resize-listener size-invalidates-c]
+          [resizing-canvas
+           {:style {:width "100%"
+                    :height "100vh"}}
+           [plot-data
+            hide-below-count]
+           (fn [ctx]
+             (draw-cell-sdrs-plot! ctx @plot-data @hide-below-count))
+           size-invalidates-c]]))
      :teardown
      (fn []
        (remove-watch steps ::update-sdrs-transitions-and-labels)
