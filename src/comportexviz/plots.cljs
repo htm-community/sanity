@@ -337,7 +337,8 @@
        nil])))
 
 (defn draw-cell-sdrs-plot!
-  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs sdr-sizes threshold title]}
+  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs sdr-sizes sdr-growth
+               threshold title]}
    hide-below-count]
   (let [lc-sdrv (:learn matching-sdrs)
         ac-sdrv (:active matching-sdrs)
@@ -355,10 +356,11 @@
                                     offset 0]
                                (if-let [sdr (first sdrs)]
                                  (let [dy (sdr-sizes sdr)
+                                       gy (sdr-growth sdr 0)
                                        ord (+ offset gap (/ dy 2))]
                                    (recur (rest sdrs)
                                           (assoc m sdr ord)
-                                          (+ offset gap dy)))
+                                          (+ offset gap dy gy)))
                                  [m offset]))
         title-px 16
         width-px (.-width (.-canvas ctx))
@@ -412,29 +414,26 @@
     ;; draw states
     (c/text-baseline ctx :middle)
     (doseq [[sdr label-counts] sdr-label-counts*
-            :let [new-sdr? (and (lc-sdrv sdr)
-                                (not (ac-sdrv sdr)))
-                  y (* y-scale (sdr-ordinate sdr))
+            :let [y-mid (* y-scale (sdr-ordinate sdr))
                   sdr-tot-count (reduce + (vals label-counts))
                   sdr-width (* x-scale sdr-tot-count)
                   sdr-height (* y-scale (sdr-sizes sdr))
+                  y-top (- y-mid (quot sdr-height 2))
                   active-color (cond
-                                new-sdr? "#bfb"
                                 (ac-sdrv sdr) "#fbb"
                                 (pc-sdrv sdr) "#bbf"
                                 :else nil)
-                  active-size (if new-sdr? (lc-sdrv sdr)
-                                  (or (ac-sdrv sdr)
-                                      (pc-sdrv sdr)))
+                  active-size (or (ac-sdrv sdr)
+                                  (pc-sdrv sdr))
                   sdr-rect {:x (- (quot sdr-width 2))
-                            :y (- y (quot sdr-height 2))
+                            :y y-top
                             :w sdr-width
                             :h sdr-height
                             :r 5}]]
       ;; outline/background of state
       (doto ctx
         (c/stroke-style "#aaa")
-        (c/rounded-rect sdr-rect)
+        (c/rounded-rect (update sdr-rect :r min (/ sdr-height 2)))
         (c/alpha 0.8)
         (c/fill-style "#ddd")
         (c/fill)
@@ -448,23 +447,38 @@
             (c/rounded-rect (-> (assoc sdr-rect :h h)
                                 (update :r min (/ h 2))))
             (c/fill)
-            (c/alpha 1.0)))
-        ;; outline of exact matching cells (learning cells)
-        (when-let [lc-size (lc-sdrv sdr)]
-          (let [h (* y-scale lc-size)]
-            (doto ctx
-              (c/stroke-style "#000")
-              (c/rounded-rect (-> (assoc sdr-rect :h h)
-                                  (update :r min (/ h 2))))))))
-      ;; draw labels
-      (c/fill-style ctx "#000")
-      (reduce (fn [offset [label n]]
-                (c/text ctx {:x (* x-scale (+ offset (/ n 2)))
-                             :y y
-                             :text (str label)})
-                (+ offset n))
-              (- (/ sdr-tot-count 2))
-              label-counts))
+            (c/alpha 1.0))))
+      ;; growth
+      (when-let [growth (sdr-growth sdr)]
+        (let [h (* y-scale growth)]
+          (doto ctx
+            (c/alpha 0.8)
+            (c/fill-style "#bfb")
+            (c/rounded-rect (-> (assoc sdr-rect :h h)
+                                (update :r min (/ h 2))
+                                (update :y + sdr-height)))
+            (c/fill)
+            (c/alpha 1.0))))
+      ;; outline of exact matching cells (learning cells)
+      (when-let [lc-size (lc-sdrv sdr)]
+        (let [h (* y-scale lc-size)]
+          (doto ctx
+            (c/stroke-style "#000")
+            (c/rounded-rect (-> (assoc sdr-rect :h h)
+                                (update :r min (/ h 2)))))))
+      ;; draw labels; center label on new growth if that's all there is
+      (let [gy (* y-scale (sdr-growth sdr))
+            lab-y (if (pos? sdr-height)
+                    y-mid
+                    (+ y-mid (/ gy 2)))]
+        (c/fill-style ctx "#000")
+        (reduce (fn [offset [label n]]
+                  (c/text ctx {:x (* x-scale (+ offset (/ n 2)))
+                               :y lab-y
+                               :text (str label)})
+                  (+ offset n))
+                (- (/ sdr-tot-count 2))
+                label-counts)))
     (c/restore ctx)))
 
 (defn sdr-votes
@@ -489,9 +503,21 @@
                                    (channel-proxy/register!
                                     local-targets response-c)])
               response-c)))
+        calc-sdr-sizes (fn [cell-sdr-fracs]
+                         (persistent!
+                          (reduce (fn [m sdr-fracs]
+                                    (reduce-kv (fn [m sdr frac]
+                                                 (assoc! m sdr
+                                                         (+ (get m sdr 0)
+                                                            frac)))
+                                               m
+                                               sdr-fracs))
+                                  (transient {})
+                                  (vals cell-sdr-fracs))))
         empty-state {:cell-sdr-counts {}
                      :sdr-label-counts {}
                      :sdr-sizes {}
+                     :sdr-growth {}
                      :matching-sdrs {:learn {}
                                      :active {}
                                      :pred {}}
@@ -523,29 +549,18 @@
                                        (util/remap freqs->fracs))
                    ac-sdrv (sdr-votes ac cell-sdr-fracs)
                    pc-sdrv (sdr-votes pc cell-sdr-fracs)
-                   lc-sdrv* (sdr-votes lc cell-sdr-fracs)
+                   lc-sdrv (sdr-votes lc cell-sdr-fracs)
                    learn-sdrs* (keep (fn [[sdr vote]] (when (>= vote threshold) sdr))
-                                     lc-sdrv*)
-                   [learn-sdrs lc-sdrv] (if (seq learn-sdrs*)
-                                          [learn-sdrs* lc-sdrv*]
-                                          (let [new-sdr (count (:sdr-label-counts state))]
-                                            [[new-sdr] {new-sdr (count lc)}]))
-                   sdr-sizes* (persistent!
-                               (reduce-kv (fn [m cell-id sdr-fracs]
-                                            (reduce-kv (fn [m sdr frac]
-                                                         (assoc! m sdr
-                                                                 (+ (get m sdr 0)
-                                                                    frac)))
-                                                       m
-                                                       sdr-fracs))
-                                          (transient {})
-                                          cell-sdr-fracs))
-                   sdr-sizes (merge-with max sdr-sizes* lc-sdrv)
+                                     lc-sdrv)
+                   new-sdr (when (empty? learn-sdrs*) (count (:sdr-label-counts state)))
+                   learn-sdrs (if new-sdr [new-sdr] learn-sdrs*)
+                   sdr-sizes (or (:updated-sdr-sizes state)
+                                 (calc-sdr-sizes cell-sdr-fracs))
                    inc-learn-sdrs (partial merge-with +
                                            (zipmap learn-sdrs (repeat 1)))
                    label (:label (:input-value step))
                    inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
-                   new-state (-> state
+                   new-state* (-> state
                                  (update :cell-sdr-counts
                                          (fn [m]
                                            (util/update-each (or m {}) lc
@@ -561,7 +576,16 @@
                                                         :active ac-sdrv
                                                         :pred pc-sdrv}
                                         :sdr-sizes sdr-sizes
-                                        :threshold threshold))]
+                                        :threshold threshold))
+                   new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
+                                                      (util/remap freqs->fracs)))
+                   sdr-growth (merge-with - (select-keys new-sdr-sizes learn-sdrs)
+                                          (select-keys sdr-sizes learn-sdrs))
+                   new-state (cond-> (assoc new-state*
+                                            :updated-sdr-sizes new-sdr-sizes
+                                            :sdr-growth sdr-growth)
+                               new-sdr (assoc-in [:matching-sdrs :learn new-sdr]
+                                                 (sdr-growth new-sdr)))]
                (swap! states assoc-in [model-id [region layer]]
                       new-state)
                (let [sel (first @selection)
