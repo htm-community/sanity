@@ -159,14 +159,14 @@
                                    col-state-freqs))))
                  % r))))))
 
-(defn ts-plots-tab-builder
+(defn time-plots-tab-builder
   [steps into-journal local-targets]
   (let [col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
                  (gather-col-state-history! col-state-history (first xs)
                                             into-journal local-targets)))
-    (fn ts-plots-tab [series-colors]
+    (fn time-plots-tab [series-colors]
       [:div
        [:p.text-muted "Time series of cortical column activity."]
        [:div
@@ -177,7 +177,7 @@
            [:legend (str (name region-key) " " (name layer-id))]
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
-(defn excitation-tab
+(defn sources-tab
   [step-template selection series-colors into-journal local-targets]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
@@ -739,7 +739,7 @@
   [_ _ _ selection steps step-template _ _ _ into-journal local-targets]
   (let [show-help (atom false)
         viz-expanded (atom false)
-        ts-plots-tab (ts-plots-tab-builder steps into-journal local-targets)
+        time-plots-tab (time-plots-tab-builder steps into-journal local-targets)
         cell-sdrs-tab (cell-sdrs-tab-builder steps step-template selection
                                              into-journal local-targets)]
     (fn [model-tab main-pane viz-options selection steps step-template
@@ -758,10 +758,10 @@
            [:drawing [bind-fields viz-options-template viz-options]]
            [:params [parameters-tab step-template selection into-sim
                      local-targets]]
-           [:ts-plots [ts-plots-tab series-colors]]
-           [:cell-sdrs [cell-sdrs-tab]]
-           [:excitation [excitation-tab step-template selection series-colors
-                         into-journal local-targets]]
+           [:time-plots [time-plots-tab series-colors]]
+           [:cell-SDRs [cell-sdrs-tab]]
+           [:sources [sources-tab step-template selection series-colors
+                      into-journal local-targets]]
            [:details [details-tab selection into-journal local-targets]]]]
          ]]
        [:div#loading-message "loading"]]])))
