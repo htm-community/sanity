@@ -349,22 +349,22 @@
                                                        hide-below-count))))
                                   sdr-label-counts)
                             sdr-label-counts)
+        gap threshold
         [sdr-ordinate y-max] (loop [sdrs (sort (keys sdr-label-counts*))
                                     m {}
                                     offset 0]
                                (if-let [sdr (first sdrs)]
-                                 (let [dy (/ (sdr-sizes sdr)
-                                             threshold)
-                                       ord (+ offset 1 (/ dy 2))]
+                                 (let [dy (sdr-sizes sdr)
+                                       ord (+ offset gap (/ dy 2))]
                                    (recur (rest sdrs)
                                           (assoc m sdr ord)
-                                          (+ offset 1 dy)))
+                                          (+ offset gap dy)))
                                  [m offset]))
         title-px 16
         width-px (.-width (.-canvas ctx))
         full-height-px (.-height (.-canvas ctx))
         height-px (- full-height-px title-px)
-        y-scale (/ height-px (max 50 (inc y-max)))
+        y-scale (/ height-px (max (* 50 gap) (inc y-max)))
         sdr-max-count (->> (vals sdr-label-counts*)
                            (map (fn [label-counts]
                                   (reduce + (vals label-counts))))
@@ -417,8 +417,7 @@
                   y (* y-scale (sdr-ordinate sdr))
                   sdr-tot-count (reduce + (vals label-counts))
                   sdr-width (* x-scale sdr-tot-count)
-                  sdr-height (* y-scale (/ (sdr-sizes sdr)
-                                           threshold))
+                  sdr-height (* y-scale (sdr-sizes sdr))
                   active-color (cond
                                 new-sdr? "#bfb"
                                 (ac-sdrv sdr) "#fbb"
@@ -441,22 +440,22 @@
         (c/fill)
         (c/alpha 1.0))
       ;; activation / prediction level
-      (when active-color
-        (doto ctx
-          (c/alpha 0.4)
-          (c/fill-style active-color)
-          (c/rounded-rect (assoc sdr-rect
-                                 :h (* y-scale (/ active-size
-                                                  threshold))))
-          (c/fill)
-          (c/alpha 1.0))
+      (when active-size
+        (let [h (* y-scale active-size)]
+          (doto ctx
+            (c/alpha 0.4)
+            (c/fill-style active-color)
+            (c/rounded-rect (-> (assoc sdr-rect :h h)
+                                (update :r min (/ h 2))))
+            (c/fill)
+            (c/alpha 1.0)))
         ;; outline of exact matching cells (learning cells)
         (when-let [lc-size (lc-sdrv sdr)]
-          (doto ctx
-            (c/stroke-style "#000")
-            (c/rounded-rect (assoc sdr-rect
-                                   :h (* y-scale (/ lc-size
-                                                    threshold)))))))
+          (let [h (* y-scale lc-size)]
+            (doto ctx
+              (c/stroke-style "#000")
+              (c/rounded-rect (-> (assoc sdr-rect :h h)
+                                  (update :r min (/ h 2))))))))
       ;; draw labels
       (c/fill-style ctx "#000")
       (reduce (fn [offset [label n]]
