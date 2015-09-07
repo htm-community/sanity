@@ -410,7 +410,6 @@
         (c/stroke)))
     (c/stroke-width ctx 1)
     ;; draw states
-    (c/stroke-style ctx "#aaa")
     (c/text-baseline ctx :middle)
     (doseq [[sdr label-counts] sdr-label-counts*
             :let [new-sdr? (and (lc-sdrv sdr)
@@ -433,30 +432,33 @@
                             :w sdr-width
                             :h sdr-height
                             :r 5}]]
+      ;; outline/background of state
       (doto ctx
         (c/stroke-style "#aaa")
         (c/rounded-rect sdr-rect)
         (c/alpha 0.8)
         (c/fill-style "#ddd")
-        (c/fill))
+        (c/fill)
+        (c/alpha 1.0))
+      ;; activation / prediction level
       (when active-color
         (doto ctx
-          (c/alpha 0.5)
+          (c/alpha 0.4)
           (c/fill-style active-color)
           (c/rounded-rect (assoc sdr-rect
                                  :h (* y-scale (/ active-size
                                                   threshold))))
-          (c/fill)))
-      (doto ctx
-        (c/alpha 1.0)
-        (c/fill-style "#000"))
-      (when (lc-sdrv sdr)
-        (doto ctx
-          (c/stroke-style "#000")
-          (c/stroke-width 2)
-          (c/rounded-rect (assoc sdr-rect
-                                 :h (* y-scale (/ (lc-sdrv sdr)
-                                                  threshold))))))
+          (c/fill)
+          (c/alpha 1.0))
+        ;; outline of exact matching cells (learning cells)
+        (when-let [lc-size (lc-sdrv sdr)]
+          (doto ctx
+            (c/stroke-style "#000")
+            (c/rounded-rect (assoc sdr-rect
+                                   :h (* y-scale (/ lc-size
+                                                    threshold)))))))
+      ;; draw labels
+      (c/fill-style ctx "#000")
       (reduce (fn [offset [label n]]
                 (c/text ctx {:x (* x-scale (+ offset (/ n 2)))
                              :y y
@@ -466,11 +468,10 @@
               label-counts))
     (c/restore ctx)))
 
-(defn find-matching-sdrs
-  [cells cell-sdr-fracs threshold]
+(defn sdr-votes
+  [cells cell-sdr-fracs]
   (->> (map cell-sdr-fracs cells)
-       (apply merge-with +)
-       (into {} (filter (fn [[_ vote]] (>= vote threshold))))))
+       (apply merge-with + {})))
 
 (defn- freqs->fracs
   [freqs]
@@ -492,7 +493,9 @@
         empty-state {:cell-sdr-counts {}
                      :sdr-label-counts {}
                      :sdr-sizes {}
-                     :matching-sdrs {}
+                     :matching-sdrs {:learn {}
+                                     :active {}
+                                     :pred {}}
                      :threshold 0}
         states (atom {})
         plot-data (atom (assoc empty-state :title ""))]
@@ -519,14 +522,15 @@
                    ;; for each cell, represents its specificity to each SDR
                    cell-sdr-fracs (->> (:cell-sdr-counts state)
                                        (util/remap freqs->fracs))
-                   ac-sdrv (find-matching-sdrs ac cell-sdr-fracs threshold)
-                   pc-sdrv (find-matching-sdrs pc cell-sdr-fracs threshold)
-                   lc-sdrv* (find-matching-sdrs lc cell-sdr-fracs threshold)
-                   lc-sdrv (if (seq lc-sdrv*)
-                             lc-sdrv*
-                             (let [new-sdr (count (:sdr-label-counts state))]
-                               {new-sdr (count lc)}))
-                   learn-sdrs (keys lc-sdrv)
+                   ac-sdrv (sdr-votes ac cell-sdr-fracs)
+                   pc-sdrv (sdr-votes pc cell-sdr-fracs)
+                   lc-sdrv* (sdr-votes lc cell-sdr-fracs)
+                   learn-sdrs* (keep (fn [[sdr vote]] (when (>= vote threshold) sdr))
+                                     lc-sdrv*)
+                   [learn-sdrs lc-sdrv] (if (seq learn-sdrs*)
+                                          [learn-sdrs* lc-sdrv*]
+                                          (let [new-sdr (count (:sdr-label-counts state))]
+                                            [[new-sdr] {new-sdr (count lc)}]))
                    sdr-sizes* (persistent!
                                (reduce-kv (fn [m cell-id sdr-fracs]
                                             (reduce-kv (fn [m sdr frac]
@@ -539,8 +543,7 @@
                                           cell-sdr-fracs))
                    sdr-sizes (merge-with max sdr-sizes* lc-sdrv)
                    inc-learn-sdrs (partial merge-with +
-                                           (zipmap learn-sdrs
-                                                   (repeat 1)))
+                                           (zipmap learn-sdrs (repeat 1)))
                    label (:label (:input-value step))
                    inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
                    new-state (-> state
