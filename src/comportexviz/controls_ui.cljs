@@ -208,8 +208,9 @@
         ]
     (fn cell-sdrs-tab []
       [:div
-       [:p.text-muted "Cell SDRs and their transitions meeting
-   seg-learn-threshold. Labelled with inputs for interpretability."]
+       [:p.text-muted "Cell "
+        [:abbr {:title "Sparse Distributed Representations"} "SDRs"]
+        " and their transitions. Labelled with inputs for interpretability."]
        [:div
         (if-not @component
           ;; placeholder
@@ -243,7 +244,50 @@
             {:on-click (fn [e]
                          (disable!)
                          (.preventDefault e))}
-            "Disable and reset"]])]])))
+            "Disable and reset"]])
+        [:p.muted.small "(Not enabled by default because it slows everything down.)"]
+        [:p "This shows the dynamics of a layer of cells as a state
+        transition diagram. The \"states\" are in fact cell SDRs,
+        i.e. sets of cells active together. They are fuzzy: cells may
+        participate in multiple states. And they are fluid: the
+        membership of a state may change over time."]
+        [:p "To be precise, a state is defined as a set of cells
+         weighted by their specificity to that state. So if a cell
+         participates in states A and B an equal number of times, it
+         will count only half as much to A as a cell fully specific to
+         A."]
+        [:p "If the active learning cells match a known state
+        sufficiently well (meeting " [:code "seg-learn-threshold"]
+         ") then the state is extended to include all current
+        cells. Otherwise, a new state is created."]
+        [:p "Input labels (key :label) are recorded on matching
+        states, but this is only for display, it is not used to define
+        states."]
+        [:p "The display shows one layer at one point in
+         time. Select other layers to switch the display to them. Move
+         back and forward in time as you wish."]
+        [:h4 "Reading the diagram"]
+        [:ul
+         [:li "States are drawn in order of appearance."]
+         [:li "If any of a state's cells are currently active that
+         fraction will be shaded red (whether active due to bursting
+         or not)."]
+         [:li "Similarly, any predictive cells (predicting activation for the "
+          [:strong "next"] " time step) will be shaded blue."]
+         [:li "If any of a state's cells are the
+         current " [:i "learning cells"] " that fraction will be
+         outlined in black."]
+         [:li "When a matching state will be extended to include new
+         cells, those are shown in green."]
+         [:li "If there are enough connected synapses from cells in
+         one state to cells in another, the transition is drawn as a
+         blue curve."]
+         [:li "The height of a state corresponds to the (weighted)
+         number of cells it represents."]
+         [:li "The width of a state corresponds to the number of times
+         it has matched."]
+         [:li "Labels are drawn with horizonal spacing by frequency."]]
+        ]])))
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]
