@@ -4,6 +4,7 @@
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
+            [goog.string :as gstr]
             [clojure.string :as str]
             [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
@@ -158,14 +159,14 @@
                                    col-state-freqs))))
                  % r))))))
 
-(defn ts-plots-tab-builder
+(defn time-plots-tab-builder
   [steps into-journal local-targets]
   (let [col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
                  (gather-col-state-history! col-state-history (first xs)
                                             into-journal local-targets)))
-    (fn ts-plots-tab [series-colors]
+    (fn time-plots-tab [series-colors]
       [:div
        [:p.text-muted "Time series of cortical column activity."]
        [:div
@@ -176,7 +177,7 @@
            [:legend (str (name region-key) " " (name layer-id))]
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
-(defn excitation-tab
+(defn sources-tab
   [step-template selection series-colors into-journal local-targets]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
@@ -190,25 +191,103 @@
          [plots/cell-excitation-plot-cmp step-template selection series-colors
           region-key layer-id into-journal local-targets]]))]])
 
-(defn transitions-tab-builder
+(defn cell-sdrs-tab-builder
   [steps step-template selection into-journal local-targets]
-  (let [enable (async/chan)
-        transitions-plot (atom
-                          (fn []
-                            [:button.btn.btn-warning.btn-block
-                             {:on-click #(put! enable :enable)}
-                             "Enable"]))]
-    (go
-      (when (<! enable)
-        (reset! transitions-plot
-                (plots/transitions-plot-builder steps step-template selection
-                                                into-journal local-targets))))
-    (fn transitions-tab []
+  (let [hide-below-count (atom 1)
+        component (atom nil)
+        enable! (fn []
+                  (reset!
+                   component
+                   (plots/cell-sdrs-plot-builder steps step-template selection
+                                                 into-journal local-targets
+                                                 hide-below-count)))
+        disable! (fn []
+                   (let [teardown! (:teardown @component)]
+                     (teardown!))
+                   (reset! component nil))
+        ]
+    (fn cell-sdrs-tab []
       [:div
-       [:p.text-muted "Cell SDRs and their transitions meeting
-   seg-learn-threshold. Labelled by inputs for interpretability."]
+       [:p.text-muted "Cell "
+        [:abbr {:title "Sparse Distributed Representations"} "SDRs"]
+        " and their transitions. Labelled with inputs for interpretability."]
        [:div
-        [@transitions-plot]]])))
+        (if-not @component
+          ;; placeholder
+          [:div
+           [:button.btn.btn-warning.btn-block
+                 {:on-click (fn [e]
+                              (enable!)
+                              (.preventDefault e))}
+            "Enable"]]
+          ;; enabled content
+          [:div
+           [:div.row
+            [:div.col-sm-6
+             [:label.small
+              (if (> @hide-below-count 1)
+                (gstr/unescapeEntities
+                 (str "Seen &ge; "
+                      @hide-below-count
+                      " times"))
+                "Showing all states")]]
+            [:div.col-sm-6
+             [:input {:type :range
+                      :min 1
+                      :max 10
+                      :value @hide-below-count
+                      :on-change (fn [e]
+                                   (reset! hide-below-count
+                                           (-> e .-target forms/getValue)))}]]]
+           [(:content @component)]
+           [:button.btn.btn-warning.btn-block
+            {:on-click (fn [e]
+                         (disable!)
+                         (.preventDefault e))}
+            "Disable and reset"]])
+        [:p.muted.small "(Not enabled by default because it slows everything down.)"]
+        [:p "This shows the dynamics of a layer of cells as a state
+        transition diagram. The \"states\" are in fact cell SDRs,
+        i.e. sets of cells active together. They are fuzzy: cells may
+        participate in multiple states. And they are fluid: the
+        membership of a state may change over time."]
+        [:p "To be precise, a state is defined as a set of cells
+         weighted by their specificity to that state. So if a cell
+         participates in states A and B an equal number of times, it
+         will count only half as much to A as a cell fully specific to
+         A."]
+        [:p "If the active learning cells match a known state
+        sufficiently well (meeting " [:code "seg-learn-threshold"]
+         ") then the state is extended to include all current
+        cells. Otherwise, a new state is created."]
+        [:p "Input labels (key :label) are recorded on matching
+        states, but this is only for display, it is not used to define
+        states."]
+        [:p "The display shows one layer at one point in
+         time. Select other layers to switch the display to them. Move
+         back and forward in time as you wish."]
+        [:h4 "Reading the diagram"]
+        [:ul
+         [:li "States are drawn in order of appearance."]
+         [:li "If any of a state's cells are currently active that
+         fraction will be shaded red (whether active due to bursting
+         or not)."]
+         [:li "Similarly, any predictive cells (predicting activation for the "
+          [:strong "next"] " time step) will be shaded blue."]
+         [:li "If any of a state's cells are the
+         current " [:i "learning cells"] " that fraction will be
+         outlined in black."]
+         [:li "When a matching state will be extended to include new
+         cells, those are shown in green."]
+         [:li "If there are enough connected synapses from cells in
+         one state to cells in another, the transition is drawn as a
+         blue curve."]
+         [:li "The height of a state corresponds to the (weighted)
+         number of cells it represents."]
+         [:li "The width of a state corresponds to the number of times
+         it has matched."]
+         [:li "Labels are drawn with horizonal spacing by frequency."]]
+        ]])))
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]
@@ -686,7 +765,7 @@
         [:li [:b {:style {:color "purple"}} "Purple"]
          ": active+predicted (i.e. recognised)"]
         [:li [:b {:style {:color "green"}} "Green"]
-         ": growing (new synapses)"]]
+         ": growing (new synapses) or temporal pooling"]]
        [:h4 "Key controls"]
        [:p "When the main canvas is in focus, "
         [:kbd "up"] "/" [:kbd "down"]
@@ -704,9 +783,9 @@
   [_ _ _ selection steps step-template _ _ _ into-journal local-targets]
   (let [show-help (atom false)
         viz-expanded (atom false)
-        ts-plots-tab (ts-plots-tab-builder steps into-journal local-targets)
-        transitions-tab (transitions-tab-builder steps step-template selection
-                                                 into-journal local-targets)]
+        time-plots-tab (time-plots-tab-builder steps into-journal local-targets)
+        cell-sdrs-tab (cell-sdrs-tab-builder steps step-template selection
+                                             into-journal local-targets)]
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal local-targets]
      [:div
@@ -723,10 +802,10 @@
            [:drawing [bind-fields viz-options-template viz-options]]
            [:params [parameters-tab step-template selection into-sim
                      local-targets]]
-           [:ts-plots [ts-plots-tab series-colors]]
-           [:excitation [excitation-tab step-template selection series-colors
-                         into-journal local-targets]]
-           [:transitions [transitions-tab]]
+           [:time-plots [time-plots-tab series-colors]]
+           [:cell-SDRs [cell-sdrs-tab]]
+           [:sources [sources-tab step-template selection series-colors
+                      into-journal local-targets]]
            [:details [details-tab selection into-journal local-targets]]]]
          ]]
        [:div#loading-message "loading"]]])))
