@@ -327,18 +327,20 @@
         (remove-watch selection [::fetch-excitation-data region-key layer-id]))
 
       :reagent-render
-      (fn [step-template _ series-colors region-key layer-id _ _]
-        [canvas
-         {}
-         300
-         240
-         [excitation-data]
-         (fn [ctx]
-           (let [sel (first (filter sel/layer @selection))
-                 bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
-             (draw-cell-excitation-plot! ctx @excitation-data step-template
-                                         bit series-colors)))
-         nil])
+      (let [size-invalidates-c (async/chan)]
+        (fn [step-template _ series-colors region-key layer-id _ _]
+          [:div nil
+           [window-resize-listener size-invalidates-c]
+           [resizing-canvas
+            {:style {:width "100%"
+                     :height "240px"}}
+            [excitation-data]
+            (fn [ctx]
+              (let [sel (first (filter sel/layer @selection))
+                    bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
+                (draw-cell-excitation-plot! ctx @excitation-data step-template
+                                            bit series-colors)))
+            size-invalidates-c]]))
       })))
 
 (defn draw-cell-sdrs-plot!
