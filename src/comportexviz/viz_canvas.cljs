@@ -913,7 +913,7 @@
                                      :selected (if bit
                                                  [true [bit]]
                                                  [false])
-                                     :default [false])]
+                                     [false])]
           (when continue?
             (let [response-c (async/chan)]
               (go
