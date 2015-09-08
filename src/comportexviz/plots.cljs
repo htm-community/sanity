@@ -295,13 +295,13 @@
     (c/restore ctx)))
 
 (defn fetch-excitation-data!
-  [excitation-data sel into-journal local-targets]
-  (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
-        [region layer] (sel/layer sel1)]
-    (if layer
+  [excitation-data region-key layer-id sels into-journal local-targets]
+  (let [sel (first (filter sel/layer sels))
+        bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
+    (if-let [model-id (:model-id sel)]
       (let [response-c (async/chan)]
         (put! @into-journal
-              [:get-cell-excitation-data model-id region layer bit
+              [:get-cell-excitation-data model-id region-key layer-id bit
                (channel-proxy/register! local-targets
                                         response-c)])
         (go
@@ -309,32 +309,37 @@
       (reset! excitation-data {}))))
 
 (defn cell-excitation-plot-cmp
-  [_ selection _ _ _ into-journal local-targets]
+  [_ selection _ region-key layer-id into-journal local-targets]
   (let [excitation-data (atom {})]
-    (add-watch selection :fetch-excitation-data
-               (fn [_ _ _ sel]
-                 (fetch-excitation-data! excitation-data sel into-journal
-                                         local-targets)))
+    (reagent/create-class
+     {:component-will-mount
+      (fn [_]
+        (add-watch selection [::fetch-excitation-data region-key layer-id]
+                   (fn [_ _ _ sels]
+                     (fetch-excitation-data! excitation-data region-key layer-id
+                                             sels into-journal local-targets)))
 
-    (fetch-excitation-data! excitation-data @selection into-journal
-                            local-targets)
+        (fetch-excitation-data! excitation-data region-key layer-id @selection
+                                into-journal local-targets))
 
-    (fn [step-template _ series-colors region-key layer-id _ _]
-      [canvas
-       {}
-       300
-       240
-       [excitation-data]
-       (fn [ctx]
-         (let [sel1 (first (filter sel/layer @selection))
-               [sel-rgn sel-lyr] (sel/layer sel1)
-               sel-col (when (and sel-lyr
-                                  (= region-key sel-rgn)
-                                  (= layer-id sel-lyr))
-                         (:bit sel1))]
-           (draw-cell-excitation-plot! ctx @excitation-data step-template
-                                       sel-col series-colors)))
-       nil])))
+      :component-will-unmount
+      (fn [_]
+        (remove-watch selection [::fetch-excitation-data region-key layer-id]))
+
+      :reagent-render
+      (fn [step-template _ series-colors region-key layer-id _ _]
+        [canvas
+         {}
+         300
+         240
+         [excitation-data]
+         (fn [ctx]
+           (let [sel (first (filter sel/layer @selection))
+                 bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
+             (draw-cell-excitation-plot! ctx @excitation-data step-template
+                                         bit series-colors)))
+         nil])
+      })))
 
 (defn draw-cell-sdrs-plot!
   [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
