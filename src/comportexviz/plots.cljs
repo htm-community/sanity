@@ -337,12 +337,12 @@
        nil])))
 
 (defn draw-cell-sdrs-plot!
-  [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs sdr-sizes sdr-growth
+  [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
                threshold title]}
    states-hide-below conn-hide-below]
-  (let [lc-sdrv (:learn matching-sdrs)
-        ac-sdrv (:active matching-sdrs)
-        pc-sdrv (:pred matching-sdrs)
+  (let [lc-sdrv (:learn sdr-votes)
+        ac-sdrv (:active sdr-votes)
+        pc-sdrv (:pred sdr-votes)
         sdr-label-counts* (if (> states-hide-below 1)
                             (into {} (filter (fn [[sdr label-counts]]
                                                (or (lc-sdrv sdr)
@@ -540,9 +540,10 @@
    :sdr-label-counts {}
    :sdr-sizes {}
    :sdr-growth {}
-   :matching-sdrs {:learn {}
-                   :active {}
-                   :pred {}}
+   :sdr-votes {:learn {}
+               :active {}
+               :pred {}}
+   :sdr-transitions nil
    :threshold 0})
 
 (defn update-cell-sdrs-states!
@@ -593,9 +594,9 @@
                                              m
                                              learn-sdrs)))
                            (assoc :sdr-transitions nil ;; updated lazily
-                                  :matching-sdrs {:learn lc-sdrv
-                                                  :active ac-sdrv
-                                                  :pred pc-sdrv}
+                                  :sdr-votes {:learn lc-sdrv
+                                              :active ac-sdrv
+                                              :pred pc-sdrv}
                                   :sdr-sizes sdr-sizes
                                   :threshold threshold))
             new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
@@ -605,7 +606,7 @@
             new-state (cond-> (assoc new-state*
                                      :updated-sdr-sizes new-sdr-sizes
                                      :sdr-growth sdr-growth)
-                        new-sdr (assoc-in [:matching-sdrs :learn new-sdr]
+                        new-sdr (assoc-in [:sdr-votes :learn new-sdr]
                                           (sdr-growth new-sdr)))]
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
