@@ -856,8 +856,7 @@
         append? (.-metaKey e)
         s-lays (:senses layouts)
         r-lays (:regions layouts)
-        ;; we need to assume there is a previous step, so:
-        max-dt (max 0 (- (count steps) 2))
+        max-dt (max 0 (dec (count steps)))
         hit? (atom false)]
     ;; check senses and regions
     (doseq [path (grid-layout-paths layouts)
@@ -1051,8 +1050,7 @@
                                          (if apply-to-all?
                                            (grid-layout-paths @viz-layouts)
                                            (map :path @selection))))
-          :step-backward (let [ ;; we need to assume there is a previous step, so:
-                               max-dt (max 0 (- (count @steps) 2))]
+          :step-backward (let [max-dt (max 0 (dec (count @steps)))]
                            (swap! selection
                                   #(conj (pop %)
                                          (let [sel1 (peek %)
