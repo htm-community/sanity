@@ -868,7 +868,7 @@
                        (min dt max-dt)
                        (:dt (peek @selection)))
                   sel1 {:path path :bit id :dt dt
-                        :model-id (:model-id (nth steps dt))}]]
+                        :model-id (:model-id (nth steps dt nil))}]]
       (reset! hit? true)
       (if append?
         (let [same-bit? #(and (= dt (:dt %))

@@ -21,9 +21,10 @@
 (defn id-missing-response
   [id steps-offset]
   (let [offset @steps-offset]
-    (assert (< id offset))
-    (println (str "Can't fetch model " id
-                  ". We've dropped all models below id " offset))
+    (when (pos? offset)
+      (assert (< id offset))
+      (println (str "Can't fetch model " id
+                    ". We've dropped all models below id " offset)))
     {}))
 
 (defn init
@@ -194,10 +195,11 @@
             :get-cell-excitation-data
             (let [[id region-key layer-id sel-col response-c] xs]
               (put! response-c
-                    (if-let [[prev-htm htm] (find-model-pair id)]
-                      (data/cell-excitation-data htm prev-htm region-key layer-id
-                                                 sel-col)
-                      (id-missing-response id steps-offset))))
+                    (let [[prev-htm htm] (find-model-pair id)]
+                      (if prev-htm
+                        (data/cell-excitation-data htm prev-htm region-key layer-id
+                                                   sel-col)
+                        (id-missing-response id steps-offset)))))
 
             :get-cells-by-state
             (let [[id region-key layer-id response-c] xs]
