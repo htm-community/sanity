@@ -339,15 +339,15 @@
 (defn draw-cell-sdrs-plot!
   [ctx {:keys [sdr-transitions sdr-label-counts matching-sdrs sdr-sizes sdr-growth
                threshold title]}
-   hide-below-count]
+   states-hide-below conn-hide-below]
   (let [lc-sdrv (:learn matching-sdrs)
         ac-sdrv (:active matching-sdrs)
         pc-sdrv (:pred matching-sdrs)
-        sdr-label-counts* (if (> hide-below-count 1)
+        sdr-label-counts* (if (> states-hide-below 1)
                             (into {} (filter (fn [[sdr label-counts]]
                                                (or (lc-sdrv sdr)
                                                    (>= (reduce + (vals label-counts))
-                                                       hide-below-count))))
+                                                       states-hide-below))))
                                   sdr-label-counts)
                             sdr-label-counts)
         gap threshold
@@ -393,18 +393,19 @@
                    :text "back"}))
     ;; draw transitions
     (c/stroke-style ctx "hsl(210,50%,50%)")
-    (c/stroke-width ctx 4)
-    (doseq [[from-sdr to-sdrs] sdr-transitions
+    (doseq [[from-sdr to-sdrs-counts] sdr-transitions
             :when (contains? sdr-label-counts* from-sdr)
             :let [from-y (* y-scale (sdr-ordinate from-sdr))]
-            to-sdr to-sdrs
+            [to-sdr to-sdr-count] to-sdrs-counts
             :when (contains? sdr-label-counts* to-sdr)
+            :when (>= to-sdr-count conn-hide-below)
             :let [to-y (* y-scale (sdr-ordinate to-sdr))
                   mid-y (/ (+ to-y from-y) 2)
                   off-x (* 1.0 width-px
                            (/ (- to-y from-y)
                               height-px))]]
       (doto ctx
+        (c/stroke-width (-> (/ to-sdr-count threshold) (* 4) (min 6)))
         (c/begin-path)
         (c/move-to 0 from-y)
         (c/quadratic-curve-to off-x mid-y
@@ -609,7 +610,7 @@
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
 (defn cell-sdrs-plot-builder
-  [steps step-template selection into-journal local-targets hide-below-count]
+  [steps step-template selection into-journal local-targets states-hide-below conn-hide-below]
   (let [states (atom {})
         plot-data (atom (assoc empty-cell-sdrs-state :title ""))]
     (add-watch steps ::cell-sdrs-plot
@@ -655,9 +656,10 @@
            {:style {:width "100%"
                     :height "100vh"}}
            [plot-data
-            hide-below-count]
+            states-hide-below
+            conn-hide-below]
            (fn [ctx]
-             (draw-cell-sdrs-plot! ctx @plot-data @hide-below-count))
+             (draw-cell-sdrs-plot! ctx @plot-data @states-hide-below @conn-hide-below))
            size-invalidates-c]]))
      :teardown
      (fn []

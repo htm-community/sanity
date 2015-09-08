@@ -445,7 +445,7 @@
        (persistent!)))
 
 (defn- sdr-sdr-transitions
-  [cell-sdrs-xns cell-sdr-fracs threshold]
+  [cell-sdrs-xns cell-sdr-fracs]
   (->> cell-sdrs-xns
        ;; count SDR transitions
        (reduce-kv (fn [m from-cell to-sdrs-fracs]
@@ -460,10 +460,9 @@
                                 m)))
                   (transient {}))
        (persistent!)
-       ;; filter SDR transitions to where at least threshold cells have it
+       ;; filter transitions to those with >= 1 fully-specific-cell-equivalent
        (util/remap (fn [to-sdr-frac-sums]
-                     (keep (fn [[sdr-id n]]
-                             (when (>= n threshold) sdr-id))
+                     (into {} (filter (fn [[_ n]] (>= n 1)))
                            to-sdr-frac-sums)))))
 
 (defn- freqs->fracs
@@ -476,15 +475,15 @@
   participates in. Each value gives the frequencies map by SDR id
   for that cell.
 
-  Returns the SDR to SDR transitions, derived from distal
-  synapses. That is a map from an SDR id to a collection of following
-  SDRs to which a sufficient number of connected synapses exist."
+  Returns the SDR to SDR transitions, derived from the distal synapse
+  graph. It is a map from an SDR id to any subsequent SDRs, each
+  mapped to the number of connected synapses, weighted by the
+  specificity of both the source and target cells to those SDRs."
   [htm rgn-id lyr-id cell-sdr-counts]
   (let [lyr (get-in htm [:regions rgn-id lyr-id])
         depth (p/layer-depth lyr)
-        threshold (get-in lyr [:spec :seg-stimulus-threshold])
         distal-sg (:distal-sg lyr)
         cell-sdr-fracs (util/remap freqs->fracs cell-sdr-counts)]
     (-> (cell-cells-transitions distal-sg depth (p/size-of lyr))
         (cell-sdr-transitions cell-sdr-fracs)
-        (sdr-sdr-transitions cell-sdr-fracs threshold))))
+        (sdr-sdr-transitions cell-sdr-fracs))))

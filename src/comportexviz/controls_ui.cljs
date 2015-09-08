@@ -193,14 +193,15 @@
 
 (defn cell-sdrs-tab-builder
   [steps step-template selection into-journal local-targets]
-  (let [hide-below-count (atom 1)
+  (let [states-hide-below (atom 1)
+        conn-hide-below (atom 5)
         component (atom nil)
         enable! (fn []
                   (reset!
                    component
                    (plots/cell-sdrs-plot-builder steps step-template selection
                                                  into-journal local-targets
-                                                 hide-below-count)))
+                                                 states-hide-below conn-hide-below)))
         disable! (fn []
                    (let [teardown! (:teardown @component)]
                      (teardown!))
@@ -225,19 +226,36 @@
            [:div.row
             [:div.col-sm-6
              [:label.small
-              (if (> @hide-below-count 1)
+              (if (> @states-hide-below 1)
                 (gstr/unescapeEntities
                  (str "Seen &ge; "
-                      @hide-below-count
+                      @states-hide-below
                       " times"))
                 "Showing all states")]]
             [:div.col-sm-6
              [:input {:type :range
                       :min 1
-                      :max 10
-                      :value @hide-below-count
+                      :max 12
+                      :value @states-hide-below
                       :on-change (fn [e]
-                                   (reset! hide-below-count
+                                   (reset! states-hide-below
+                                           (-> e .-target forms/getValue)))}]]]
+           [:div.row
+            [:div.col-sm-6
+             [:label.small
+              (if (> @conn-hide-below 1)
+                (gstr/unescapeEntities
+                 (str "&ge; "
+                      @conn-hide-below
+                      "-cell connections"))
+                "All connections")]]
+            [:div.col-sm-6
+             [:input {:type :range
+                      :min 1
+                      :max 12
+                      :value @conn-hide-below
+                      :on-change (fn [e]
+                                   (reset! conn-hide-below
                                            (-> e .-target forms/getValue)))}]]]
            [(:content @component)]
            [:button.btn.btn-warning.btn-block
@@ -279,9 +297,9 @@
          outlined in black."]
          [:li "When a matching state will be extended to include new
          cells, those are shown in green."]
-         [:li "If there are enough connected synapses from cells in
-         one state to cells in another, the transition is drawn as a
-         blue curve."]
+         [:li "Transitions are drawn as blue curves. Thickness
+         corresponds to the number of connected synapses, weighted by
+         specificity of both the source and target cells."]
          [:li "The height of a state corresponds to the (weighted)
          number of cells it represents."]
          [:li "The width of a state corresponds to the number of times
