@@ -219,7 +219,7 @@
                  {:on-click (fn [e]
                               (enable!)
                               (.preventDefault e))}
-            "Enable"]]
+            "Start from selected timestep"]]
           ;; enabled content
           [:div
            [:div.row
@@ -245,7 +245,7 @@
                          (disable!)
                          (.preventDefault e))}
             "Disable and reset"]])
-        [:p.muted.small "(Not enabled by default because it slows everything down.)"]
+        [:p.muted.small "Not enabled by default because it can be slow."]
         [:p "This shows the dynamics of a layer of cells as a state
         transition diagram. The \"states\" are in fact cell SDRs,
         i.e. sets of cells active together. They are fuzzy: cells may
@@ -264,7 +264,7 @@
         states, but this is only for display, it is not used to define
         states."]
         [:p "The display shows one layer at one point in
-         time. Select other layers to switch the display to them. Move
+         time. Select other layers to switch the display to them. Step
          back and forward in time as you wish."]
         [:h4 "Reading the diagram"]
         [:ul

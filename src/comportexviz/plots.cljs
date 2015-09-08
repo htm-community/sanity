@@ -481,6 +481,49 @@
                 label-counts)))
     (c/restore ctx)))
 
+(defn fetch-transitions-data
+  [sel cell-sdr-counts into-journal local-targets]
+  (when-let [[region layer] (sel/layer sel)]
+    (let [model-id (:model-id sel)
+          response-c (async/chan)]
+      (put! @into-journal [:get-transitions-data
+                           model-id region layer cell-sdr-counts
+                           (channel-proxy/register!
+                            local-targets response-c)])
+      response-c)))
+
+(defn calc-sdr-sizes
+  [cell-sdr-fracs]
+  (persistent!
+   (reduce (fn [m sdr-fracs]
+             (reduce-kv (fn [m sdr frac]
+                          (assoc! m sdr
+                                  (+ (get m sdr 0)
+                                     frac)))
+                        m
+                        sdr-fracs))
+           (transient {})
+           (vals cell-sdr-fracs))))
+
+(defn update-cell-sdrs-plot-data!
+  [plot-data states sel into-journal local-targets]
+  (when-let [[region layer] (sel/layer sel)]
+    (let [model-id (:model-id sel)]
+      (when-let [state* (get-in @states [model-id [region layer]])]
+        (let [state (assoc state* :title (str (name region) " " (name layer)))]
+          (if-not (:sdr-transitions state)
+           ;; request transitions new data
+           (go
+             ;; immediate update from local state while waiting:
+             (reset! plot-data state)
+             ;; another update when receive server data
+             (let [x (<! (fetch-transitions-data sel (:cell-sdr-counts state)
+                                                 into-journal local-targets))]
+               (swap! states assoc-in [model-id [region layer] :sdr-transitions] x)
+               (swap! plot-data assoc :sdr-transitions x)))
+           ;; otherwise - we have the data
+           (reset! plot-data state)))))))
+
 (defn sdr-votes
   [cells cell-sdr-fracs]
   (->> (map cell-sdr-fracs cells)
@@ -491,133 +534,118 @@
   (let [total (reduce + (vals freqs))]
     (util/remap #(/ % total) freqs)))
 
+(def empty-cell-sdrs-state
+  {:cell-sdr-counts {}
+   :sdr-label-counts {}
+   :sdr-sizes {}
+   :sdr-growth {}
+   :matching-sdrs {:learn {}
+                   :active {}
+                   :pred {}}
+   :threshold 0})
+
+(defn update-cell-sdrs-states!
+  [states step-template step prev-step into-journal local-targets]
+  (for [[region layer-map] (:regions @step-template)
+        layer (keys layer-map)
+        :let [response-c (async/chan)
+              model-id (:model-id step)]]
+    (go
+      (put! @into-journal [:get-cells-by-state model-id
+                           region layer
+                           (channel-proxy/register! local-targets
+                                                    response-c)])
+      (let [cells-by-state (<! response-c)
+            state (or (get-in @states [(:model-id prev-step) [region layer]])
+                      empty-cell-sdrs-state)
+            lc (:learn-cells cells-by-state)
+            ac (:active-cells cells-by-state)
+            pc (:pred-cells cells-by-state)
+            threshold (get-in @step-template [:regions region layer
+                                              :spec :seg-learn-threshold])
+            ;; for each cell, represents its specificity to each SDR
+            cell-sdr-fracs (->> (:cell-sdr-counts state)
+                                (util/remap freqs->fracs))
+            ac-sdrv (sdr-votes ac cell-sdr-fracs)
+            pc-sdrv (sdr-votes pc cell-sdr-fracs)
+            lc-sdrv (sdr-votes lc cell-sdr-fracs)
+            learn-sdrs* (keep (fn [[sdr vote]] (when (>= vote threshold) sdr))
+                              lc-sdrv)
+            new-sdr (when (empty? learn-sdrs*) (count (:sdr-label-counts state)))
+            learn-sdrs (if new-sdr [new-sdr] learn-sdrs*)
+            sdr-sizes (or (:updated-sdr-sizes state)
+                          (calc-sdr-sizes cell-sdr-fracs))
+            inc-learn-sdrs (partial merge-with +
+                                    (zipmap learn-sdrs (repeat 1)))
+            label (:label (:input-value step))
+            inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
+            new-state* (-> state
+                           (update :cell-sdr-counts
+                                   (fn [m]
+                                     (util/update-each (or m {}) lc
+                                                       inc-learn-sdrs)))
+                           (update :sdr-label-counts
+                                   (fn [m]
+                                     (reduce (fn [m learn-sdr]
+                                               (update m learn-sdr
+                                                       inc-label))
+                                             m
+                                             learn-sdrs)))
+                           (assoc :sdr-transitions nil ;; updated lazily
+                                  :matching-sdrs {:learn lc-sdrv
+                                                  :active ac-sdrv
+                                                  :pred pc-sdrv}
+                                  :sdr-sizes sdr-sizes
+                                  :threshold threshold))
+            new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
+                                               (util/remap freqs->fracs)))
+            sdr-growth (merge-with - (select-keys new-sdr-sizes learn-sdrs)
+                                   (select-keys sdr-sizes learn-sdrs))
+            new-state (cond-> (assoc new-state*
+                                     :updated-sdr-sizes new-sdr-sizes
+                                     :sdr-growth sdr-growth)
+                        new-sdr (assoc-in [:matching-sdrs :learn new-sdr]
+                                          (sdr-growth new-sdr)))]
+        (swap! states assoc-in [model-id [region layer]] new-state)))))
+
 (defn cell-sdrs-plot-builder
   [steps step-template selection into-journal local-targets hide-below-count]
-  (let [fetch-transitions-data
-        (fn [sel cell-sdr-counts]
-          (when-let [[region layer] (sel/layer sel)]
-            (let [model-id (:model-id sel)
-                  response-c (async/chan)]
-              (put! @into-journal [:get-transitions-data
-                                   model-id region layer cell-sdr-counts
-                                   (channel-proxy/register!
-                                    local-targets response-c)])
-              response-c)))
-        calc-sdr-sizes (fn [cell-sdr-fracs]
-                         (persistent!
-                          (reduce (fn [m sdr-fracs]
-                                    (reduce-kv (fn [m sdr frac]
-                                                 (assoc! m sdr
-                                                         (+ (get m sdr 0)
-                                                            frac)))
-                                               m
-                                               sdr-fracs))
-                                  (transient {})
-                                  (vals cell-sdr-fracs))))
-        empty-state {:cell-sdr-counts {}
-                     :sdr-label-counts {}
-                     :sdr-sizes {}
-                     :sdr-growth {}
-                     :matching-sdrs {:learn {}
-                                     :active {}
-                                     :pred {}}
-                     :threshold 0}
-        states (atom {})
-        plot-data (atom (assoc empty-state :title ""))]
-    (add-watch
-     steps ::update-sdrs-transitions-and-labels
-     (fn [_ _ _ [step prev-step]]
-       (when-let [model-id (:model-id step)]
-         (doseq [[region layer-map] (:regions @step-template)
-                 layer (keys layer-map)
-                 :let [response-c (async/chan)]]
-           (put! @into-journal [:get-cells-by-state model-id
-                                region layer
-                                (channel-proxy/register! local-targets
-                                                         response-c)])
-           (go
-             (let [cells-by-state (<! response-c)
-                   state (or (get-in @states [(:model-id prev-step) [region layer]])
-                             empty-state)
-                   lc (:learn-cells cells-by-state)
-                   ac (:active-cells cells-by-state)
-                   pc (:pred-cells cells-by-state)
-                   threshold (get-in @step-template [:regions region layer
-                                                     :spec :seg-learn-threshold])
-                   ;; for each cell, represents its specificity to each SDR
-                   cell-sdr-fracs (->> (:cell-sdr-counts state)
-                                       (util/remap freqs->fracs))
-                   ac-sdrv (sdr-votes ac cell-sdr-fracs)
-                   pc-sdrv (sdr-votes pc cell-sdr-fracs)
-                   lc-sdrv (sdr-votes lc cell-sdr-fracs)
-                   learn-sdrs* (keep (fn [[sdr vote]] (when (>= vote threshold) sdr))
-                                     lc-sdrv)
-                   new-sdr (when (empty? learn-sdrs*) (count (:sdr-label-counts state)))
-                   learn-sdrs (if new-sdr [new-sdr] learn-sdrs*)
-                   sdr-sizes (or (:updated-sdr-sizes state)
-                                 (calc-sdr-sizes cell-sdr-fracs))
-                   inc-learn-sdrs (partial merge-with +
-                                           (zipmap learn-sdrs (repeat 1)))
-                   label (:label (:input-value step))
-                   inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
-                   new-state* (-> state
-                                 (update :cell-sdr-counts
-                                         (fn [m]
-                                           (util/update-each (or m {}) lc
-                                                             inc-learn-sdrs)))
-                                 (update :sdr-label-counts
-                                         (fn [m]
-                                           (reduce (fn [m learn-sdr]
-                                                     (update m learn-sdr
-                                                             inc-label))
-                                                   m
-                                                   learn-sdrs)))
-                                 (assoc :matching-sdrs {:learn lc-sdrv
-                                                        :active ac-sdrv
-                                                        :pred pc-sdrv}
-                                        :sdr-sizes sdr-sizes
-                                        :threshold threshold))
-                   new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
-                                                      (util/remap freqs->fracs)))
-                   sdr-growth (merge-with - (select-keys new-sdr-sizes learn-sdrs)
-                                          (select-keys sdr-sizes learn-sdrs))
-                   new-state (cond-> (assoc new-state*
-                                            :updated-sdr-sizes new-sdr-sizes
-                                            :sdr-growth sdr-growth)
-                               new-sdr (assoc-in [:matching-sdrs :learn new-sdr]
-                                                 (sdr-growth new-sdr)))]
-               (swap! states assoc-in [model-id [region layer]]
-                      new-state)
-               (let [sel (first @selection)
-                     model-id (:model-id sel)]
-                 (when (= [region layer] (sel/layer sel))
-                   (go
-                     (let [x (<! (fetch-transitions-data sel (:cell-sdr-counts state)))]
-                       (swap! states assoc-in [model-id [region layer]
-                                               :sdr-transitions] x)
-                       (reset! plot-data
-                               (assoc new-state
-                                      :sdr-transitions x
-                                      :title (str (name region) " " (name layer))))))))
-               ))))))
+  (let [states (atom {})
+        plot-data (atom (assoc empty-cell-sdrs-state :title ""))]
+    (add-watch steps ::cell-sdrs-plot
+               (fn [_ _ _ [step prev-step]]
+                 (when (:model-id step)
+                   (let [procs (update-cell-sdrs-states! states step-template
+                                                         step prev-step
+                                                         into-journal local-targets)]
+                     (go
+                       ;; await update processes for all layers...
+                       (doseq [c procs] (<! c))
+                       ;; ...before refreshing plot
+                       (let [[sel] @selection]
+                         (update-cell-sdrs-plot-data! plot-data states sel
+                                                      into-journal local-targets))
+                       )))))
     (add-watch selection ::cell-sdrs-plot
                (fn [_ _ _ [sel]]
-                 (when-let [[region layer] (sel/layer sel)]
-                   (let [model-id (:model-id sel)
-                         state (-> (get-in @states [model-id [region layer]])
-                                   (assoc :title (str (name region) " " (name layer))))]
-                     (if-not (:transitions state)
-                       ;; request transitions new data
-                       (go
-                         ;; immediate update from local state while waiting:
-                         (reset! plot-data state)
-                         ;; another update when receive server data
-                         (let [x (<! (fetch-transitions-data sel (:cell-sdr-counts state)))]
-                           (swap! states assoc-in [model-id [region layer]
-                                                   :sdr-transitions] x)
-                           (swap! plot-data assoc :sdr-transitions x)))
-                       ;; otherwise - we have the data
-                       (reset! plot-data state))))))
+                 (update-cell-sdrs-plot-data! plot-data states sel
+                                              into-journal local-targets)))
+    ;; at build time, pull in existing steps starting from current selection
+    (let [[sel] @selection]
+      (when-let [model-id (:model-id sel)]
+        (let [to-ingest (->> (reverse @steps)
+                             (drop-while #(not= model-id (:model-id %))))]
+          (go
+            (doseq [[prev-step step] (partition 2 1 (cons nil to-ingest))]
+              (println "cell-sdrs plot ingesting" (:model-id step))
+              (let [procs (update-cell-sdrs-states! states step-template
+                                                    step prev-step
+                                                    into-journal local-targets)]
+                ;; await update processes before going on to next time step
+                (doseq [c procs] (<! c))))
+            ;; finally, redraw
+            (update-cell-sdrs-plot-data! plot-data states sel
+                                         into-journal local-targets)))))
     {:content
      (let [size-invalidates-c (async/chan)]
        (fn []
@@ -633,5 +661,5 @@
            size-invalidates-c]]))
      :teardown
      (fn []
-       (remove-watch steps ::update-sdrs-transitions-and-labels)
+       (remove-watch steps ::cell-sdrs-plot)
        (remove-watch selection ::cell-sdrs-plot))}))
