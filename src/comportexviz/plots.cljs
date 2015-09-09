@@ -8,6 +8,7 @@
             [comportexviz.selection :as sel]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
+            [tailrecursion.priority-map :refer [priority-map]]
             [clojure.string :as str]
             [goog.dom :as dom]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -345,20 +346,25 @@
 
 (defn draw-cell-sdrs-plot!
   [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
-               threshold title]}
-   states-hide-below conn-hide-below]
+               sdr-last-matches timestep threshold title]}
+   {:keys [hide-states-older hide-states-rarer hide-conns-smaller]}]
   (let [lc-sdrv (:learn sdr-votes)
         ac-sdrv (:active sdr-votes)
         pc-sdrv (:pred sdr-votes)
-        sdr-label-counts* (if (> states-hide-below 1)
-                            (into {} (filter (fn [[sdr label-counts]]
-                                               (or (lc-sdrv sdr)
-                                                   (>= (reduce + (vals label-counts))
-                                                       states-hide-below))))
-                                  sdr-label-counts)
-                            sdr-label-counts)
+        kept-sdrs (->> (subseq sdr-last-matches >= (- timestep hide-states-older))
+                       (into
+                        #{}
+                        (comp (map key)
+                              (if (> hide-states-rarer 1)
+                                (filter (fn [sdr]
+                                          (or (lc-sdrv sdr)
+                                              (let [label-counts (sdr-label-counts sdr)]
+                                                (>= (reduce + (vals label-counts))
+                                                    hide-states-rarer)))))
+                                identity))))
+        sdr-label-counts* (select-keys sdr-label-counts kept-sdrs)
         gap threshold
-        [sdr-ordinate y-max] (loop [sdrs (sort (keys sdr-label-counts*))
+        [sdr-ordinate y-max] (loop [sdrs (sort kept-sdrs)
                                     m {}
                                     offset 0]
                                (if-let [sdr (first sdrs)]
@@ -401,11 +407,11 @@
     ;; draw transitions
     (c/stroke-style ctx "hsl(210,50%,50%)")
     (doseq [[from-sdr to-sdrs-counts] sdr-transitions
-            :when (contains? sdr-label-counts* from-sdr)
+            :when (contains? kept-sdrs from-sdr)
             :let [from-y (* y-scale (sdr-ordinate from-sdr))]
             [to-sdr to-sdr-count] to-sdrs-counts
-            :when (contains? sdr-label-counts* to-sdr)
-            :when (>= to-sdr-count conn-hide-below)
+            :when (contains? kept-sdrs to-sdr)
+            :when (>= to-sdr-count hide-conns-smaller)
             :let [to-y (* y-scale (sdr-ordinate to-sdr))
                   mid-y (/ (+ to-y from-y) 2)
                   off-x (* 1.0 width-px
@@ -551,6 +557,8 @@
                :active {}
                :pred {}}
    :sdr-transitions nil
+   :sdr-last-matches (priority-map)
+   :timestep 0
    :threshold 0})
 
 (defn update-cell-sdrs-states!
@@ -588,11 +596,11 @@
                                     (zipmap learn-sdrs (repeat 1)))
             label (:label (:input-value step))
             inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
+            t (:timestep step)
             new-state* (-> state
                            (update :cell-sdr-counts
                                    (fn [m]
-                                     (util/update-each (or m {}) lc
-                                                       inc-learn-sdrs)))
+                                     (util/update-each m lc inc-learn-sdrs)))
                            (update :sdr-label-counts
                                    (fn [m]
                                      (reduce (fn [m learn-sdr]
@@ -600,11 +608,15 @@
                                                        inc-label))
                                              m
                                              learn-sdrs)))
+                           (update :sdr-last-matches
+                                   (fn [m]
+                                     (merge m (zipmap learn-sdrs (repeat t)))))
                            (assoc :sdr-transitions nil ;; updated lazily
                                   :sdr-votes {:learn lc-sdrv
                                               :active ac-sdrv
                                               :pred pc-sdrv}
                                   :sdr-sizes sdr-sizes
+                                  :timestep t
                                   :threshold threshold))
             new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
                                                (util/remap freqs->fracs)))
@@ -618,7 +630,7 @@
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
 (defn cell-sdrs-plot-builder
-  [steps step-template selection into-journal local-targets states-hide-below conn-hide-below]
+  [steps step-template selection into-journal local-targets plot-opts]
   (let [states (atom {})
         plot-data (atom (assoc empty-cell-sdrs-state :title ""))]
     (add-watch steps ::cell-sdrs-plot
@@ -644,14 +656,15 @@
       (when-let [model-id (:model-id sel)]
         (let [to-ingest (->> (reverse @steps)
                              (drop-while #(not= model-id (:model-id %))))]
+          (println "cell-sdrs ingest start from" (:model-id (first to-ingest)) "...")
           (go
             (doseq [[prev-step step] (partition 2 1 (cons nil to-ingest))]
-              (println "cell-sdrs plot ingesting" (:model-id step))
               (let [procs (update-cell-sdrs-states! states step-template
                                                     step prev-step
                                                     into-journal local-targets)]
                 ;; await update processes before going on to next time step
                 (doseq [c procs] (<! c))))
+            (println "cell-sdrs ingest done at" (:model-id (last to-ingest)))
             ;; finally, redraw
             (update-cell-sdrs-plot-data! plot-data states sel
                                          into-journal local-targets)))))
@@ -664,10 +677,9 @@
            {:style {:width "100%"
                     :height "100vh"}}
            [plot-data
-            states-hide-below
-            conn-hide-below]
+            plot-opts]
            (fn [ctx]
-             (draw-cell-sdrs-plot! ctx @plot-data @states-hide-below @conn-hide-below))
+             (draw-cell-sdrs-plot! ctx @plot-data @plot-opts))
            size-invalidates-c]]))
      :teardown
      (fn []

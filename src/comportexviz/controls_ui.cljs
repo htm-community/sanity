@@ -191,17 +191,67 @@
          [plots/cell-excitation-plot-cmp step-template selection series-colors
           region-key layer-id into-journal local-targets]]))]])
 
+(def default-cell-sdrs-plot-options
+  {:hide-states-older 100
+   :hide-states-rarer 1
+   :hide-conns-smaller 5})
+
+(def cell-sdrs-plot-dt-limit 300)
+
+(def cell-sdrs-plot-options-template
+  [:div
+   [:div.row
+    [:div.col-sm-6
+     [:label.small {:field :label
+                    :id :hide-states-older
+                    :preamble (gstr/unescapeEntities "Seen &le; ")
+                    :postamble " steps ago"}]
+     ]
+    [:div.col-sm-6
+     [:input {:field :range
+              :min 5
+              :max cell-sdrs-plot-dt-limit
+              :step 5
+              :id :hide-states-older}]]
+    ]
+   [:div.row
+    [:div.col-sm-6
+     [:label.small {:field :label
+                    :id :hide-states-rarer
+                    :preamble (gstr/unescapeEntities "Seen &ge; ")
+                    :postamble " times"}]
+     ]
+    [:div.col-sm-6
+     [:input {:field :range
+              :min 1
+              :max 16
+              :id :hide-states-rarer}]]
+    ]
+   [:div.row
+    [:div.col-sm-6
+     [:label.small {:field :label
+                    :id :hide-conns-smaller
+                    :preamble (gstr/unescapeEntities "&ge; ")
+                    :postamble "-cell connections"}]
+     ]
+    [:div.col-sm-6
+     [:input {:field :range
+              :min 1
+              :max 16
+              :id :hide-conns-smaller}]]
+    ]
+   ])
+
 (defn cell-sdrs-tab-builder
   [steps step-template selection into-journal local-targets]
-  (let [states-hide-below (atom 1)
-        conn-hide-below (atom 5)
+  (let [plot-opts (atom default-cell-sdrs-plot-options)
         component (atom nil)
         enable! (fn []
                   (reset!
                    component
                    (plots/cell-sdrs-plot-builder steps step-template selection
                                                  into-journal local-targets
-                                                 states-hide-below conn-hide-below)))
+                                                 plot-opts)))
         disable! (fn []
                    (let [teardown! (:teardown @component)]
                      (teardown!))
@@ -211,7 +261,8 @@
       [:div
        [:p.text-muted "Cell "
         [:abbr {:title "Sparse Distributed Representations"} "SDRs"]
-        " and their transitions. Labelled with inputs for interpretability."]
+        " on a state transition diagram. Labels are corresponding
+        inputs."]
        [:div
         (if-not @component
           ;; placeholder
@@ -223,40 +274,7 @@
             "Start from selected timestep"]]
           ;; enabled content
           [:div
-           [:div.row
-            [:div.col-sm-6
-             [:label.small
-              (if (> @states-hide-below 1)
-                (gstr/unescapeEntities
-                 (str "Seen &ge; "
-                      @states-hide-below
-                      " times"))
-                "Showing all states")]]
-            [:div.col-sm-6
-             [:input {:type :range
-                      :min 1
-                      :max 12
-                      :value @states-hide-below
-                      :on-change (fn [e]
-                                   (reset! states-hide-below
-                                           (-> e .-target forms/getValue)))}]]]
-           [:div.row
-            [:div.col-sm-6
-             [:label.small
-              (if (> @conn-hide-below 1)
-                (gstr/unescapeEntities
-                 (str "&ge; "
-                      @conn-hide-below
-                      "-cell connections"))
-                "All connections")]]
-            [:div.col-sm-6
-             [:input {:type :range
-                      :min 1
-                      :max 12
-                      :value @conn-hide-below
-                      :on-change (fn [e]
-                                   (reset! conn-hide-below
-                                           (-> e .-target forms/getValue)))}]]]
+           [bind-fields cell-sdrs-plot-options-template plot-opts]
            [(:content @component)]
            [:button.btn.btn-warning.btn-block
             {:on-click (fn [e]
