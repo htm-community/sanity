@@ -22,7 +22,8 @@
 (def world-buffer (async/buffer 5000))
 (def world-c
   (async/chan world-buffer
-              (map (util/keep-history-middleware 300 :value :history))))
+              (comp (map (util/keep-history-middleware 300 :value :history))
+                    (map #(assoc % :label (:value %))))))
 
 (def into-sim
   (atom nil))
