@@ -79,7 +79,8 @@ fox eat something.
 (def world-buffer (async/buffer 5000))
 (def world-c
   (async/chan world-buffer
-              (map (util/keep-history-middleware 100 :word :history))))
+              (comp (map (util/keep-history-middleware 100 :word :history))
+                    (map #(assoc % :label (:word %))))))
 
 (def into-sim
   (atom nil))

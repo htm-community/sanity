@@ -21,7 +21,7 @@
 
 (def world-c
   (async/chan (async/buffer 1)
-              (map (fn [m] (assoc m :label (:value m))))))
+              (map #(assoc % :label (:value %)))))
 
 (def control-c (async/chan))
 

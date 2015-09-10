@@ -22,7 +22,8 @@
          :world-buffer-count 0}))
 
 (def world-buffer (async/buffer 5000))
-(def world-c (async/chan world-buffer))
+(def world-c
+  (async/chan world-buffer (map #(assoc % :label (:value %)))))
 
 (def into-sim
   (atom nil))

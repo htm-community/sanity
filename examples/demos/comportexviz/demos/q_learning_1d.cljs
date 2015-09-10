@@ -22,7 +22,8 @@
 
 (def world-c
   (async/chan (async/buffer 1)
-              (map (util/frequencies-middleware :x :freqs))))
+              (comp (map (util/frequencies-middleware :x :freqs))
+                    (map #(assoc % :label (:x %))))))
 
 (def into-sim
   (atom nil))

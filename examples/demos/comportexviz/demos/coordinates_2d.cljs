@@ -18,11 +18,17 @@
 (def config
   (atom {:n-regions 1}))
 
+(defn quadrant
+  [inval]
+  (str (if (pos? (:y inval)) "S" "N")
+       (if (pos? (:x inval)) "E" "W")))
+
 (def world-c
   (async/chan (async/buffer 1)
-              (map (util/keep-history-middleware
-                    50 #(select-keys % [:x :y :vx :vy])
-                    :history))))
+              (comp (map (util/keep-history-middleware
+                          50 #(select-keys % [:x :y :vx :vy])
+                          :history))
+                    (map #(assoc % :label (quadrant %))))))
 
 (def into-sim
   (atom nil))

@@ -22,7 +22,8 @@
   (atom {:n-regions 1}))
 
 (def world-c
-  (async/chan (async/buffer 1)))
+  (async/chan (async/buffer 1)
+              (map #(assoc % :label [(:x %) (:y %)]))))
 
 (def into-sim
   (atom nil))
