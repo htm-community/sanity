@@ -134,8 +134,8 @@ fox eat something.
    :ff-max-segments 5})
 
 (defn load-predictions
-  [in-value htm n-predictions predictions-cache]
-  (let [e (first (vals (:encoders htm)))
+  [htm n-predictions predictions-cache]
+  (let [[_ e] (first (vals (:sensors htm)))
         rgn (first (core/region-seq htm))
         pr-votes (core/predicted-bit-votes rgn)
         predictions (p/decode e pr-votes n-predictions)]
@@ -166,11 +166,11 @@ fox eat something.
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (:input-value step)]
+          (let [inval (:input-value step)]
             [:div
              [:p.muted [:small "Input on selected timestep."]]
              [:div {:style {:min-height "40vh"}}
-              (helpers/text-world-input-component in-value htm max-shown
+              (helpers/text-world-input-component inval htm max-shown
                                                   scroll-every " ")]
              [:div
               [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
@@ -180,7 +180,7 @@ fox eat something.
                "Compute predictions"]]
              (when @show-predictions
                (if-let [predictions (or (get @predictions-cache htm)
-                                        (load-predictions in-value htm 8 predictions-cache))]
+                                        (load-predictions htm 8 predictions-cache))]
                  (helpers/predictions-table predictions)
                  ;; not cached and not returned immediately
                  [:p.text-info "Loading predictions..."]))]))))))

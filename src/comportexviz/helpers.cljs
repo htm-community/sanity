@@ -37,10 +37,10 @@
      (f))))
 
 (defn text-world-input-component
-  [in-value htm max-shown scroll-every separator]
+  [inval htm max-shown scroll-every separator]
   (let [time (p/timestep htm)
         show-n (- max-shown (mod (- max-shown time) scroll-every))
-        history (->> (:history (meta in-value))
+        history (->> (:history (meta inval))
                      (take-last show-n))]
     [:p
      (for [[i word] (map-indexed vector history)
@@ -72,7 +72,7 @@
      ]]])
 
 (defn text-world-predictions-component
-  [in-value htm n-predictions]
+  [htm n-predictions]
   (let [[_ e] (first (vals (:sensors htm)))
         rgn (first (core/region-seq htm))
         pr-votes (core/predicted-bit-votes rgn)

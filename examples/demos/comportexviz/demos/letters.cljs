@@ -68,11 +68,11 @@ Chifung has a friend."))
     (fn []
       (when-let [step (main/selected-step)]
         (when-let [htm @selected-htm]
-          (let [in-value (:input-value step)]
+          (let [inval (:input-value step)]
             [:div
              [:p.muted [:small "Input on selected timestep."]]
              [:div {:style {:min-height "40vh"}}
-              (helpers/text-world-input-component in-value htm max-shown scroll-every "")]
+              (helpers/text-world-input-component inval htm max-shown scroll-every "")]
              [:div.checkbox
               [:label [:input {:type :checkbox
                                :checked (when @show-predictions true)
@@ -81,7 +81,7 @@ Chifung has a friend."))
                                             (.preventDefault e))}]
                "Compute predictions"]]
              (when @show-predictions
-               (helpers/text-world-predictions-component in-value htm 8))]))))))
+               (helpers/text-world-predictions-component htm 8))]))))))
 
 (defn set-model!
   []
