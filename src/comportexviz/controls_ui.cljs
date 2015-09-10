@@ -125,11 +125,14 @@
                  [:button.btn.btn-warning.btn-block
 
                   (if @into-sim
-                    {:on-click #(let [finished (async/chan)]
-                                  (put! @into-sim
-                                        [:restart (channel-proxy/register!
-                                                   local-targets finished)])
-                                  (helpers/ui-loading-message-until finished))}
+                    {:on-click #(helpers/ui-loading-message-until
+                                 (go
+                                   (<! (async/timeout 100))
+                                   (let [finished (async/chan)]
+                                     (put! @into-sim
+                                           [:restart (channel-proxy/register!
+                                                      local-targets finished)])
+                                     (<! finished))))}
                     {:disabled "disabled"})
                   "Rebuild model"]
                  [:p.small "This will not reset, or otherwise alter, the input stream."]]
