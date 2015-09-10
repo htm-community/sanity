@@ -77,7 +77,7 @@
               :step (swap! options update :force-n-steps inc)
               :set-spec (let [[path v] xs]
                           (swap! model assoc-in path v))
-              :restart (let [[result response-c] xs]
+              :restart (let [[response-c] xs]
                          (swap! model p/restart)
                          (put! response-c :done))
               :toggle (->> (swap! options update :go? not)

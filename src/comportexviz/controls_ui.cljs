@@ -39,19 +39,18 @@
   [step-template _ into-sim _]
 
   (add-watch step-template ::push-to-server
-             (fn [_ _ oldv newv]
-               (when-not (nil? oldv) ;; don't push when getting initial template
-                 (fn [_ _ prev-st st]
-                   (assert @into-sim)
-                   (doseq [path (for [[r-id rgn] (:regions st)
-                                      l-id (keys rgn)]
-                                  [:regions r-id l-id :spec])
-                           :let [old-spec (get-in prev-st path)
-                                 new-spec (get-in st path)]]
-                     (when (not= old-spec new-spec)
-                       (put! @into-sim [:set-spec path new-spec])))))))
+             (fn [_ _ prev-st st]
+               (when-not (nil? prev-st) ;; don't push when getting initial template
+                 (assert @into-sim)
+                 (doseq [path (for [[r-id rgn] (:regions st)
+                                    l-id (keys rgn)]
+                                [:regions r-id l-id :spec])
+                         :let [old-spec (get-in prev-st path)
+                               new-spec (get-in st path)]]
+                   (when (not= old-spec new-spec)
+                     (put! @into-sim [:set-spec path new-spec]))))))
 
-  (let [partypes (cljs.core/atom {})] ;; immutable cache
+  (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [step-template selection into-sim local-targets]
       (let [[sel-region sel-layer] (some sel/layer @selection)]
         [:div

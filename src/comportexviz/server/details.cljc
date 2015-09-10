@@ -47,7 +47,7 @@
       "__TP excitation__"
       (str (sort (:temporal-pooling-exc (:state lyr))))
       ""
-      (if col
+      (if (and col prior-htm)
         (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
               p-prox-sg (:proximal-sg p-lyr)
               p-distal-sg (:distal-sg p-lyr)
