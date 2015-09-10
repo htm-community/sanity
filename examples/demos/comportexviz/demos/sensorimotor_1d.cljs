@@ -11,8 +11,9 @@
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
-            [cljs.core.async :as async])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+            [cljs.core.async :as async :refer [put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1
@@ -225,4 +226,6 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (set-model!))
+  (go
+    (<! (set-model!))
+    (put! @into-sim [:run])))

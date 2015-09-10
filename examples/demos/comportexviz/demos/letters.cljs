@@ -176,4 +176,6 @@ Chifung has a friend."))
   []
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (set-model!))
+  (go
+    (<! (set-model!))
+    (put! @into-sim [:run])))

@@ -20,24 +20,21 @@
 (defn- hide [el]
   (goog.dom.classes/remove el "show"))
 
-(defn with-ui-loading-message
-  [f]
-  (let [el (loading-message-element)]
-     (show el)
-     ;; need a timeout to allow redraw to show loading message
-     (js/setTimeout (fn []
-                      (try
-                        (f)
-                        (finally
-                          (hide el))))
-                    100)))
-
 (defn ui-loading-message-until
   [finished-c]
   (let [el (loading-message-element)]
     (show el)
-    (go (<! finished-c)
-        (hide el))))
+    (go (let [x (<! finished-c)]
+          (hide el)
+          x))))
+
+(defn with-ui-loading-message
+  [f]
+  (ui-loading-message-until
+   (go
+     ;; need a timeout to allow redraw to show loading message
+     (<! (async/timeout 100))
+     (f))))
 
 (defn text-world-input-component
   [in-value htm max-shown scroll-every separator]
