@@ -1061,8 +1061,8 @@
                                                   :model-id (:model-id
                                                              (nth @steps dt)))))))
           :step-forward (if (some #(zero? (:dt %)) @selection)
-                          (when (and into-sim @into-sim)
-                            (put! @into-sim [:step]))
+                          (when (and @step-template into-sim)
+                            (put! into-sim [:step]))
                           (swap! selection
                                  #(conj (pop %)
                                         (let [sel1 (peek %)
@@ -1109,8 +1109,8 @@
                                   (grid-layout-paths @viz-layouts)
                                   (map :path @selection))
                                 false))
-          :toggle-run (when (and into-sim @into-sim)
-                        (put! @into-sim [:toggle])))
+          :toggle-run (when (and @step-template into-sim)
+                        (put! into-sim [:toggle])))
         (recur)))
 
     (reagent/create-class
