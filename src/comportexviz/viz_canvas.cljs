@@ -754,7 +754,8 @@
                                 break?]}] rgn-data
                 :let [uniqix (str (name rgn-id) (name lyr-id))
                       lay (get-in r-lays [rgn-id lyr-id])
-                      lay-cache (::cache (meta lay))]]
+                      lay-cache (::cache (meta lay))]
+                :when lay]
           (->> (bg-image lay)
                (with-cache lay-cache [::bg uniqix] opts #{:drawing})
                (draw-image-dt ctx lay dt))
@@ -918,10 +919,10 @@
               (go
                 (swap! ff-synapses-response assoc-in
                        [:in-synapses sel1] (<! response-c)))
-              (put! @into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
-                                   only-ids viewport-token
-                                   (channel-proxy/register! local-targets
-                                                            response-c)])
+              (put! into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
+                                  only-ids viewport-token
+                                  (channel-proxy/register! local-targets
+                                                           response-c)])
               true))))
       ;; out-synapses
       (when bit
@@ -930,10 +931,10 @@
             (go
               (swap! ff-synapses-response assoc-in
                      [:out-synapses sel1] (<! response-c)))
-            (put! @into-journal [:get-ff-out-synapses model-id sense-id bit
-                                 viewport-token
-                                 (channel-proxy/register! local-targets
-                                                          response-c)])
+            (put! into-journal [:get-ff-out-synapses model-id sense-id bit
+                                viewport-token
+                                (channel-proxy/register! local-targets
+                                                         response-c)])
             true))))))
 
 (defn fetch-cells-segments!
@@ -948,7 +949,7 @@
                          ;; dt may be outdated at this point
                          (reset! cells-segs-response [(dissoc sel1 :dt)
                                                       (<! response-c)]))
-                       (put! @into-journal
+                       (put! into-journal
                              [:get-cells-segments model-id rgn-id lyr-id bit
                               cell-seg viewport-token
                               (channel-proxy/register! local-targets
@@ -961,9 +962,9 @@
   (doseq [step steps
           :let [model-id (:model-id step)
                 response-c (async/chan)]]
-    (put! @into-journal [:get-inbits-cols model-id viewport-token
-                         (channel-proxy/register! local-targets
-                                                  response-c)])
+    (put! into-journal [:get-inbits-cols model-id viewport-token
+                        (channel-proxy/register! local-targets
+                                                 response-c)])
     (go
       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
 
@@ -976,8 +977,8 @@
                                         (map lay/ids-onscreen)))
         viewport [opts path->ids-onscreen]
         response-c (async/chan)]
-    (put! @into-journal [:register-viewport viewport
-                         (channel-proxy/register! local-targets response-c)])
+    (put! into-journal [:register-viewport viewport
+                        (channel-proxy/register! local-targets response-c)])
     (go
       (reset! viewport-token (<! response-c)))))
 
@@ -1142,17 +1143,16 @@
                                             @selection @viewport-token
                                             local-targets)
                      (when old-token
-                       (put! @into-journal [:unregister-viewport old-token]))))
+                       (put! into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
                    (fn viewport<-opts [_ _ _ opts]
-                     (when (and @into-journal @viz-layouts)
+                     (when @viz-layouts
                        (push-new-viewport! into-journal viewport-token
                                            @viz-layouts opts
                                            local-targets))))
         (add-watch viz-layouts ::viewport
                    (fn viewport<-layouts [_ _ prev layouts]
-                     (when (and @into-journal
-                                prev
+                     (when (and prev
                                 (ids-onscreen-changed? prev layouts))
                        (push-new-viewport! into-journal viewport-token
                                            layouts @viz-options
@@ -1240,11 +1240,10 @@
                            (+ bottom lay/extra-px-for-highlight))
                          0)]
           [canvas
-           (cond-> props
-             @into-journal (assoc
-                            :on-click #(viz-click % @steps selection
-                                                  @viz-layouts)
-                            :on-key-down #(viz-key-down % into-viz)))
+           (assoc props
+                  :on-click #(viz-click % @steps selection
+                                        @viz-layouts)
+                  :on-key-down #(viz-key-down % into-viz))
            width height
            [selection steps steps-data ff-synapses-response
             cells-segs-response viz-layouts viz-options]

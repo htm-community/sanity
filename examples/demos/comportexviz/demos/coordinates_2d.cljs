@@ -6,6 +6,7 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -30,8 +31,9 @@
                           :history))
                     (map #(assoc % :label (quadrant %))))))
 
-(def into-sim
-  (atom nil))
+(def model (atom nil))
+
+(def into-sim (async/chan))
 
 (def control-c (async/chan))
 
@@ -134,13 +136,14 @@
 
 (defn set-model!
   []
-  (utilv/close-and-reset! into-sim (async/chan))
-  (utilv/close-and-reset! main/into-journal (async/chan))
   (with-ui-loading-message
-    (server/init (demo/n-region-model (:n-regions @config))
-                 world-c
-                 @main/into-journal
-                 @into-sim)))
+    (let [init? (nil? @model)]
+      (reset! model (demo/n-region-model (:n-regions @config)))
+      (if init?
+        (server/init model world-c main/into-journal into-sim)
+        (reset! main/step-template (data/step-template-data @model)))
+      (when init?
+        (feed-world!)))))
 
 (def config-template
   [:div.form-horizontal
@@ -194,8 +197,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane (atom into-sim)]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (feed-world!)
   (set-model!))

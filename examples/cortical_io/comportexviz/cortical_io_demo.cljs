@@ -10,6 +10,7 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -82,11 +83,9 @@ fox eat something.
               (comp (map (util/keep-history-middleware 100 :word :history))
                     (map #(assoc % :label (:word %))))))
 
-(def into-sim
-  (atom nil))
+(def into-sim (async/chan))
 
-(def model
-  (atom nil))
+(def model (atom nil))
 
 (add-watch model ::count-world-buffer
            (fn [_ _ _ _]
@@ -161,7 +160,7 @@ fox eat something.
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! @main/into-journal [:get-model model-id out-c])
+                     (put! main/into-journal [:get-model model-id out-c])
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
@@ -227,32 +226,28 @@ fox eat something.
 
 (defn set-model!
   []
-  (utilv/close-and-reset! into-sim (async/chan))
-  (utilv/close-and-reset! main/into-journal (async/chan))
-  (put! @into-sim [:run])
-
-  (let [n-regions (:n-regions @config)
-        spec (case (:spec-choice @config)
-               :a spec-global
-               :b spec-local)
-        e (case (:encoder @config)
-            :cortical-io
-            (cortical-io-encoder (:api-key @config) fingerprint-cache
-                                 :decode-locally? (:decode-locally? @config)
-                                 :spatial-scramble? (:spatial-scramble? @config))
-            :random
-            (enc/unique-encoder cio/retina-dim
-                                (apply * 0.02 cio/retina-dim)))
-        sensor [:word e]]
-    (with-ui-loading-message
+  (with-ui-loading-message
+    (let [n-regions (:n-regions @config)
+          spec (case (:spec-choice @config)
+                 :a spec-global
+                 :b spec-local)
+          e (case (:encoder @config)
+              :cortical-io
+              (cortical-io-encoder (:api-key @config) fingerprint-cache
+                                   :decode-locally? (:decode-locally? @config)
+                                   :spatial-scramble? (:spatial-scramble? @config))
+              :random
+              (enc/unique-encoder cio/retina-dim
+                                  (apply * 0.02 cio/retina-dim)))
+          sensor [:word e]
+          init? (nil? @model)]
       (reset! model (core/regions-in-series
                      n-regions core/sensory-region
                      (list* spec (repeat (merge spec higher-level-spec-diff)))
                      {:input sensor}))
-      (server/init model
-                   world-c
-                   @main/into-journal
-                   @into-sim)
+      (if init?
+        (server/init model world-c main/into-journal into-sim)
+        (reset! main/step-template (data/step-template-data @model)))
       (swap! config assoc :have-model? true))))
 
 (def config-template
@@ -361,6 +356,7 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane (atom into-sim)]
                   (dom/getElement "comportexviz-app"))
-  (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d))
+  (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
+  (put! into-sim [:run]))

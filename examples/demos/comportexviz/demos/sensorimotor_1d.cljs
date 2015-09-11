@@ -5,6 +5,7 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -25,11 +26,9 @@
 (def world-c
   (async/chan world-buffer (map #(assoc % :label (:value %)))))
 
-(def into-sim
-  (atom nil))
+(def into-sim (async/chan))
 
-(def model
-  (atom nil))
+(def model (atom nil))
 
 (add-watch model ::count-world-buffer
            (fn [_ _ _ _]
@@ -161,15 +160,12 @@
 
 (defn set-model!
   []
-  (utilv/close-and-reset! into-sim (async/chan))
-  (utilv/close-and-reset! main/into-journal (async/chan))
-
   (with-ui-loading-message
-    (reset! model (demo/n-region-model (:n-regions @config)))
-    (server/init model
-                 world-c
-                 @main/into-journal
-                 @into-sim)))
+    (let [init? (nil? @model)]
+      (reset! model (demo/n-region-model (:n-regions @config)))
+      (if init?
+        (server/init model world-c main/into-journal into-sim)
+        (reset! main/step-template (data/step-template-data @model))))))
 
 (def config-template
   [:div
@@ -225,8 +221,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app model-tab world-pane (atom into-sim)]
                   (dom/getElement "comportexviz-app"))
-  (go
-    (<! (set-model!))
-    (put! @into-sim [:run])))
+  (put! into-sim [:run])
+  (set-model!))

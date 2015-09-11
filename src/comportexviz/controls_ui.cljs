@@ -146,9 +146,9 @@
 (defn gather-col-state-history!
   [col-state-history step into-journal local-targets]
   (let [response-c (async/chan)]
-    (put! @into-journal [:get-column-state-freqs
-                         (:model-id step)
-                         (channel-proxy/register! local-targets response-c)])
+    (put! into-journal [:get-column-state-freqs
+                        (:model-id step)
+                        (channel-proxy/register! local-targets response-c)])
     (go
       (let [r (<! response-c)]
         (swap! col-state-history
@@ -333,9 +333,9 @@
         [rgn-id lyr-id] (sel/layer sel1)]
     (when (and bit lyr-id)
       (let [response-c (async/chan)]
-        (put! @into-journal [:get-details-text model-id rgn-id lyr-id bit
-                             (channel-proxy/register! local-targets
-                                                      response-c)])
+        (put! into-journal [:get-details-text model-id rgn-id lyr-id bit
+                            (channel-proxy/register! local-targets
+                                                     response-c)])
         (go
           (reset! text-response (<! response-c)))))))
 
@@ -371,7 +371,7 @@
            [:button.btn.btn-warning.btn-block
             (cond-> {:on-click (fn [e]
                                  (let [response-c (async/chan)]
-                                   (put! @into-journal
+                                   (put! into-journal
                                          [:get-model model-id
                                           (channel-proxy/register! local-targets
                                                                    response-c)
