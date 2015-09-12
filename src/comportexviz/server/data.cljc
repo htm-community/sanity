@@ -43,12 +43,20 @@
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
         do-predictive? (get-in opts [:ff-synapses :predicted])
         do-perm? (get-in opts [:ff-synapses :permanences])
+        adjusted-bit (->> (:senses htm)
+                          (take-while (fn [[id sense]]
+                                        (not= id sense-id)))
+                          (map (fn [[id sense]]
+                                 sense))
+                          (map p/ff-topology)
+                          (map p/size)
+                          (reduce + bit))
         [rgn-id] (core/region-keys htm)
         rgn (get-in htm [:regions rgn-id])
         [lyr-id] (core/layers rgn)
         lyr (get rgn lyr-id)
         sg (:proximal-sg lyr)
-        to-segs (p/targets-connected-from sg bit)
+        to-segs (p/targets-connected-from sg adjusted-bit)
         active-columns (p/active-columns lyr)
         predictive-columns (->> (p/prior-predictive-cells lyr)
                                 (map first)
@@ -61,7 +69,7 @@
            :when (or do-inactive?
                      (and do-predictive? predictive?)
                      active?)
-           :let [perm (get (p/in-synapses sg seg-path) bit)]]
+           :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
        [[rgn-id lyr-id col] [(cond-> {:src-id sense-id
                                       :src-col bit
                                       :syn-state (cond
@@ -73,7 +81,7 @@
                                                    :else :inactive-syn)}
                                do-perm? (assoc :perm
                                                (get (p/in-synapses sg seg-path)
-                                                    bit)))]]))))
+                                                    adjusted-bit)))]]))))
 
 (defn ff-in-synapses-data
   [htm rgn-id lyr-id only-ids opts]
