@@ -8,12 +8,6 @@
     (async/tap mult c)
     c))
 
-(defn close-and-reset! [chan-atom v]
-  (swap! chan-atom (fn [c]
-                     (when c
-                       (async/close! c))
-                     v)))
-
 (defn index-of
   [coll pred]
   (first (->> coll
