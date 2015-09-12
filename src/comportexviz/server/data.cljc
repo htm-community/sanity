@@ -38,19 +38,26 @@
           0
           (range depth)))
 
+(defn sense-range [htm sense-id]
+  (let [senses (:senses htm)
+        base (->> senses
+                  (take-while (fn [[id sense]]
+                                (not= id sense-id)))
+                  (map (fn [[id sense]]
+                         sense))
+                  (map p/ff-topology)
+                  (map p/size)
+                  (reduce + 0))
+        size (-> senses (get sense-id) p/ff-topology p/size)]
+    [base (+ base size)]))
+
 (defn ff-out-synapses-data
   [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
         do-predictive? (get-in opts [:ff-synapses :predicted])
         do-perm? (get-in opts [:ff-synapses :permanences])
-        adjusted-bit (->> (:senses htm)
-                          (take-while (fn [[id sense]]
-                                        (not= id sense-id)))
-                          (map (fn [[id sense]]
-                                 sense))
-                          (map p/ff-topology)
-                          (map p/size)
-                          (reduce + bit))
+        [base _] (sense-range htm sense-id)
+        adjusted-bit (+ base bit)
         [rgn-id] (core/region-keys htm)
         rgn (get-in htm [:regions rgn-id])
         [lyr-id] (core/layers rgn)
@@ -310,7 +317,6 @@
                         sense (get-in htm [:senses sense-id])
                         ;; region this sense feeds to, for predictions
                         ff-rgn-id (first (get-in htm [:fb-deps sense-id]))
-                        ;; TODO offset if multiple senses feeding to region
                         prev-ff-rgn (when (pos? (p/size (p/ff-topology sense)))
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
               [sense-id (cond-> {}
@@ -319,10 +325,15 @@
 
                           (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
                           (assoc :pred-bits-alpha
-                                 (->> (core/predicted-bit-votes prev-ff-rgn)
-                                      (util/remap #(min 1.0
-                                                        (float (/ % 8)))))))]))
-
+                                 (let [[start end] (sense-range htm sense-id)]
+                                   (->> (core/predicted-bit-votes prev-ff-rgn)
+                                        (keep (fn [[id votes]]
+                                                (when (and (<= start id)
+                                                           (< id end))
+                                                  [(- id start) votes])))
+                                        (into {})
+                                        (util/remap
+                                         #(min 1.0 (float (/ % 8))))))))]))
    :regions (into
              {}
              (for [rgn-id (core/region-keys htm)
