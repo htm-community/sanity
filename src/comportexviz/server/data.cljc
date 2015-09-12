@@ -41,6 +41,7 @@
 (defn ff-out-synapses-data
   [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
+        do-predictive? (get-in opts [:ff-synapses :predicted])
         do-perm? (get-in opts [:ff-synapses :permanences])
         [rgn-id] (core/region-keys htm)
         rgn (get-in htm [:regions rgn-id])
@@ -48,18 +49,28 @@
         lyr (get rgn lyr-id)
         sg (:proximal-sg lyr)
         to-segs (p/targets-connected-from sg bit)
-        active-columns (p/active-columns lyr)]
+        active-columns (p/active-columns lyr)
+        predictive-columns (->> (p/prior-predictive-cells lyr)
+                                (map first)
+                                (into #{}))]
     (into
      {}
      (for [[col _ _ :as seg-path] to-segs
-           :let [active? (contains? active-columns col)]
-           :when (or do-inactive? active?)
+           :let [active? (contains? active-columns col)
+                 predictive? (contains? predictive-columns col)]
+           :when (or do-inactive?
+                     (and do-predictive? predictive?)
+                     active?)
            :let [perm (get (p/in-synapses sg seg-path) bit)]]
        [[rgn-id lyr-id col] [(cond-> {:src-id sense-id
                                       :src-col bit
-                                      :syn-state (if active?
-                                                   :active
-                                                   :inactive-syn)}
+                                      :syn-state (cond
+                                                   (and active? predictive?)
+                                                   :active-predicted
+
+                                                   active? :active
+                                                   predictive? :predicted
+                                                   :else :inactive-syn)}
                                do-perm? (assoc :perm
                                                (get (p/in-synapses sg seg-path)
                                                     bit)))]]))))

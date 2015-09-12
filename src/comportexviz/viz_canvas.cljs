@@ -75,6 +75,7 @@
              :refresh-index 0}
    :ff-synapses {:to :selected ;; :selected, :all, :none
                  :growing true
+                 :predicted true
                  :inactive nil
                  :disconnected nil
                  :permanences true}

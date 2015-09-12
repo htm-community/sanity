@@ -443,6 +443,7 @@
                 ]]
               (chbox :ff-synapses.disconnected "Disconnected")
               (chbox :ff-synapses.inactive "Inactive")
+              (chbox :ff-synapses.predicted "Predictive")
               (chbox :ff-synapses.permanences "Permanences")
               ])
       (group "Distal synapses"
