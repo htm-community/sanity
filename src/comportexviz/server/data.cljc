@@ -38,13 +38,17 @@
           0
           (range depth)))
 
-(defn sense-range [htm sense-id]
-  (let [senses (:senses htm)
-        base (->> senses
-                  (take-while (fn [[id sense]]
-                                (not= id sense-id)))
-                  (map (fn [[id sense]]
-                         sense))
+(defn sense-range [htm rgn-id sense-id]
+  (let [{:keys [senses regions]} htm
+        base (->> (get-in htm [:ff-deps rgn-id])
+                  (map (fn [ff-id]
+                         [ff-id
+                          (or (senses ff-id)
+                              (regions ff-id))]))
+                  (take-while (fn [[ff-id _]]
+                                (not= ff-id sense-id)))
+                  (map (fn [[ff-id ff]]
+                         ff))
                   (map p/ff-topology)
                   (map p/size)
                   (reduce + 0))
@@ -55,22 +59,22 @@
   [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
         do-predictive? (get-in opts [:ff-synapses :predicted])
-        do-perm? (get-in opts [:ff-synapses :permanences])
-        [base _] (sense-range htm sense-id)
-        adjusted-bit (+ base bit)
-        [rgn-id] (core/region-keys htm)
-        rgn (get-in htm [:regions rgn-id])
-        [lyr-id] (core/layers rgn)
-        lyr (get rgn lyr-id)
-        sg (:proximal-sg lyr)
-        to-segs (p/targets-connected-from sg adjusted-bit)
-        active-columns (p/active-columns lyr)
-        predictive-columns (->> (p/prior-predictive-cells lyr)
-                                (map first)
-                                (into #{}))]
+        do-perm? (get-in opts [:ff-synapses :permanences])]
     (into
      {}
-     (for [[col _ _ :as seg-path] to-segs
+     (for [rgn-id (core/region-keys htm)
+           :let [rgn (get-in htm [:regions rgn-id])]
+           lyr-id (core/layers rgn)
+           :let [lyr (get rgn lyr-id)
+                 sg (:proximal-sg lyr)
+                 [base _] (sense-range htm rgn-id sense-id)
+                 adjusted-bit (+ base bit)
+                 to-segs (p/targets-connected-from sg adjusted-bit)
+                 active-columns (p/active-columns lyr)
+                 predictive-columns (->> (p/prior-predictive-cells lyr)
+                                         (map first)
+                                         (into #{}))]
+           [col _ _ :as seg-path] to-segs
            :let [active? (contains? active-columns col)
                  predictive? (contains? predictive-columns col)]
            :when (or do-inactive?
@@ -325,7 +329,8 @@
 
                           (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
                           (assoc :pred-bits-alpha
-                                 (let [[start end] (sense-range htm sense-id)]
+                                 (let [[start end] (sense-range htm ff-rgn-id
+                                                                sense-id)]
                                    (->> (core/predicted-bit-votes prev-ff-rgn)
                                         (keep (fn [[id votes]]
                                                 (when (and (<= start id)
