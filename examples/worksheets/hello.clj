@@ -99,7 +99,7 @@
 (defn t->prediction [t]
   (when (> t 0)
     (-> (nth timeline (dec t))
-        (core/predictions 1)
+        (core/predictions :input 1)
         first
         :value)))
 
