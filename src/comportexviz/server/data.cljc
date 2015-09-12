@@ -62,10 +62,10 @@
         do-perm? (get-in opts [:ff-synapses :permanences])]
     (into
      {}
-     (for [rgn-id (core/region-keys htm)
-           :let [rgn (get-in htm [:regions rgn-id])]
-           lyr-id (core/layers rgn)
-           :let [lyr (get rgn lyr-id)
+     (for [rgn-id (get-in htm [:fb-deps sense-id])
+           :let [rgn (get-in htm [:regions rgn-id])
+                 [lyr-id] (core/layers rgn)
+                 lyr (get rgn lyr-id)
                  sg (:proximal-sg lyr)
                  [base _] (sense-range htm rgn-id sense-id)
                  adjusted-bit (+ base bit)
