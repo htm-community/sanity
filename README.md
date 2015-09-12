@@ -39,11 +39,8 @@ The notebook:
 
 - Is a fun-filled way to drive and present HTM models
 - Is a launchpad for ComportexViz runners
-- Is built for blogging. Use the
-  [Gorilla REPL viewer service](http://gorilla-repl.org/viewer.html)
-  or host your own on a static webserver. Upload your saved worksheet
-  and it will just work. Interactive graphics are serialized as images
-  in the state that you left them.
+- Is [built for blogging](https://github.com/nupic-community/comportexviz/wiki/Putting-notebooks-on-the-web).
+  Interactive graphics are saved as images in the state that you left them.
 
 ## Usage
 
