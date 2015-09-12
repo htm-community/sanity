@@ -6,6 +6,7 @@
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -25,11 +26,9 @@
               (comp (map (util/frequencies-middleware :x :freqs))
                     (map #(assoc % :label (:x %))))))
 
-(def into-sim
-  (atom nil))
+(def into-sim (async/chan))
 
-(def model
-  (atom nil))
+(def model (atom nil))
 
 (defn draw-world
   [ctx inval]
@@ -155,7 +154,7 @@
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! @main/into-journal [:get-model model-id out-c])
+                     (put! main/into-journal [:get-model model-id out-c])
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
@@ -206,17 +205,19 @@
 
 (defn set-model!
   []
-  (utilv/close-and-reset! into-sim (async/chan))
-  (utilv/close-and-reset! main/into-journal (async/chan))
-
   (with-ui-loading-message
-    (reset! model (demo/make-model))
-    (server/init model
-                 world-c
-                 @main/into-journal
-                 @into-sim
-                 (demo/htm-step-with-action-selection world-c))
-    (put! world-c demo/initial-inval)))
+    (let [init? (nil? @model)]
+      (go
+        (when-not init?
+          ;; break cycle to reset input
+          (<! world-c))
+        (reset! model (demo/make-model))
+        (if init?
+          (server/init model world-c main/into-journal into-sim
+                       (demo/htm-step-with-action-selection world-c))
+          (reset! main/step-template (data/step-template-data @model)))
+        ;; seed input
+        (put! world-c demo/initial-inval)))))
 
 (def config-template
   [:div.form-horizontal

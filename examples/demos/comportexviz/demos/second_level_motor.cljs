@@ -6,6 +6,7 @@
             [comportexviz.plots-canvas :as plt]
             [comportexviz.demos.sensorimotor-1d :refer [draw-eye]]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
@@ -13,8 +14,9 @@
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [clojure.string :as str]
-            [cljs.core.async :as async :refer [put!]])
-  (:require-macros [comportexviz.macros :refer [with-ui-loading-message]]))
+            [cljs.core.async :as async :refer [put! <!]])
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:text demo/test-text}))
@@ -25,7 +27,7 @@
 
 (def control-c (async/chan))
 
-(def into-sim (atom nil))
+(def into-sim (async/chan))
 
 (def model (atom nil))
 
@@ -133,19 +135,20 @@
 
 (defn set-model!
   []
-  (let [] ;; TODO: config
-    (utilv/close-and-reset! into-sim (async/chan))
-    (utilv/close-and-reset! main/into-journal (async/chan))
-
-    (with-ui-loading-message
-      (reset! model (demo/two-region-model))
-      (server/init model
-                   world-c
-                   @main/into-journal
-                   @into-sim
-                   (demo/htm-step-with-action-selection world-c
-                                                        control-c))
-      (put! world-c demo/initial-inval))))
+  (with-ui-loading-message
+    (let [init? (nil? @model)]
+      (go
+        (when-not init?
+          ;; break cycle to reset input
+          (<! world-c))
+        (reset! model (demo/two-region-model))
+        (if init?
+          (server/init model world-c main/into-journal into-sim
+                       (demo/htm-step-with-action-selection world-c
+                                                            control-c))
+          (reset! main/step-template (data/step-template-data @model)))
+        ;; seed input
+        (put! world-c demo/initial-inval)))))
 
 (defn set-text!
   []

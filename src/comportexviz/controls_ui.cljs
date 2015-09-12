@@ -41,14 +41,13 @@
   (add-watch step-template ::push-to-server
              (fn [_ _ prev-st st]
                (when-not (nil? prev-st) ;; don't push when getting initial template
-                 (assert @into-sim)
                  (doseq [path (for [[r-id rgn] (:regions st)
                                     l-id (keys rgn)]
                                 [:regions r-id l-id :spec])
                          :let [old-spec (get-in prev-st path)
                                new-spec (get-in st path)]]
                    (when (not= old-spec new-spec)
-                     (put! @into-sim [:set-spec path new-spec]))))))
+                     (put! into-sim [:set-spec path new-spec]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [step-template selection into-sim local-targets]
@@ -69,10 +68,8 @@
                     :let [typ (or (get @partypes k)
                                   (get (swap! partypes assoc k (param-type v))
                                        k))
-                          setv! (if @into-sim
-                                  #(swap! step-template assoc-in spec-path
-                                          (assoc spec k %))
-                                  identity)]]
+                          setv! #(swap! step-template assoc-in spec-path
+                                        (assoc spec k %))]]
                 [:div.row {:class (when (or (nil? v) (string? v))
                                     "has-error")}
                  [:div.col-sm-8
@@ -123,17 +120,14 @@
                  (obviously losing any learned connections in the process):"
                   ]
                  [:button.btn.btn-warning.btn-block
-
-                  (if @into-sim
-                    {:on-click #(helpers/ui-loading-message-until
-                                 (go
-                                   (<! (async/timeout 100))
-                                   (let [finished (async/chan)]
-                                     (put! @into-sim
-                                           [:restart (channel-proxy/register!
-                                                      local-targets finished)])
-                                     (<! finished))))}
-                    {:disabled "disabled"})
+                  {:on-click #(helpers/ui-loading-message-until
+                               (go
+                                 (<! (async/timeout 100))
+                                 (let [finished (async/chan)]
+                                   (put! into-sim
+                                         [:restart (channel-proxy/register!
+                                                    local-targets finished)])
+                                   (<! finished))))}
                   "Rebuild model"]
                  [:p.small "This will not reset, or otherwise alter, the input stream."]]
                 ]
@@ -146,9 +140,9 @@
 (defn gather-col-state-history!
   [col-state-history step into-journal local-targets]
   (let [response-c (async/chan)]
-    (put! @into-journal [:get-column-state-freqs
-                         (:model-id step)
-                         (channel-proxy/register! local-targets response-c)])
+    (put! into-journal [:get-column-state-freqs
+                        (:model-id step)
+                        (channel-proxy/register! local-targets response-c)])
     (go
       (let [r (<! response-c)]
         (swap! col-state-history
@@ -333,9 +327,9 @@
         [rgn-id lyr-id] (sel/layer sel1)]
     (when (and bit lyr-id)
       (let [response-c (async/chan)]
-        (put! @into-journal [:get-details-text model-id rgn-id lyr-id bit
-                             (channel-proxy/register! local-targets
-                                                      response-c)])
+        (put! into-journal [:get-details-text model-id rgn-id lyr-id bit
+                            (channel-proxy/register! local-targets
+                                                     response-c)])
         (go
           (reset! text-response (<! response-c)))))))
 
@@ -371,7 +365,7 @@
            [:button.btn.btn-warning.btn-block
             (cond-> {:on-click (fn [e]
                                  (let [response-c (async/chan)]
-                                   (put! @into-journal
+                                   (put! into-journal
                                          [:get-model model-id
                                           (channel-proxy/register! local-targets
                                                                    response-c)
@@ -478,7 +472,7 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [steps show-help viz-options viz-expanded into-viz into-sim local-targets]
+  [steps show-help viz-options viz-expanded step-template into-viz into-sim local-targets]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -490,14 +484,8 @@
         going? (atom false)
         subscriber-c (async/chan)]
 
-    (let [m [:subscribe-to-status (channel-proxy/register! local-targets
-                                                           subscriber-c)]]
-      (add-watch into-sim ::subscribe-to-status
-                 (fn [_ _ _ c]
-                   (when c
-                     (put! c m))))
-      (when @into-sim
-        (put! @into-sim m)))
+    (put! into-sim [:subscribe-to-status (channel-proxy/register! local-targets
+                                                                  subscriber-c)])
 
     (go-loop []
       (when-let [[g?] (<! subscriber-c)]
@@ -537,7 +525,7 @@
             (cond-> {:type :button
                      :on-click (send-command into-viz :step-backward)
                      :title "Step backward in time"}
-              (not @into-sim) (assoc :disabled "disabled"))
+              (not @step-template) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step backward"]]]
           ;; step forward
@@ -546,24 +534,24 @@
             (cond-> {:type :button
                      :on-click (send-command into-viz :step-forward)
                      :title "Step forward in time"}
-              (not @into-sim) (assoc :disabled "disabled"))
+              (not @step-template) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step forward"]]]
           ;; pause button
           [:li (when-not @going? {:class "hidden"})
            [:button.btn.btn-default.navbar-btn
             (cond-> {:type :button
-                     :on-click #(put! @into-sim [:pause])
+                     :on-click #(put! into-sim [:pause])
                      :style {:width "5em"}}
-              (not @into-sim) (assoc :disabled "disabled"))
+              (not @step-template) (assoc :disabled "disabled"))
             "Pause"]]
           ;; run button
           [:li (when @going? {:class "hidden"})
            [:button.btn.btn-primary.navbar-btn
             (cond-> {:type :button
-                     :on-click #(put! @into-sim [:run])
+                     :on-click #(put! into-sim [:run])
                      :style {:width "5em"}}
-              (not @into-sim) (assoc :disabled "disabled"))
+              (not @step-template) (assoc :disabled "disabled"))
             "Run"]]
           ;; display mode
           [:li.dropdown
@@ -698,31 +686,31 @@
            [:ul.dropdown-menu {:role "menu"}
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (put! @into-sim [:set-step-ms 0])
+                                  (put! into-sim [:set-step-ms 0])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "max sim speed"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (put! @into-sim [:set-step-ms 0])
+                                  (put! into-sim [:set-step-ms 0])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 100))}
                   "max sim speed, draw every 100 steps"]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (put! @into-sim [:set-step-ms 250])
+                                  (put! into-sim [:set-step-ms 250])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 4 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (put! @into-sim [:set-step-ms 500])
+                                  (put! into-sim [:set-step-ms 500])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 2 steps/sec."]]
             [:li [:a {:href "#"
                       :on-click (fn []
-                                  (put! @into-sim [:set-step-ms 1000])
+                                  (put! into-sim [:set-step-ms 1000])
                                   (swap! viz-options assoc-in
                                          [:drawing :anim-every] 1))}
                   "limit to 1 step/sec."]]]]
@@ -827,8 +815,8 @@
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal local-targets]
      [:div
-      [navbar steps show-help viz-options viz-expanded into-viz into-sim
-       local-targets]
+      [navbar steps show-help viz-options viz-expanded step-template into-viz
+       into-sim local-targets]
       [help-block show-help]
       [:div.container-fluid
        [:div.row

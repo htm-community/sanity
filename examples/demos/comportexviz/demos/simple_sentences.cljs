@@ -5,6 +5,7 @@
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
             [comportexviz.bridge.browser :as server]
+            [comportexviz.server.data :as data]
             [comportexviz.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -27,11 +28,9 @@
               (comp (map (util/keep-history-middleware 100 :word :history))
                     (map #(assoc % :label (:word %))))))
 
-(def into-sim
-  (atom nil))
+(def into-sim (async/chan))
 
-(def model
-  (atom nil))
+(def model (atom nil))
 
 (add-watch model ::count-world-buffer
            (fn [_ _ _ _]
@@ -49,7 +48,7 @@
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! @main/into-journal [:get-model model-id out-c])
+                     (put! main/into-journal [:get-model model-id out-c])
                      (go
                        (reset! selected-htm (<! out-c)))))))
 
@@ -74,19 +73,16 @@
 
 (defn set-model!
   []
-  (utilv/close-and-reset! into-sim (async/chan))
-  (utilv/close-and-reset! main/into-journal (async/chan))
-
-  (let [n-regions (:n-regions @config)
-        sensor (case (:encoder @config)
-                 :block (demo/make-block-sensor (:text @config))
-                 :random demo/random-sensor)]
-    (with-ui-loading-message
+  (with-ui-loading-message
+    (let [n-regions (:n-regions @config)
+          sensor (case (:encoder @config)
+                   :block (demo/make-block-sensor (:text @config))
+                   :random demo/random-sensor)
+          init? (nil? @model)]
       (reset! model (demo/n-region-model n-regions demo/spec sensor))
-      (server/init model
-                   world-c
-                   @main/into-journal
-                   @into-sim))))
+      (if init?
+        (server/init model world-c main/into-journal into-sim)
+        (reset! main/step-template (data/step-template-data @model))))))
 
 (defn send-text!
   []
@@ -159,6 +155,5 @@
   []
   (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
                   (dom/getElement "comportexviz-app"))
-  (go
-    (<! (set-model!))
-    (put! @into-sim [:run])))
+  (put! into-sim [:run])
+  (set-model!))

@@ -301,7 +301,7 @@
         bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
     (if-let [model-id (:model-id sel)]
       (let [response-c (async/chan)]
-        (put! @into-journal
+        (put! into-journal
               [:get-cell-excitation-data model-id region-key layer-id bit
                (channel-proxy/register! local-targets
                                         response-c)])
@@ -500,10 +500,10 @@
   (when-let [[region layer] (sel/layer sel)]
     (let [model-id (:model-id sel)
           response-c (async/chan)]
-      (put! @into-journal [:get-transitions-data
-                           model-id region layer cell-sdr-counts
-                           (channel-proxy/register!
-                            local-targets response-c)])
+      (put! into-journal [:get-transitions-data
+                          model-id region layer cell-sdr-counts
+                          (channel-proxy/register!
+                           local-targets response-c)])
       response-c)))
 
 (defn calc-sdr-sizes
@@ -568,10 +568,10 @@
         :let [response-c (async/chan)
               model-id (:model-id step)]]
     (go
-      (put! @into-journal [:get-cells-by-state model-id
-                           region layer
-                           (channel-proxy/register! local-targets
-                                                    response-c)])
+      (put! into-journal [:get-cells-by-state model-id
+                          region layer
+                          (channel-proxy/register! local-targets
+                                                   response-c)])
       (let [cells-by-state (<! response-c)
             state (or (get-in @states [(:model-id prev-step) [region layer]])
                       empty-cell-sdrs-state)

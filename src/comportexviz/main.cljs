@@ -12,7 +12,7 @@
 
 ;;; ## Journal data
 
-(def into-journal (atom nil))
+(def into-journal (async/chan))
 (def local-targets (channel-proxy/registry))
 
 ;;; ## Viz data
@@ -54,6 +54,9 @@
           (recur))))
     steps-c))
 
+;; not sure why this would be used, but for completeness...
+(def subscription-data (subscribe-to-steps! into-journal))
+
 (defn unsubscribe! [subscription-data]
   (let [steps-c subscription-data]
     (async/close! steps-c))
@@ -68,15 +71,6 @@
                                               (:model-id
                                                (nth steps (:dt sel)))))
                                      %))))
-
-(let [subscription-data (atom nil)]
-  (add-watch into-journal ::subscribe-to-steps
-             (fn [_ _ _ into-j]
-               (swap! subscription-data
-                      (fn [sd]
-                        (when sd
-                          (unsubscribe! sd))
-                        (subscribe-to-steps! into-j))))))
 
 ;;; ## Components
 

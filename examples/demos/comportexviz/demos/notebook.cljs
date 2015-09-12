@@ -88,7 +88,7 @@
                            [viz/viz-timeline steps selection viz-options])
                          [viz/viz-canvas {:tabIndex 0} steps
                           selection step-template viz-options nil nil
-                          (atom into-journal) local-targets]]
+                          into-journal local-targets]]
                         el)))))
 
 (defn ^:export release-viz [el serialized]
