@@ -36,9 +36,10 @@
       (transit/read s)))
 
 (defn ^:export display-inbits [el serialized]
-  (let [[topo state->bits] (read-transit-str serialized)]
+  (let [[topo state->bits d-opts] (read-transit-str serialized)]
     (reagent/render [viz/inbits-display topo state->bits
-                     (:drawing viz/default-viz-options)]
+                     (merge (:drawing viz/default-viz-options)
+                            d-opts)]
                     el)))
 
 (defn ^:export release-inbits [el]

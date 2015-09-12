@@ -1256,7 +1256,8 @@
                             opts))))]))})))
 
 (defn inbits-display [topo state->bits d-opts]
-  (let [lay (lay/grid-layout topo 0 0 d-opts true :two-d)
+  (let [d-opts (assoc d-opts :draw-steps 1)
+        lay (lay/grid-layout topo 0 0 d-opts true (:display-mode d-opts))
         {:keys [x y w h]} (layout-bounds lay)]
     [canvas nil w h [topo state->bits]
      (fn [ctx]

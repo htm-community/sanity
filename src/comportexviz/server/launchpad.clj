@@ -17,6 +17,12 @@
   (runner/stop (get @runners port))
   (swap! runners dissoc port))
 
+(defn stop-all-runners
+  []
+  (doseq [[_ r] @runners]
+    (runner/stop r))
+  (swap! runners empty))
+
 (defn start-runner
   ([model inputs]
    (start-runner model inputs nil))

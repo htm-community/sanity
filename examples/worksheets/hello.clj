@@ -2,7 +2,7 @@
 
 ;; **
 ;;; # Comportex
-;;;
+;;; 
 ;; **
 
 ;; **
@@ -13,7 +13,8 @@
 (ns my-notebook
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [comportexviz.server.launchpad :refer [start-runner]]
+            [comportexviz.server.launchpad :refer [start-runner
+                                                   stop-all-runners]]
             [comportexviz.server.notebook :refer [viz]]
             [gorilla-plot.core :as plot]
             [org.nfrac.comportex.core :as core]
@@ -41,7 +42,7 @@
    :seg-stimulus-threshold 5
    :seg-learn-threshold 3})
 
-(def encoder (e/linear-encoder 200 10 [0 24]))
+(def encoder (e/linear-encoder [200] 10 [0 24]))
 
 (def model (core/regions-in-series
             1 core/sensory-region
@@ -144,4 +145,8 @@
 ;; @@
 ;; Display the last exception's stack trace
 (print-stack-trace *e)
+;; @@
+
+;; @@
+(stop-all-runners)
 ;; @@

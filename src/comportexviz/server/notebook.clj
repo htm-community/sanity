@@ -82,19 +82,21 @@
            :saveHook save-canvases})))))
 
 (defmethod viz p/PEncoder
-  [enc & [input]]
+  [enc & [input d-opts]]
   (reify
     renderable/Renderable
     (render [_]
       (let [topo (p/topology enc)
-            state->bits {:active (p/encode enc input)}]
+            state->bits {:active (p/encode enc input)}
+            d-opts (merge {:display-mode :two-d}
+                          d-opts)]
         {:type :html
          :content ""
          :didMount (format
                     "(function(el) {
                        comportexviz.demos.notebook.display_inbits(el, %s);
                      })"
-                    (pr-str (transit-str [topo state->bits])))
+                    (pr-str (transit-str [topo state->bits d-opts])))
          :willUnmount "(function(el) {
                          comportexviz.demos.notebook.release_inbits(el);
                        })"
