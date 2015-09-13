@@ -38,23 +38,6 @@
           0
           (range depth)))
 
-(defn sense-range [htm rgn-id sense-id]
-  (let [{:keys [senses regions]} htm
-        base (->> (get-in htm [:ff-deps rgn-id])
-                  (map (fn [ff-id]
-                         [ff-id
-                          (or (senses ff-id)
-                              (regions ff-id))]))
-                  (take-while (fn [[ff-id _]]
-                                (not= ff-id sense-id)))
-                  (map (fn [[ff-id ff]]
-                         ff))
-                  (map p/ff-topology)
-                  (map p/size)
-                  (reduce + 0))
-        size (-> senses (get sense-id) p/ff-topology p/size)]
-    [base (+ base size)]))
-
 (defn ff-out-synapses-data
   [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
@@ -67,8 +50,8 @@
                  [lyr-id] (core/layers rgn)
                  lyr (get rgn lyr-id)
                  sg (:proximal-sg lyr)
-                 [base _] (sense-range htm rgn-id sense-id)
-                 adjusted-bit (+ base bit)
+                 adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
+                                 bit)
                  to-segs (p/targets-connected-from sg adjusted-bit)
                  active-columns (p/active-columns lyr)
                  predictive-columns (->> (p/prior-predictive-cells lyr)
@@ -329,8 +312,10 @@
 
                           (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
                           (assoc :pred-bits-alpha
-                                 (let [[start end] (sense-range htm ff-rgn-id
-                                                                sense-id)]
+                                 (let [start (core/ff-base htm ff-rgn-id
+                                                           sense-id)
+                                       end (+ start
+                                              (-> sense p/ff-topology p/size))]
                                    (->> (core/predicted-bit-votes prev-ff-rgn)
                                         (keep (fn [[id votes]]
                                                 (when (and (<= start id)
