@@ -34,8 +34,6 @@
 ;; @@
 (def spec
   {:column-dimensions [800]
-   :ff-potential-radius 0.2
-   :ff-stimulus-threshold 3
    :global-inhibition? false
    :depth 5
    :max-segments 5
