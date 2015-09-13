@@ -42,7 +42,10 @@
   [htm sense-id bit opts]
   (let [do-inactive? (get-in opts [:ff-synapses :inactive])
         do-predictive? (get-in opts [:ff-synapses :predicted])
-        do-perm? (get-in opts [:ff-synapses :permanences])]
+        do-perm? (get-in opts [:ff-synapses :permanences])
+        active-bit? (->> (active-bits (get-in htm [:senses sense-id]))
+                         (some (partial = bit))
+                         boolean)]
     (into
      {}
      (for [rgn-id (get-in htm [:fb-deps sense-id])
@@ -53,26 +56,24 @@
                  adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
                                  bit)
                  to-segs (p/targets-connected-from sg adjusted-bit)
-                 active-columns (p/active-columns lyr)
                  predictive-columns (->> (p/prior-predictive-cells lyr)
                                          (map first)
                                          (into #{}))]
            [col _ _ :as seg-path] to-segs
-           :let [active? (contains? active-columns col)
-                 predictive? (contains? predictive-columns col)]
+           :let [predictive-col? (contains? predictive-columns col)]
            :when (or do-inactive?
-                     (and do-predictive? predictive?)
-                     active?)
+                     (and do-predictive? predictive-col?)
+                     active-bit?)
            :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
        [[rgn-id lyr-id col] [(cond-> {:src-id sense-id
                                       :src-col bit
-                                      :syn-state (cond
-                                                   (and active? predictive?)
-                                                   :active-predicted
-
-                                                   active? :active
-                                                   predictive? :predicted
-                                                   :else :inactive-syn)}
+                                      :syn-state (if active-bit?
+                                                   (if predictive-col?
+                                                     :active-predicted
+                                                     :active)
+                                                   (if predictive-col?
+                                                     :predicted
+                                                     :inactive-syn))}
                                do-perm? (assoc :perm
                                                (get (p/in-synapses sg seg-path)
                                                     adjusted-bit)))]]))))
