@@ -347,13 +347,12 @@
 (defn draw-cell-sdrs-plot!
   [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
                sdr-last-matches timestep threshold title]}
-   {:keys [hide-states-older hide-states-rarer hide-conns-smaller]}]
+   {:keys [ordering hide-states-older hide-states-rarer hide-conns-smaller]}]
   (let [lc-sdrv (:learn sdr-votes)
         ac-sdrv (:active sdr-votes)
         pc-sdrv (:pred sdr-votes)
         kept-sdrs (->> (subseq sdr-last-matches >= (- timestep hide-states-older))
-                       (into
-                        #{}
+                       (into []
                         (comp (map key)
                               (if (> hide-states-rarer 1)
                                 (filter (fn [sdr]
@@ -362,9 +361,12 @@
                                                 (>= (reduce + (vals label-counts))
                                                     hide-states-rarer)))))
                                 identity))))
+        kept-sdr? (set kept-sdrs)
         sdr-label-counts* (select-keys sdr-label-counts kept-sdrs)
         gap threshold
-        [sdr-ordinate y-max] (loop [sdrs (sort kept-sdrs)
+        [sdr-ordinate y-max] (loop [sdrs (case ordering
+                                           :first-appearance (sort kept-sdrs)
+                                           :last-appearance kept-sdrs)
                                     m {}
                                     offset 0]
                                (if-let [sdr (first sdrs)]
@@ -407,10 +409,10 @@
     ;; draw transitions
     (c/stroke-style ctx "hsl(210,50%,50%)")
     (doseq [[from-sdr to-sdrs-counts] sdr-transitions
-            :when (contains? kept-sdrs from-sdr)
+            :when (kept-sdr? from-sdr)
             :let [from-y (* y-scale (sdr-ordinate from-sdr))]
             [to-sdr to-sdr-count] to-sdrs-counts
-            :when (contains? kept-sdrs to-sdr)
+            :when (kept-sdr? to-sdr)
             :when (>= to-sdr-count hide-conns-smaller)
             :let [to-y (* y-scale (sdr-ordinate to-sdr))
                   mid-y (/ (+ to-y from-y) 2)

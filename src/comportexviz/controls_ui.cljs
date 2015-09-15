@@ -188,7 +188,8 @@
           region-key layer-id into-journal local-targets]]))]])
 
 (def default-cell-sdrs-plot-options
-  {:hide-states-older 100
+  {:ordering :first-appearance
+   :hide-states-older 100
    :hide-states-rarer 1
    :hide-conns-smaller 5})
 
@@ -198,11 +199,19 @@
   [:div
    [:div.row
     [:div.col-sm-6
+     [:label.small "Order by"]]
+    [:div.col-sm-6
+     [:select.form-control.input-sm {:field :list
+                                     :id :ordering}
+      [:option {:key :first-appearance} "first appearance"]
+      [:option {:key :last-appearance} "last appearance"]]]
+    ]
+   [:div.row
+    [:div.col-sm-6
      [:label.small {:field :label
                     :id :hide-states-older
                     :preamble (gstr/unescapeEntities "Seen &le; ")
-                    :postamble " steps ago"}]
-     ]
+                    :postamble " steps ago"}]]
     [:div.col-sm-6
      [:input {:field :range
               :min 5
@@ -215,8 +224,7 @@
      [:label.small {:field :label
                     :id :hide-states-rarer
                     :preamble (gstr/unescapeEntities "Seen &ge; ")
-                    :postamble " times"}]
-     ]
+                    :postamble " times"}]]
     [:div.col-sm-6
      [:input {:field :range
               :min 1
@@ -229,8 +237,7 @@
                     :id :hide-conns-smaller
                     :preamble (gstr/unescapeEntities "&ge; ")
                     :postamble "-cell connections"}]
-     ]
-    [:div.col-sm-6
+     ] [:div.col-sm-6
      [:input {:field :range
               :min 1
               :max 16
@@ -281,7 +288,7 @@
         [:p "This shows the dynamics of a layer of cells as a state
         transition diagram. The \"states\" are in fact cell SDRs,
         i.e. sets of cells active together. They are fuzzy: cells may
-        participate in multiple states. And they are fluid: the
+        participate in multiple states. And they are evolving: the
         membership of a state may change over time."]
         [:p "To be precise, a state is defined as a set of cells
          weighted by their specificity to that state. So if a cell
