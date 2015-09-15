@@ -83,9 +83,7 @@
         (c/fill-rect {:x xpx
                       :y ypx
                       :w (- (x-scale (+ x w)) xpx)
-                      :h (- (y-scale (+ y h)) ypx)})
-        ;; TODO kill
-        (c/stroke))))
+                      :h (- (y-scale (+ y h)) ypx)}))))
 
   (line! [_ xys]
     (c/begin-path ctx)
