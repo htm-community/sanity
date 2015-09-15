@@ -88,15 +88,29 @@
   []
   (when-let [xs (seq (demo/word-item-seq (:repeats @config)
                                          (:text @config)))]
-    (async/onto-chan world-c xs false)
-    (swap! config assoc :world-buffer-count (count world-buffer))))
+    (go
+      (<! (async/onto-chan world-c xs false))
+      (swap! config assoc :world-buffer-count (count world-buffer)))))
 
 (def config-template
   [:div
    [:h3 "Input " [:small "Word sequences"]]
-   [:p.text-info {:field :label
-                  :id :world-buffer-count
-                  :postamble " queued input values."}]
+   [:p.text-info
+    [:span {:field :label
+            :id :world-buffer-count
+            :postamble " queued input values."}]
+    " "
+    [:span {:field :container
+            :visible? #(pos? (:world-buffer-count %))}
+     [:button.btn.btn-warning.btn-xs
+      {:on-click (fn [e]
+                   (go-loop []
+                     (when (and (pos? (count world-buffer))
+                                (<! world-c))
+                       (swap! config assoc :world-buffer-count (count world-buffer))
+                       (recur)))
+                   (.preventDefault e))}
+      "drain"]]]
    [:div.form-horizontal
     [:div.form-group
      [:label.col-sm-5 "Repeats of each sentence:"]

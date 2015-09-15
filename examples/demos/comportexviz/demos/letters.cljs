@@ -97,7 +97,7 @@ Chifung has a friend."))
 
 (defn immediate-key-down!
   [e]
-  (when-let [[x] (->> (or (.-keyCode e) (.-charCode e))
+  (when-let [[x] (->> (.-charCode e)
                       (.fromCharCode js/String)
                       (demo/clean-text)
                       (seq))]
@@ -107,9 +107,10 @@ Chifung has a friend."))
 (defn send-text!
   []
   (when-let [xs (seq (demo/clean-text @text-to-send))]
-    (async/onto-chan world-c (for [x xs] {:value (str x)})
-                     false)
-    (swap! config assoc :world-buffer-count (count world-buffer))))
+    (go
+      (<! (async/onto-chan world-c (for [x xs] {:value (str x)})
+                           false))
+      (swap! config assoc :world-buffer-count (count world-buffer)))))
 
 (def config-template
   [:div.form-horizontal
@@ -144,7 +145,18 @@ Chifung has a friend."))
 
    [:h3 "Input " [:small "Letter sequences"]]
    [:p.text-info
-    (str (:world-buffer-count @config) " queued input values.")]
+    (str (:world-buffer-count @config) " queued input values.")
+    " "
+    (when (pos? (:world-buffer-count @config))
+      [:button.btn.btn-warning.btn-xs
+       {:on-click (fn [e]
+                    (go-loop []
+                      (when (and (pos? (count world-buffer))
+                                 (<! world-c))
+                        (swap! config assoc :world-buffer-count (count world-buffer))
+                        (recur)))
+                    (.preventDefault e))}
+       "drain"])]
    [:div.well
     "Immediate input as you type: "
     [:input {:size 2 :maxLength 1
