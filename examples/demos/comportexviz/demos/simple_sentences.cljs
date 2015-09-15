@@ -18,7 +18,7 @@
 (def config
   (atom {:n-regions 1
          :encoder :block
-         :repeats 1
+         :repeats 2
          :text demo/input-text
          :world-buffer-count 0}))
 
