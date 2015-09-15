@@ -236,33 +236,37 @@
         (fn [plot x-coord bd labels?]
           (let [series (for [k excitation-order
                              :let [v (get bd k)]
-                             [src x] (if (map? v)
+                             [src z] (if (map? v)
                                        (sort-by (comp src-shades key) v)
                                        {nil v})
-                             :when (and x (pos? x))]
-                         [k src x])]
+                             :when (and z (pos? z))]
+                         [k src z])]
             (c/stroke-style ctx "black")
-            (reduce (fn [offset [k src x]]
+            (reduce (fn [offset [k src z]]
                       (let [color (excitation-colors k)
                             shade (if src (src-shades src) 0.0)]
                         (c/fill-style ctx (get series-colors color))
-                        (plt/rect! plot x-coord offset 0.5 x)
+                        (plt/rect! plot x-coord offset 0.5 z)
                         (when-not (zero? shade)
                           (c/fill-style ctx (if (pos? shade) "white" "black"))
                           (c/alpha ctx (abs shade))
-                          (plt/rect! plot x-coord offset 0.25 x)
+                          (plt/rect! plot x-coord offset 0.25 z)
                           (c/alpha ctx 1.0))
+                        (let [y-top (+ offset z)]
+                          (plt/line! plot [[(+ x-coord 0.05) y-top]
+                                           [(+ x-coord 0.45) y-top]]))
                         (when labels?
                           (c/fill-style ctx "black")
                           (let [labs (concat (str/split (name k) #"-")
                                              (if src [(str "(" (name src) ")")]))]
-                            (plt/texts! plot (+ x-coord 0.5) (+ offset (* 0.5 x))
+                            (plt/texts! plot (+ x-coord 0.5) (+ offset (* 0.5 z))
                                         labs 10)))
-                        (+ offset (or x 0))))
+                        (+ offset (or z 0))))
                     0.0
                     series)))]
     (c/save ctx)
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
+    (c/stroke-width ctx 0.5)
     (let [plot (plt/xy-plot ctx plot-size x-lim y-lim)]
       (doseq [[i [cell-id bd]] (->> breakdowns
                                     (sort-by key)
@@ -292,6 +296,7 @@
         (c/fill-style ctx "black")
         (c/text-align ctx :left)
         (plt/text-rotated! plot leg-x bot-lab-y "KEY")
+        (c/stroke-width ctx 1)
         (plt/frame! plot)))
     (c/restore ctx)))
 
