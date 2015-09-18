@@ -386,7 +386,7 @@
         width-px (.-width (.-canvas ctx))
         full-height-px (.-height (.-canvas ctx))
         height-px (- full-height-px title-px)
-        y-scale (/ height-px (max (* 50 gap) (inc y-max)))
+        y-scale (/ height-px (max (* 50 gap) (+ y-max gap)))
         sdr-max-count (->> (vals sdr-label-counts*)
                            (map (fn [label-counts]
                                   (reduce + (vals label-counts))))
