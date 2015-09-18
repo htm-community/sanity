@@ -332,7 +332,7 @@
   [into-journal text-response sel local-targets]
   (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
         [rgn-id lyr-id] (sel/layer sel1)]
-    (when (and bit lyr-id)
+    (when lyr-id
       (let [response-c (async/chan)]
         (put! into-journal [:get-details-text model-id rgn-id lyr-id bit
                             (channel-proxy/register! local-targets
