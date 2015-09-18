@@ -121,7 +121,7 @@
              (map sentence-string)
              (str/join \newline))]
        [resizing-canvas {:style {:width "100%"
-                                 :height "300px"}}
+                                 :height "75vh"}}
         [main/selection]
         (fn [ctx]
           (let [step (main/selected-step)
@@ -148,14 +148,13 @@
                                                             control-c))
           (reset! main/step-template (data/step-template-data @model)))
         ;; seed input
-        (put! world-c demo/initial-inval)))))
+        (let [sentences (demo/parse-sentences (:text @config))]
+          (put! world-c (demo/initial-inval sentences)))))))
 
 (defn set-text!
   []
   (let [sentences (demo/parse-sentences (:text @config))]
-    (when (seq sentences)
-      (put! control-c #(assoc demo/initial-inval
-                              :sentences sentences)))))
+    (put! control-c (fn [_] (demo/initial-inval sentences)))))
 
 (def config-template
   [:div
