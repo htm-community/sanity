@@ -44,6 +44,10 @@
       (for [seg-up (sort-by :target-id (vals (:distal-learning (:state lyr))))]
         (str (:target-id seg-up) " " (dissoc seg-up :target-id :operation)))
       ""
+      "__Distal punishments__"
+      (for [seg-up (sort-by :target-id (:distal-punishments (:state lyr)))]
+        (str (:target-id seg-up)))
+      ""
       "__TP excitation__"
       (str (sort (:temporal-pooling-exc (:state lyr))))
       ""
