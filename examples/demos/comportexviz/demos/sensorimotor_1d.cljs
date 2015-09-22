@@ -145,6 +145,8 @@
             (draw-world ctx in-value)))
         nil]])))
 
+(def seed-counter (atom 0))
+
 (defn send-input-stream!
   []
   (let [field-key (:field @config)
@@ -152,9 +154,8 @@
         field (demo/fields field-key)]
     (async/onto-chan world-c
                      (take n-steps (demo/input-seq
-                                    {:field field
-                                     :position (quot (count field) 2)
-                                     :next-saccade 1}))
+                                    (demo/initial-world
+                                     field (swap! seed-counter inc))))
                      false)
     (swap! config assoc :world-buffer-count (count world-buffer))))
 
