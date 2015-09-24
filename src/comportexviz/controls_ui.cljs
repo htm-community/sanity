@@ -188,7 +188,8 @@
           region-key layer-id into-journal local-targets]]))]])
 
 (def default-cell-sdrs-plot-options
-  {:ordering :first-appearance
+  {:group-contexts? false
+   :ordering :first-appearance
    :hide-states-older 100
    :hide-states-rarer 1
    :hide-conns-smaller 5})
@@ -197,6 +198,14 @@
 
 (def cell-sdrs-plot-options-template
   [:div
+   [:div.row
+    [:div.col-sm-6
+     [:label.small "Group contexts?"]]
+    [:div.col-sm-6
+     [:input {:field :checkbox
+              :id :group-contexts?}]
+     [:small " (column-level SDRs)"]]
+    ]
    [:div.row
     [:div.col-sm-6
      [:label.small "Order by"]]
@@ -262,71 +271,70 @@
         ]
     (fn cell-sdrs-tab []
       [:div
-       [:p.text-muted "Cell "
-        [:abbr {:title "Sparse Distributed Representations"} "SDRs"]
-        " on a state transition diagram. Labels are corresponding
-        inputs."]
-       [:div
-        (if-not @component
-          ;; placeholder
-          [:div
-           [:button.btn.btn-warning.btn-block
-                 {:on-click (fn [e]
-                              (enable!)
-                              (.preventDefault e))}
-            "Start from selected timestep"]]
-          ;; enabled content
-          [:div
-           [bind-fields cell-sdrs-plot-options-template plot-opts]
-           [(:content @component)]
-           [:button.btn.btn-warning.btn-block
-            {:on-click (fn [e]
-                         (disable!)
-                         (.preventDefault e))}
-            "Disable and reset"]])
-        [:p.muted.small "Not enabled by default because it can be slow."]
-        [:p "This shows the dynamics of a layer of cells as a state
+       (if-not @component
+         ;; placeholder
+         [:div
+          [:p.text-muted "Cell "
+           [:abbr {:title "Sparse Distributed Representations"} "SDRs"]
+           " on a state transition diagram. Labels are corresponding inputs."]
+          [:button.btn.btn-primary.btn-block
+           {:on-click (fn [e]
+                        (enable!)
+                        (.preventDefault e))}
+           "Start from selected timestep"]
+          [:p.small "So to start from the beginning, select timestep 1 first."]
+          [:p.small "Not enabled by default because it can be slow."]]
+         ;; enabled content
+         [:div
+          [bind-fields cell-sdrs-plot-options-template plot-opts]
+          [(:content @component)]
+          [:button.btn.btn-warning.btn-block
+           {:on-click (fn [e]
+                        (disable!)
+                        (.preventDefault e))}
+           "Disable and reset"]])
+       [:p "This shows the dynamics of a layer of cells as a state
         transition diagram. The \"states\" are in fact cell SDRs,
         i.e. sets of cells active together. They are fuzzy: cells may
         participate in multiple states. And they are evolving: the
         membership of a state may change over time."]
-        [:p "To be precise, a state is defined as a set of cells
+       [:p "To be precise, a state is defined as a set of cells
          weighted by their specificity to that state. So if a cell
          participates in states A and B an equal number of times, it
          will count only half as much to A as a cell fully specific to
          A."]
-        [:p "If the active learning cells match a known state
+       [:p "If the active learning cells match a known state
         sufficiently well (meeting " [:code "seg-learn-threshold"]
-         ") then the state is extended to include all current
+        ") then the state is extended to include all current
         cells. Otherwise, a new state is created."]
-        [:p "Input labels (key :label) are recorded on matching
+       [:p "Input labels (key :label) are recorded on matching
         states, but this is only for display, it is not used to define
         states."]
-        [:p "The display shows one layer at one point in
+       [:p "The display shows one layer at one point in
          time. Select other layers to switch the display to them. Step
          back and forward in time as you wish."]
-        [:h4 "Reading the diagram"]
-        [:ul
-         [:li "States are drawn in order of appearance."]
-         [:li "If any of a state's cells are currently active that
+       [:h4 "Reading the diagram"]
+       [:ul
+        [:li "States are drawn in order of appearance."]
+        [:li "If any of a state's cells are currently active that
          fraction will be shaded red (whether active due to bursting
          or not)."]
-         [:li "Similarly, any predictive cells (predicting activation for the "
-          [:strong "next"] " time step) will be shaded blue."]
-         [:li "If any of a state's cells are the
+        [:li "Similarly, any predictive cells (predicting activation for the "
+         [:strong "next"] " time step) will be shaded blue."]
+        [:li "If any of a state's cells are the
          current " [:i "learning cells"] " that fraction will be
          outlined in black."]
-         [:li "When a matching state will be extended to include new
+        [:li "When a matching state will be extended to include new
          cells, those are shown in green."]
-         [:li "Transitions are drawn as blue curves. Thickness
+        [:li "Transitions are drawn as blue curves. Thickness
          corresponds to the number of connected synapses, weighted by
          specificity of both the source and target cells."]
-         [:li "The height of a state corresponds to the (weighted)
+        [:li "The height of a state corresponds to the (weighted)
          number of cells it represents."]
-         [:li "The width of a state corresponds to the number of times
+        [:li "The width of a state corresponds to the number of times
          it has matched."]
-         [:li "Labels are drawn with horizonal spacing by frequency."]]
-        ]])))
+        [:li "Labels are drawn with horizonal spacing by frequency."]]
+       ])))
 
 (defn fetch-details-text!
   [into-journal text-response sel local-targets]

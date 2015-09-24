@@ -349,23 +349,13 @@
             size-invalidates-c]]))
       })))
 
-(defn draw-cell-sdrs-plot!
+(defn draw-cell-sdrs-plot!*
   [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
-               sdr-last-matches timestep threshold title]}
-   {:keys [ordering hide-states-older hide-states-rarer hide-conns-smaller]}]
+               kept-sdrs timestep threshold title]}
+   {:keys [group-contexts? ordering hide-conns-smaller]}]
   (let [lc-sdrv (:learn sdr-votes)
         ac-sdrv (:active sdr-votes)
         pc-sdrv (:pred sdr-votes)
-        kept-sdrs (->> (subseq sdr-last-matches >= (- timestep hide-states-older))
-                       (into []
-                        (comp (map key)
-                              (if (> hide-states-rarer 1)
-                                (filter (fn [sdr]
-                                          (or (lc-sdrv sdr)
-                                              (let [label-counts (sdr-label-counts sdr)]
-                                                (>= (reduce + (vals label-counts))
-                                                    hide-states-rarer)))))
-                                identity))))
         kept-sdr? (set kept-sdrs)
         sdr-label-counts* (select-keys sdr-label-counts kept-sdrs)
         gap threshold
@@ -502,6 +492,87 @@
                 label-counts)))
     (c/restore ctx)))
 
+(defn cell-sdrs-plot-data-group-contexts
+  [{:as plot-data
+    :keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
+           sdr->gid gid-sizes gid-growth kept-sdrs
+           ]}]
+  (let [kept-gids (-> (map sdr->gid kept-sdrs) ;; keep order by last appearance:
+                      (reverse) (distinct) (reverse))]
+    ;; TODO an abstraction for this kind of aggregation
+    (-> plot-data
+        (assoc :kept-sdrs kept-gids
+               :sdr-sizes gid-sizes
+               :sdr-growth gid-growth
+               :grouped? true)
+        (update :sdr-label-counts
+                (fn [m]
+                  (persistent!
+                   (reduce-kv
+                    (fn [m sdr label-counts]
+                      (let [gid (sdr->gid sdr)]
+                        (assoc! m gid (merge-with + (get m gid {})
+                                                  label-counts))))
+                    (transient {})
+                    m))))
+        (update :sdr-transitions
+                (fn [m]
+                  (persistent!
+                   (reduce-kv
+                    (fn [m from-sdr to-sdrs-counts]
+                      (let [from-gid (sdr->gid from-sdr)
+                            to-gids-counts (persistent!
+                                            (reduce-kv
+                                             (fn [mm to-sdr n]
+                                               (let [to-gid (sdr->gid to-sdr)]
+                                                 (assoc! mm to-gid
+                                                         (max (get mm to-gid 0)
+                                                              n))))
+                                             (transient {})
+                                             to-sdrs-counts))]
+                        (assoc! m from-gid (merge-with + (get m from-gid {})
+                                                       to-gids-counts))))
+                    (transient {})
+                    m))))
+        (update :sdr-votes (fn [vm]
+                             (util/remap
+                              (fn [m]
+                                (reduce-kv (fn [mm sdr vote]
+                                             (let [gid (sdr->gid sdr)]
+                                               (assoc mm gid
+                                                      (max (get mm gid 0)
+                                                           vote))))
+                                           {}
+                                           m))
+                              vm)))
+        )))
+
+(defn kept-sdrs-by-last-appearance
+  "Applies options hide-states-older, hide-states-rarer to filter the
+  list of sdrs, and returns them ordered by last appearance."
+  [{:keys [sdr-label-counts sdr-last-matches sdr-votes timestep]}
+   {:keys [hide-states-older hide-states-rarer]}]
+  (let [lc-sdrv (:learn sdr-votes)]
+    (->> (subseq sdr-last-matches >= (- timestep hide-states-older))
+         (into []
+               (comp (map key)
+                     (if (> hide-states-rarer 1)
+                       (filter (fn [sdr]
+                                 (or (lc-sdrv sdr)
+                                     (let [label-counts (sdr-label-counts sdr)]
+                                       (>= (reduce + (vals label-counts))
+                                           hide-states-rarer)))))
+                       identity))))))
+
+(defn draw-cell-sdrs-plot!
+  [ctx plot-data* plot-opts]
+  (let [kept-sdrs (kept-sdrs-by-last-appearance plot-data* plot-opts)
+        plot-data (cond->
+                      (assoc plot-data* :kept-sdrs kept-sdrs)
+                    (:group-contexts? plot-opts)
+                    (cell-sdrs-plot-data-group-contexts))]
+    (draw-cell-sdrs-plot!* ctx plot-data plot-opts)))
+
 (defn fetch-transitions-data
   [sel cell-sdr-counts into-journal local-targets]
   (when-let [[region layer] (sel/layer sel)]
@@ -557,8 +628,11 @@
 
 (def empty-cell-sdrs-state
   {:cell-sdr-counts {}
+   :col-gid-counts {}
+   :sdr->gid {}
    :sdr-label-counts {}
    :sdr-sizes {}
+   :gid-sizes {}
    :sdr-growth {}
    :sdr-votes {:learn {}
                :active {}
@@ -597,10 +671,22 @@
                               lc-sdrv)
             new-sdr (when (empty? learn-sdrs*) (count (:sdr-label-counts state)))
             learn-sdrs (if new-sdr [new-sdr] learn-sdrs*)
+            ;; grouping by columns
+            col-gid-fracs (->> (:col-gid-counts state)
+                               (util/remap freqs->fracs))
+            a-cols (map first lc)
+            gidv (sdr-votes a-cols col-gid-fracs)
+            learn-gids* (keep (fn [[gid vote]] (when (>= vote threshold) gid))
+                              gidv)
+            new-gid (when (empty? learn-gids*) (count (:sdr-label-counts state)))
+            learn-gids (if new-gid [new-gid] learn-gids*)
+            ;; etc
             sdr-sizes (or (:updated-sdr-sizes state)
                           (calc-sdr-sizes cell-sdr-fracs))
-            inc-learn-sdrs (partial merge-with +
-                                    (zipmap learn-sdrs (repeat 1)))
+            gid-sizes (or (:updated-gid-sizes state)
+                          (calc-sdr-sizes col-gid-fracs))
+            inc-learn-sdrs (partial merge-with + (zipmap learn-sdrs (repeat 1)))
+            inc-learn-gids (partial merge-with + (zipmap learn-gids (repeat 1)))
             label (:label (:input-value step))
             inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
             t (:timestep step)
@@ -608,13 +694,16 @@
                            (update :cell-sdr-counts
                                    (fn [m]
                                      (util/update-each m lc inc-learn-sdrs)))
+                           (update :col-gid-counts
+                                   (fn [m]
+                                     (util/update-each m a-cols inc-learn-gids)))
+                           (update :sdr->gid
+                                   (fn [m]
+                                     (if new-sdr (assoc m new-sdr (first learn-gids))
+                                         m)))
                            (update :sdr-label-counts
                                    (fn [m]
-                                     (reduce (fn [m learn-sdr]
-                                               (update m learn-sdr
-                                                       inc-label))
-                                             m
-                                             learn-sdrs)))
+                                     (util/update-each m learn-sdrs inc-label)))
                            (update :sdr-last-matches
                                    (fn [m]
                                      (merge m (zipmap learn-sdrs (repeat t)))))
@@ -623,15 +712,22 @@
                                               :active ac-sdrv
                                               :pred pc-sdrv}
                                   :sdr-sizes sdr-sizes
+                                  :gid-sizes gid-sizes
                                   :timestep t
                                   :threshold threshold))
             new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
                                                (util/remap freqs->fracs)))
             sdr-growth (merge-with - (select-keys new-sdr-sizes learn-sdrs)
                                    (select-keys sdr-sizes learn-sdrs))
+            new-gid-sizes (calc-sdr-sizes (->> (:col-gid-counts new-state*)
+                                               (util/remap freqs->fracs)))
+            gid-growth (merge-with - (select-keys new-gid-sizes learn-gids)
+                                   (select-keys gid-sizes learn-gids))
             new-state (cond-> (assoc new-state*
                                      :updated-sdr-sizes new-sdr-sizes
-                                     :sdr-growth sdr-growth)
+                                     :sdr-growth sdr-growth
+                                     :updated-gid-sizes new-gid-sizes
+                                     :gid-growth gid-growth)
                         new-sdr (assoc-in [:sdr-votes :learn new-sdr]
                                           (sdr-growth new-sdr)))]
         (swap! states assoc-in [model-id [region layer]] new-state)))))
@@ -663,7 +759,8 @@
       (when-let [model-id (:model-id sel)]
         (let [to-ingest (->> (reverse @steps)
                              (drop-while #(not= model-id (:model-id %))))]
-          (println "cell-sdrs ingest start from" (:model-id (first to-ingest)) "...")
+          (println "cell-sdrs ingesting from" (:model-id (first to-ingest)) "to"
+                   (:model-id (last to-ingest)))
           (go
             (doseq [[prev-step step] (partition 2 1 (cons nil to-ingest))]
               (let [procs (update-cell-sdrs-states! states step-template
@@ -671,7 +768,6 @@
                                                     into-journal local-targets)]
                 ;; await update processes before going on to next time step
                 (doseq [c procs] (<! c))))
-            (println "cell-sdrs ingest done at" (:model-id (last to-ingest)))
             ;; finally, redraw
             (update-cell-sdrs-plot-data! plot-data states sel
                                          into-journal local-targets)))))
