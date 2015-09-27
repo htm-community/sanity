@@ -15,10 +15,9 @@
                  [info.sunng/ring-jetty9-adapter "0.9.1"]
                  [com.cognitect/transit-clj "0.8.281"]
                  [com.cognitect/transit-cljs "0.8.220"]
-                 [com.mrcslws/gorilla-repl "0.3.5-007"
+                 [com.mrcslws/gorilla-repl "0.3.5-008"
                   :exclusions [javax.servlet/servlet-api
-                               org.slf4j/slf4j-api]]
-                 [org.clojure/data.csv "0.1.3"]]
+                               org.slf4j/slf4j-api]]]
 
   :plugins [[lein-cljsbuild "1.1.0"]
             [com.cemerick/austin "0.1.6"]
@@ -32,7 +31,9 @@
                   "public/cortical_io/out"
                   "public/local_inhibition/out"]
 
-  :profiles {:repl
+  :profiles {:dev {:dependencies [[org.clojure/data.csv "0.1.3"]
+                                  [org.clojure/data.codec "0.1.0"]]}
+             :repl
              {;; for Cursive debugging
               ;; :jvm-opts ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"]
               }}
