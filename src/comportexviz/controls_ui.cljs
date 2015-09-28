@@ -830,24 +830,25 @@
                                              into-journal local-targets)]
     (fn [model-tab main-pane viz-options selection steps step-template
          series-colors into-viz into-sim into-journal local-targets]
-     [:div
-      [navbar steps show-help viz-options viz-expanded step-template into-viz
-       into-sim local-targets]
-      [help-block show-help]
-      [:div.container-fluid
-       [:div.row
-        [:div.col-sm-9.viz-expandable
-         [main-pane]]
-        [:div.col-sm-3
-         [tabs
-          [[:model [model-tab]]
-           [:drawing [bind-fields viz-options-template viz-options]]
-           [:params [parameters-tab step-template selection into-sim
-                     local-targets]]
-           [:time-plots [time-plots-tab series-colors]]
-           [:cell-SDRs [cell-sdrs-tab]]
-           [:sources [sources-tab step-template selection series-colors
-                      into-journal local-targets]]
-           [:details [details-tab selection into-journal local-targets]]]]
-         ]]
-       [:div#loading-message "loading"]]])))
+      [:div
+       [navbar steps show-help viz-options viz-expanded step-template into-viz
+        into-sim local-targets]
+       [help-block show-help]
+       [:div.container-fluid
+        [:div.row
+         [:div.col-sm-9.viz-expandable
+          main-pane]
+         [:div.col-sm-3
+          [tabs
+           (into (if model-tab
+                   [[:model model-tab]]
+                   [])
+                 [[:drawing [bind-fields viz-options-template viz-options]]
+                  [:params [parameters-tab step-template selection into-sim
+                            local-targets]]
+                  [:time-plots [time-plots-tab series-colors]]
+                  [:cell-SDRs [cell-sdrs-tab]]
+                  [:sources [sources-tab step-template selection series-colors
+                             into-journal local-targets]]
+                  [:details [details-tab selection into-journal local-targets]]])]]]
+        [:div#loading-message "loading"]]])))

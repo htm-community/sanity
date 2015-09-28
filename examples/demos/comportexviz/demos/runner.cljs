@@ -10,15 +10,12 @@
 (defn world-pane
   []
   (when-let [step (main/selected-step)]
-    (apply vector :div
-           [:div {:style {:font "10px sans-serif"}} "sensed values"]
-           (for [[sense-id v] (:sensed-values step)]
-             [:div {:style {:margin-top 30}}
-              [:p (name sense-id) [:br]
-               [:strong (str v)]]]))))
-
-(defn model-tab
-  [])
+    (into [:div
+           [:div {:style {:font "10px sans-serif"}} "sensed values"]]
+          (for [[sense-id v] (:sensed-values step)]
+            [:div {:style {:margin-top 30}}
+             [:p (name sense-id) [:br]
+              [:strong (str v)]]]))))
 
 (defn ^:export init
   []
@@ -38,5 +35,5 @@
         (put! into-journal [:ping])
         (recur)))
 
-    (reagent/render [main/comportexviz-app model-tab world-pane into-sim-in]
+    (reagent/render [main/comportexviz-app nil [world-pane] into-sim-in]
                     (dom/getElement "comportexviz-app"))))

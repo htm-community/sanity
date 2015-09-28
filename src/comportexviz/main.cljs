@@ -86,7 +86,7 @@
        [viz/viz-timeline steps selection viz-options]
        [:div.row
         [:div.col-sm-3.col-lg-2
-         [world-pane]]
+         world-pane]
         [:div.col-sm-9.col-lg-10
          [window-resize-listener size-invalidates-c]
          [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options
@@ -94,10 +94,9 @@
 
 (defn comportexviz-app
   [model-tab world-pane into-sim]
-  (let [m (fn [] [main-pane world-pane into-sim])]
-    [cui/comportexviz-app model-tab m viz-options selection
-     steps step-template viz/state-colors into-viz into-sim into-journal
-     local-targets]))
+  [cui/comportexviz-app model-tab [main-pane world-pane into-sim] viz-options
+   selection steps step-template viz/state-colors into-viz into-sim into-journal
+   local-targets])
 
 ;;; ## Exported helpers
 

@@ -197,7 +197,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app model-tab world-pane into-sim]
+  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!))
