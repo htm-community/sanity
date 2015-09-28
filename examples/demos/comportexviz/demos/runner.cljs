@@ -8,7 +8,14 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn world-pane
-  [])
+  []
+  (when-let [step (main/selected-step)]
+    (apply vector :div
+           [:div {:style {:font "10px sans-serif"}} "sensed values"]
+           (for [[sense-id v] (:sensed-values step)]
+             [:div {:style {:margin-top 30}}
+              [:p (name sense-id) [:br]
+               [:strong (str v)]]]))))
 
 (defn model-tab
   [])

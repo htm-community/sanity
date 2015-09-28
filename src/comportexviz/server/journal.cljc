@@ -13,10 +13,17 @@
      (java.util.UUID/randomUUID)))
 
 (defn make-step
-  [model id]
-  {:model-id id
-   :timestep (p/timestep model)
-   :input-value (:input-value model)})
+  [htm id]
+  (let [input-value (:input-value htm)]
+    {:model-id id
+     :timestep (p/timestep htm)
+     :input-value input-value
+     :sensed-values (into {}
+                          (for [sense-id (core/sense-keys htm)
+                                :let [[selector _] (get-in htm [:sensors
+                                                                sense-id])
+                                      v (p/extract selector input-value)]]
+                            [sense-id v]))}))
 
 (defn id-missing-response
   [id steps-offset]
