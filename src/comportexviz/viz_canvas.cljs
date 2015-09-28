@@ -90,12 +90,13 @@
              :draw-steps 16
              :max-height-px 900
              :max-width-px nil
-             :top-px 30
+             :top-px 0
              :bit-w-px 4
              :bit-h-px 3
              :bit-shrink 0.85
              :col-d-px 5
              :col-shrink 0.85
+             :cell-label-h-px 8
              :cell-r-px 10
              :cells-segs-w-px 250
              :seg-w-px 30
@@ -375,7 +376,7 @@
         seg-w-px (:seg-w-px d-opts)
         cells-segs-w-px (:cells-segs-w-px d-opts)
         max-height-px (:max-height-px d-opts)
-        our-top (+ (:top-px d-opts) cell-r-px)
+        our-top (+ (:top-px d-opts) cell-r-px (:cell-label-h-px d-opts))
         our-height (cond-> (* nseg-pad (* 8 cell-r-px))
                      max-height-px (min (- max-height-px our-top)))]
     (reify
@@ -467,7 +468,7 @@
             (c/fill))
           (c/fill-style ctx "black")
           (c/text ctx {:text (str "cell " ci)
-                       :x (+ cell-x 10) :y (- cell-y cell-r-px 5)})
+                       :x (+ cell-x 10) :y (- cell-y cell-r-px)})
           ;; draw each segment
           (doseq [[si seg] segments
                   :let [[sx sy] (seg-xy cslay ci si)
@@ -688,9 +689,7 @@
                    ;; in case scrolled back in history
                    (let [dt0 (max 0 (- center-dt (quot draw-steps 2)))]
                      (range dt0 (min (+ dt0 draw-steps)
-                                     (count viz-steps)))))
-
-        label-top-px 0]
+                                     (count viz-steps)))))]
     ;; Draw whenever a new step appears, even when the step's inbits / column
     ;; data is not yet available. This keeps the viz-canvas in sync with the
     ;; timeline without having to share viz-canvas internal state, and it
@@ -699,28 +698,6 @@
     (c/clear-rect ctx {:x 0 :y 0
                        :w (.-width (.-canvas ctx))
                        :h (.-height (.-canvas ctx))})
-
-    ;; draw labels
-    (c/text-align ctx :start)
-    (c/text-baseline ctx :top)
-    (c/font-style ctx "10px sans-serif")
-    (c/fill-style ctx "black")
-
-    (doseq [[sense-id lay] s-lays]
-      (c/text ctx {:text (name sense-id)
-                   :x (:x (layout-bounds lay))
-                   :y label-top-px})
-      (c/text ctx {:text (scroll-status-str lay true)
-                   :x (:x (layout-bounds lay))
-                   :y (+ label-top-px 10)}))
-    (doseq [[rgn-id lyr-lays] r-lays
-            [lyr-id lay] lyr-lays]
-      (c/text ctx {:text (str (name rgn-id) " " (name lyr-id))
-                   :x (:x (layout-bounds lay))
-                   :y label-top-px})
-      (c/text ctx {:text (scroll-status-str lay false)
-                   :x (:x (layout-bounds lay))
-                   :y (+ label-top-px 10)}))
 
     (doseq [dt draw-dts
             :let [{sc :cache inbits-cols :inbits-cols} (nth viz-steps dt)
@@ -820,9 +797,6 @@
     (draw-ff-synapses ctx ff-synapses-response viz-steps r-lays s-lays)
 
     (when-let [cslay (:cells-segments layouts)]
-      (c/text ctx {:text "Cells and distal dendrite segments."
-                   :x (:x (layout-bounds cslay))
-                   :y label-top-px})
       ;; draw selected cells and segments
       (draw-cells-segments ctx cells-segs-response viz-steps layouts opts))))
 
@@ -1240,21 +1214,40 @@
               height (or (when bottom
                            (+ bottom lay/extra-px-for-highlight))
                          0)]
-          [canvas
-           (assoc props
-                  :on-click #(viz-click % @steps selection
-                                        @viz-layouts)
-                  :on-key-down #(viz-key-down % into-viz))
-           width height
-           [selection steps steps-data ff-synapses-response
-            cells-segs-response viz-layouts viz-options]
-           (fn [ctx]
-             (let [viz-steps (make-viz-steps @steps @steps-data)
-                   opts @viz-options]
-               (when (should-draw? viz-steps opts)
-                 (draw-viz! ctx viz-steps @ff-synapses-response
-                            @cells-segs-response @viz-layouts @selection
-                            opts))))]))})))
+          (into [:div {:style {:font "10px sans-serif"
+                               :position "relative"}}]
+                (concat (for [path (grid-layout-paths layouts)
+                              :let [lay (get-in layouts path)
+                                    ids (subvec path 1)
+                                    sense? (= (first path) :senses)]]
+                          [:div {:style {:position "absolute"
+                                         :left (:x (layout-bounds lay))
+                                         :top 0}}
+                           (->> ids (map name) (interpose " ") (apply str))
+                           [:br]
+                           (scroll-status-str lay sense?)])
+                        (when-let [cslay (:cells-segments layouts)]
+                          [[:div {:style {:position "absolute"
+                                          :left (:x (layout-bounds cslay))
+                                          :top 0}}
+                            "cells and distal dendrite segments"]])
+                        [^{:key "main-canvas"}
+                         [canvas
+                          (assoc props
+                                 :style {:margin-top 30}
+                                 :on-click #(viz-click % @steps selection
+                                                       @viz-layouts)
+                                 :on-key-down #(viz-key-down % into-viz))
+                          width height
+                          [selection steps steps-data ff-synapses-response
+                           cells-segs-response viz-layouts viz-options]
+                          (fn [ctx]
+                            (let [viz-steps (make-viz-steps @steps @steps-data)
+                                  opts @viz-options]
+                              (when (should-draw? viz-steps opts)
+                                (draw-viz! ctx viz-steps @ff-synapses-response
+                                           @cells-segs-response @viz-layouts
+                                           @selection opts))))]]))))})))
 
 (defn inbits-display [topo state->bits d-opts]
   (let [d-opts (assoc d-opts :draw-steps 1)

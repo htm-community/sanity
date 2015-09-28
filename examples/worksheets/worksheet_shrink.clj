@@ -27,7 +27,7 @@
 
 (let [in-path "examples/worksheets/hello.clj"
       worksheet-out-filename "hello.faster.clj"
-      
+
       date-dir (.format (java.text.SimpleDateFormat. "yyyy.MM.dd.HH.mm.ss") (java.util.Date.))
       out-dir (str "examples/worksheets/" date-dir)
       images-subfolder date-dir
@@ -53,7 +53,7 @@
                                 (spit img-file-path
                                       contents)
                                 (format "<img src='%s' />" img-web-path))))
-            (string/replace #"<img src='data\:image/png;base64,(.*?)' />"
+            (string/replace #"data\:image/png;base64,(.*?)(?=[\"'\\])"
                             (fn [[_ base64-str]]
                               (let [img-filename (str (swap! file-count inc) ".png")
                                     img-web-path (format "%s/%s" images-subfolder img-filename)
@@ -63,6 +63,6 @@
                                 (with-open [out (io/output-stream
                                                   (io/file img-file-path))]
                                   (.write out (base64/decode (.getBytes base64-str))))
-                                (format "<img src='%s' />" img-web-path))))))
+                                img-web-path)))))
   (println "Wrote to" worksheet-out-path))
 ;; @@
