@@ -621,15 +621,15 @@
 
 (defn viz-timeline [_ _ _]
   (let [size-invalidates-c (async/chan)
-        width-px (atom 0)
-        height-px (atom 0)]
+        container-width-px (atom 0)
+        container-height-px (atom 0)]
     (reagent/create-class
      {:component-did-mount
       (fn [component]
         (go-loop []
           (let [size-px (-> component reagent/dom-node style/getSize)]
-            (reset! width-px (.-width size-px))
-            (reset! height-px (.-height size-px))
+            (reset! container-width-px (.-width size-px))
+            (reset! container-height-px (.-height size-px))
             (when (not (nil? (<! size-invalidates-c)))
               (recur)))))
 
@@ -637,22 +637,34 @@
       (fn [viz-steps selection viz-options]
         (let [steps @viz-steps
               opts @viz-options
-              sel-dts (into #{} (map :dt @selection))
+              sel @selection
+              sel-dts (into #{} (map :dt sel))
               keep-steps (:keep-steps opts)
-              t-width (/ @width-px keep-steps)
-              y-px (/ @height-px 2)
+              min-t-width (* (if (pos? (count steps))
+                               (count (str (:timestep (first steps))))
+                               2)
+                             8)
+              t-width (max (/ @container-width-px keep-steps)
+                           min-t-width)
+              width-px (* t-width keep-steps)
+              y-px (/ @container-height-px 2)
               r-px (min y-px (* t-width 0.5))
               sel-r-px y-px
               dt-render-order (concat (->> (range keep-steps)
                                            (remove sel-dts))
                                       sel-dts)]
-          [:div {:style {:cursor "default"}}
+          [:div {:style {:width "100%" :height "2em"
+                         :direction "rtl"
+                         :cursor "default"
+                         :overflow-x "scroll"
+                         :overflow-y "hidden"}}
            [window-resize-listener size-invalidates-c]
-           (into [:svg {:width "100%" :height "2em"}]
+           (into [:svg {:width width-px
+                        :height @container-height-px}]
                  (for [dt dt-render-order
                        :let [kept? (< dt (count steps))
                              sel? (and kept? (contains? sel-dts dt))
-                             x-px (- (dec @width-px) r-px (* dt t-width))
+                             x-px (- (dec width-px) r-px (* dt t-width))
                              r (if sel? sel-r-px r-px)]]
                    [:g (cond-> {:text-anchor "middle"
                                 :font-family "sans-serif"
