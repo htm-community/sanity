@@ -48,6 +48,7 @@
 (defn ^:export add-viz [el serialized]
   (let [[journal-target opts] (read-transit-str serialized)
         into-journal (async/chan)
+        into-viz (async/chan)
         response-c (async/chan)]
     (swap! target->chan assoc journal-target into-journal)
     (@pipe-to-remote-target! journal-target into-journal)
@@ -85,10 +86,13 @@
                          :layer layer-id
                          :model-id (:model-id (first @steps))})))
         (reagent/render [:div
+                         {:on-click #(put! into-viz [:background-clicked])
+                          :on-key-down #(viz/viz-key-down % into-viz)
+                          :tabIndex 1}
                          (when (> (count @steps) 1)
                            [viz/viz-timeline steps selection viz-options])
                          [viz/viz-canvas {:tabIndex 0} steps
-                          selection step-template viz-options nil nil
+                          selection step-template viz-options into-viz nil
                           into-journal local-targets]]
                         el)))))
 

@@ -91,7 +91,7 @@
              :draw-steps 16
              :max-height-px 900
              :max-width-px nil
-             :top-px 0
+             :top-px 5
              :bit-w-px 4
              :bit-h-px 3
              :bit-shrink 0.85
@@ -129,7 +129,7 @@
 
 (defn non-grid-layout-paths
   [m]
-  (for [k [:cells-segments :blank-cells-segments]
+  (for [k [:cells-segments]
         :when (get m k)]
     [k]))
 
@@ -150,18 +150,6 @@
                          (assoc mm ::cache (atom {})))))
           m
           (grid-layout-paths m)))
-
-;; Preserve the width of the canvas. The whitespace behind the cell segments is
-;; still useful as a click-to-dismiss-selection target.
-(defn cells-segments-space-reserver
-  [r-right d-opts]
-  (let [{:keys [seg-h-space-px cells-segs-w-px]} d-opts
-        cells-left (+ r-right seg-h-space-px)]
-   (reify
-     lay/PBox
-     (layout-bounds [_]
-       {:x cells-left :y 0
-        :w cells-segs-w-px :h 0}))))
 
 (defn create-layouts
   [step opts]
@@ -195,9 +183,7 @@
                 [{} s-right]
                 layerseq)]
     {:senses s-lays
-     :regions r-lays
-     :blank-cells-segments (cells-segments-space-reserver
-                            r-right d-opts)}))
+     :regions r-lays}))
 
 (defn rebuild-layouts
   "Used when the model remains the same but the display has
@@ -607,6 +593,7 @@
 
 (defn timeline-click
   [e click-dt steps selection opts]
+  (.stopPropagation e)
   (let [append? (.-metaKey e)
         sel1 {:dt click-dt
               :model-id (:model-id (nth steps click-dt))}]
@@ -844,6 +831,7 @@
 
 (defn viz-click
   [e steps selection layouts]
+  (.stopPropagation e)
   (let [{:keys [x y]} (offset-from-target e)
         append? (.-metaKey e)
         s-lays (:senses layouts)
@@ -1017,6 +1005,7 @@
                                       into-viz ([v] v)
                                       :priority true)]
         (case command
+          :background-clicked (swap! selection sel/clear)
           :sort (let [[apply-to-all?] xs]
                   (sort! viz-layouts viz-options
                          (if apply-to-all?
@@ -1252,8 +1241,7 @@
                           (assoc props
                                  :style {:margin-top 30}
                                  :on-click #(viz-click % @steps selection
-                                                       @viz-layouts)
-                                 :on-key-down #(viz-key-down % into-viz))
+                                                       @viz-layouts))
                           width height
                           [selection steps steps-data ff-synapses-response
                            cells-segs-response viz-layouts viz-options]

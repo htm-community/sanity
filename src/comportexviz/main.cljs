@@ -82,14 +82,17 @@
       (when-not (nil? (<! size-invalidates-c))
         (recur)))
     (fn [world-pane into-sim]
-      [:div
-       [viz/viz-timeline steps selection viz-options]
+      [:div {:on-click #(put! into-viz [:background-clicked])
+             :on-key-down #(viz/viz-key-down % into-viz)
+             :tabIndex 1}
+       [:div.row
+        [viz/viz-timeline steps selection viz-options]]
        [:div.row
         [:div.col-sm-3.col-lg-2
          world-pane]
         [:div.col-sm-9.col-lg-10
          [window-resize-listener size-invalidates-c]
-         [viz/viz-canvas {:tabIndex 1} steps selection step-template viz-options
+         [viz/viz-canvas nil steps selection step-template viz-options
           into-viz into-sim into-journal local-targets]]]])))
 
 (defn comportexviz-app
