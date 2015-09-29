@@ -99,6 +99,15 @@
     (swap! target->chan dissoc journal-target)))
 
 (defn ^:export exported-viz [el]
-  (apply str
-         (for [cnv (-> el (.getElementsByTagName "canvas") array-seq)]
-           (str "<img src='" (.toDataURL cnv "image/png") "' />"))))
+  (let [cnvs (array-seq (.getElementsByTagName el "canvas"))
+        copy-el (js/document.createElement "div")]
+    (set! (.-innerHTML copy-el) (.-innerHTML el))
+    (doseq [cnv cnvs
+            :let [;; Each mutation invalidates the list.
+                  victim-el (aget (.getElementsByTagName copy-el "canvas") 0)
+                  img-el (js/document.createElement "img")]]
+      (.setAttribute img-el "src" (.toDataURL cnv "image/png"))
+      (when-let [style (.getAttribute victim-el "style")]
+        (.setAttribute img-el "style" style))
+      (.replaceChild (.-parentNode victim-el) img-el victim-el))
+    (.-innerHTML copy-el)))
