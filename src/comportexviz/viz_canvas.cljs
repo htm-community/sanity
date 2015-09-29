@@ -648,8 +648,11 @@
                            min-t-width)
               width-px (* t-width keep-steps)
               y-px (/ @container-height-px 2)
-              r-px (min y-px (* t-width 0.5))
-              sel-r-px y-px
+              ry-max y-px
+              rx (* t-width 0.5)
+              ry (min ry-max rx)
+              sel-rx (max rx ry-max)
+              sel-ry ry-max
               dt-render-order (concat (->> (range keep-steps)
                                            (remove sel-dts))
                                       sel-dts)]
@@ -664,8 +667,7 @@
                  (for [dt dt-render-order
                        :let [kept? (< dt (count steps))
                              sel? (and kept? (contains? sel-dts dt))
-                             x-px (- (dec width-px) r-px (* dt t-width))
-                             r (if sel? sel-r-px r-px)]]
+                             x-px (- (dec width-px) rx (* dt t-width))]]
                    [:g (cond-> {:text-anchor "middle"
                                 :font-family "sans-serif"
                                 :font-weight "bold"
@@ -673,10 +675,11 @@
                          kept?
                          (assoc :on-click
                                 #(timeline-click % dt steps selection opts)))
-                    [:circle {:cx x-px :cy y-px
-                              :r r
-                              :fill "black"
-                              :fill-opacity (cond sel? 1.0 kept? 0.3 :else 0.1)}]
+                    [:ellipse {:cx x-px :cy y-px
+                               :rx (if sel? sel-rx rx)
+                               :ry (if sel? sel-ry ry)
+                               :fill "black"
+                               :fill-opacity (cond sel? 1.0 kept? 0.3 :else 0.1)}]
                     (when (and (pos? (count steps))
                                (or sel?
                                    (and kept? (< keep-steps 100))))
