@@ -6,6 +6,7 @@
                      group-and-fill-elements]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
+            [goog.style :as style]
             [comportexviz.dom :refer [offset-from-target]]
             [comportexviz.helpers :as helpers :refer [canvas
                                                       resizing-canvas
@@ -604,73 +605,73 @@
       (let [t (:timestep most-recent)]
         (zero? (mod t anim-every))))))
 
-(defn draw-timeline!
-  [ctx steps sel opts]
-  (let [sel-dts (into #{} (map :dt sel))
-        keep-steps (:keep-steps opts)
-        width-px (.-width (.-canvas ctx))
-        height-px (.-height (.-canvas ctx))
-        t-width (/ width-px keep-steps)
-        y-px (/ height-px 2)
-        r-px (min y-px (* t-width 0.5))
-        sel-r-px y-px]
-    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
-    (c/text-align ctx :center)
-    (c/text-baseline ctx :middle)
-    (c/font-style ctx "bold 10px sans-serif")
-    (doseq [dt (reverse (range keep-steps))
-            :let [kept? (< dt (count steps))
-                  sel? (contains? sel-dts dt)
-                  x-px (- (dec width-px) r-px (* dt t-width))]]
-      (c/fill-style ctx "black")
-      (c/alpha ctx (cond sel? 1.0 kept? 0.3 :else 0.1))
-      (c/circle ctx {:x x-px :y y-px :r (if sel? sel-r-px r-px)})
-      (c/fill ctx)
-      (when (or sel?
-                (and kept? (< keep-steps 100)))
-        (c/fill-style ctx "white")
-        (c/text ctx {:x x-px :y y-px :text (str (:timestep (nth steps dt)))})))
-    (c/alpha ctx 1.0)))
-
 (defn timeline-click
-  [e steps selection opts]
-  (let [{:keys [x y]} (offset-from-target e)
-        append? (.-metaKey e)
-        keep-steps (:keep-steps opts)
-        width-px (.-width (.-target e))
-        t-width (/ width-px keep-steps)
-        click-dt (quot (- (dec width-px) x) t-width)]
-    (when (< click-dt (count steps))
-      (let [sel1 {:dt click-dt
-                  :model-id (:model-id (nth steps click-dt))}]
-        (if append?
-          (let [same-dt? #(= click-dt (:dt %))]
-            (if (some same-dt? @selection)
-              (if (> (count @selection) 1)
-                (swap! selection
-                       (fn [sel]
-                         (into (empty sel) (remove same-dt? sel))))
-                (swap! selection sel/clear))
-              (swap! selection conj (merge (peek @selection) sel1))))
-          (swap! selection #(conj (empty %)
-                                  (merge (peek @selection) sel1))))))))
+  [e click-dt steps selection opts]
+  (let [append? (.-metaKey e)
+        sel1 {:dt click-dt
+              :model-id (:model-id (nth steps click-dt))}]
+    (if append?
+      (let [same-dt? #(= click-dt (:dt %))]
+        (if (some same-dt? @selection)
+          (if (> (count @selection) 1)
+            (swap! selection #(into (empty %) (remove same-dt? %)))
+            (swap! selection sel/clear))
+          (swap! selection conj (merge (peek @selection) sel1))))
+      (swap! selection #(conj (empty %) (merge (peek @selection) sel1))))))
 
 (defn viz-timeline [_ _ _]
-  (let [size-invalidates-c (async/chan)]
-    (fn [viz-steps selection viz-options]
-      [:div
-       [window-resize-listener size-invalidates-c]
-       [resizing-canvas
-        {:on-click #(timeline-click % @viz-steps selection @viz-options)
-         :style {:width "100%"
-                 :height "2em"}}
-        [viz-steps selection viz-options]
-        (fn [ctx]
-          (let [steps @viz-steps
-                opts @viz-options]
-            (when (should-draw? steps opts)
-              (draw-timeline! ctx steps @selection opts))))
-        size-invalidates-c]])))
+  (let [size-invalidates-c (async/chan)
+        width-px (atom 0)
+        height-px (atom 0)]
+    (reagent/create-class
+     {:component-did-mount
+      (fn [component]
+        (go-loop []
+          (let [size-px (-> component reagent/dom-node style/getSize)]
+            (reset! width-px (.-width size-px))
+            (reset! height-px (.-height size-px))
+            (when (not (nil? (<! size-invalidates-c)))
+              (recur)))))
+
+      :reagent-render
+      (fn [viz-steps selection viz-options]
+        (let [steps @viz-steps
+              opts @viz-options
+              sel-dts (into #{} (map :dt @selection))
+              keep-steps (:keep-steps opts)
+              t-width (/ @width-px keep-steps)
+              y-px (/ @height-px 2)
+              r-px (min y-px (* t-width 0.5))
+              sel-r-px y-px
+              dt-render-order (concat (->> (range keep-steps)
+                                           (remove sel-dts))
+                                      sel-dts)]
+          [:div {:style {:cursor "default"}}
+           [window-resize-listener size-invalidates-c]
+           (into [:svg {:width "100%" :height "2em"}]
+                 (for [dt dt-render-order
+                       :let [kept? (< dt (count steps))
+                             sel? (and kept? (contains? sel-dts dt))
+                             x-px (- (dec @width-px) r-px (* dt t-width))
+                             r (if sel? sel-r-px r-px)]]
+                   [:g (cond-> {:text-anchor "middle"
+                                :font-family "sans-serif"
+                                :font-weight "bold"
+                                :font-size "10px"}
+                         kept?
+                         (assoc :on-click
+                                #(timeline-click % dt steps selection opts)))
+                    [:circle {:cx x-px :cy y-px
+                              :r r
+                              :fill "black"
+                              :fill-opacity (cond sel? 1.0 kept? 0.3 :else 0.1)}]
+                    (when (and (pos? (count steps))
+                               (or sel?
+                                   (and kept? (< keep-steps 100))))
+                      [:text {:x x-px :y y-px
+                              :dy "0.35em"
+                              :fill "white"}
+                       (str (:timestep (nth steps dt)))])]))]))})))
 
 (defn draw-viz!
   [ctx viz-steps ff-synapses-response cells-segs-response layouts sel opts]
