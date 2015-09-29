@@ -14,18 +14,23 @@
         lyr (get rgn lyr-id)
         depth (p/layer-depth lyr)
         in (:input-value htm)
-        sense-node (first (vals (:senses htm)))
-        bits (p/bits-value sense-node)]
+        in-bits (:in-ff-bits (:state lyr))
+        in-sbits (:in-stable-ff-bits (:state lyr))]
     (->>
      ["__Selection__"
       (str "* timestep " (p/timestep rgn))
       (str "* column " (or col "nil"))
       ""
       "__Input__"
-      (str in " (" (count bits) " bits)")
+      (str in)
+      (str "(" (count in-bits) " bits, of which " (count in-sbits) " stable)")
+      (cond
+        (:newly-engaged? (:state lyr)) "= newly engaged"
+        (:engaged? (:state lyr)) "= continuing engaged"
+        :else "= not engaged")
       ""
       "__Input bits__"
-      (str (sort bits))
+      (str (sort in-bits))
       ""
       "__Active columns__"
       (str (sort (p/active-columns lyr)))
@@ -33,8 +38,8 @@
       "__Bursting columns__"
       (str (sort (p/bursting-columns lyr)))
       ""
-      "__Learnable cells__"
-      (str (sort (p/learnable-cells lyr)))
+      "__Winner cells__"
+      (str (sort (p/winner-cells lyr)))
       ""
       "__Proximal learning__"
       (for [seg-up (sort-by :target-id (vals (:proximal-learning (:state lyr))))]
@@ -89,7 +94,7 @@
              [(str "CELL " ci)
               (str (count segs) " = " (map count segs))
               #_(str "Distal excitation from this cell: "
-                   (p/targets-connected-from p-distal-sg (+ ci (* depth col)))) ;; TODO cell->id
+                     (p/targets-connected-from p-distal-sg (+ ci (* depth col)))) ;; TODO cell->id
               (for [[si syns] (map-indexed vector segs)]
                 [(str "  SEGMENT " si)
                  (for [[id p] (sort syns)]

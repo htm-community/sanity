@@ -428,7 +428,7 @@
         (doseq [[ci cell-data] cells-segments
                 :let [[cell-x cell-y] (cell-xy cslay ci)
                       {:keys [cell-active? cell-predictive? selected-cell?
-                              cell-state segments]} cell-data]]
+                              winner-cell? cell-state segments]} cell-data]]
           ;; draw background lines to cell from column and from segments
           (c/stroke-width ctx col-d-px)
           (c/stroke-style ctx (:background state-colors))
@@ -454,7 +454,8 @@
             (c/stroke)
             (c/fill))
           (c/fill-style ctx "black")
-          (c/text ctx {:text (str "cell " ci)
+          (c/text ctx {:text (str "cell " ci
+                                  (if winner-cell? " - winner" ""))
                        :x (+ cell-x 10) :y (- cell-y cell-r-px)})
           ;; draw each segment
           (doseq [[si seg] segments

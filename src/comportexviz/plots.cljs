@@ -356,7 +356,7 @@
            kept-sdrs hit-counts timestep threshold title]}
    {:as plot-opts
     :keys [group-contexts? ordering hide-conns-smaller]}]
-  (let [lc-sdrv (:learn sdr-votes)
+  (let [wc-sdrv (:winners sdr-votes)
         ac-sdrv (:active sdr-votes)
         pc-sdrv (:pred sdr-votes)
         kept-sdr? (set kept-sdrs)
@@ -475,9 +475,9 @@
                                 (update :y + sdr-height)))
             (c/fill)
             (c/alpha 1.0))))
-      ;; outline of exact matching cells (learning cells)
-      (when-let [lc-size (lc-sdrv sdr)]
-        (let [h (* y-scale lc-size)]
+      ;; outline of exact matching cells (winner cells)
+      (when-let [wc-size (wc-sdrv sdr)]
+        (let [h (* y-scale wc-size)]
           (doto ctx
             (c/stroke-style "#000")
             (c/rounded-rect (-> (assoc sdr-rect :h h)
@@ -610,13 +610,13 @@
   list of sdrs, and returns them ordered by last appearance."
   [{:keys [sdr-label-counts sdr-last-matches sdr-votes timestep]}
    {:keys [hide-states-older hide-states-rarer]}]
-  (let [lc-sdrv (:learn sdr-votes)]
+  (let [wc-sdrv (:winners sdr-votes)]
     (->> (subseq sdr-last-matches >= (- timestep hide-states-older))
          (into []
                (comp (map key)
                      (if (> hide-states-rarer 1)
                        (filter (fn [sdr]
-                                 (or (lc-sdrv sdr)
+                                 (or (wc-sdrv sdr)
                                      (let [label-counts (sdr-label-counts sdr)]
                                        (>= (reduce + (vals label-counts))
                                            hide-states-rarer)))))
@@ -699,7 +699,7 @@
    :sdr-sizes {}
    :gid-sizes {}
    :sdr-growth {}
-   :sdr-votes {:learn {}
+   :sdr-votes {:winners {}
                :active {}
                :pred {}}
    :sdr-transitions nil
@@ -721,9 +721,10 @@
       (let [cells-by-state (<! response-c)
             state (or (get-in @states [(:model-id prev-step) [region layer]])
                       empty-cell-sdrs-state)
-            lc (:learn-cells cells-by-state)
+            wc (:winner-cells cells-by-state)
             ac (:active-cells cells-by-state)
             pc (:pred-cells cells-by-state)
+            on? (:engaged? cells-by-state)
             threshold (get-in @step-template [:regions region layer
                                               :spec :seg-learn-threshold])
             ;; for each cell, represents its specificity to each SDR
@@ -731,70 +732,75 @@
                                 (util/remap freqs->fracs))
             ac-sdrv (sdr-votes ac cell-sdr-fracs)
             pc-sdrv (sdr-votes pc cell-sdr-fracs)
-            lc-sdrv (sdr-votes lc cell-sdr-fracs)
-            learn-sdrs* (keep (fn [[sdr vote]] (when (>= vote threshold) sdr))
-                              lc-sdrv)
-            new-sdr (when (empty? learn-sdrs*) (count (:sdr-label-counts state)))
-            learn-sdrs (if new-sdr [new-sdr] learn-sdrs*)
+            wc-sdrv (sdr-votes wc cell-sdr-fracs)
+            [win-sdrs new-sdr] (let [hits (keep (fn [[id vote]]
+                                                  (when (>= vote threshold) id))
+                                                wc-sdrv)
+                                     n (count (:sdr-label-counts state))]
+                                 (if (seq hits) [hits nil] ;; otherwise, new state:
+                                     [[n] n]))
             ;; grouping by columns
             col-gid-fracs (->> (:col-gid-counts state)
                                (util/remap freqs->fracs))
-            a-cols (map first lc)
+            a-cols (map first wc)
             gidv (sdr-votes a-cols col-gid-fracs)
-            learn-gids* (keep (fn [[gid vote]] (when (>= vote threshold) gid))
-                              gidv)
-            new-gid (when (empty? learn-gids*) (count (:sdr-label-counts state)))
-            learn-gids (if new-gid [new-gid] learn-gids*)
+            [win-gids new-gid] (let [hits (keep (fn [[id vote]]
+                                                  (when (>= vote threshold) id))
+                                                gidv)
+                                     n (count (:sdr-label-counts state))]
+                                 (if (seq hits) [hits nil] ;; otherwise, new state:
+                                     [[n] n]))
             ;; etc
             sdr-sizes (or (:updated-sdr-sizes state)
                           (calc-sdr-sizes cell-sdr-fracs))
             gid-sizes (or (:updated-gid-sizes state)
                           (calc-sdr-sizes col-gid-fracs))
-            inc-learn-sdrs (partial merge-with + (zipmap learn-sdrs (repeat 1)))
-            inc-learn-gids (partial merge-with + (zipmap learn-gids (repeat 1)))
+            inc-win-sdrs (partial merge-with + (zipmap win-sdrs (repeat 1)))
+            inc-win-gids (partial merge-with + (zipmap win-gids (repeat 1)))
             label (:label (:input-value step))
-            inc-label (partial merge-with + {label (/ 1 (count learn-sdrs))})
+            inc-label (partial merge-with + {label (/ 1 (count win-sdrs))})
             t (:timestep step)
-            new-state* (-> state
-                           (update :cell-sdr-counts
-                                   (fn [m]
-                                     (util/update-each m lc inc-learn-sdrs)))
-                           (update :col-gid-counts
-                                   (fn [m]
-                                     (util/update-each m a-cols inc-learn-gids)))
-                           (update :sdr->gid
-                                   (fn [m]
-                                     (if new-sdr (assoc m new-sdr (first learn-gids))
-                                         m)))
-                           (update :sdr-label-counts
-                                   (fn [m]
-                                     (util/update-each m learn-sdrs inc-label)))
-                           (update :sdr-last-matches
-                                   (fn [m]
-                                     (merge m (zipmap learn-sdrs (repeat t)))))
-                           (assoc :sdr-transitions nil ;; updated lazily
-                                  :sdr-votes {:learn lc-sdrv
-                                              :active ac-sdrv
-                                              :pred pc-sdrv}
-                                  :sdr-sizes sdr-sizes
-                                  :gid-sizes gid-sizes
-                                  :timestep t
-                                  :threshold threshold))
+            new-state* (cond-> state
+                         on? (update :cell-sdr-counts
+                                     (fn [m]
+                                       (util/update-each m wc inc-win-sdrs)))
+                         on? (update :col-gid-counts
+                                     (fn [m]
+                                       (util/update-each m a-cols inc-win-gids)))
+                         on? (update :sdr->gid
+                                     (fn [m]
+                                       (if new-sdr (assoc m new-sdr (first win-gids))
+                                           m)))
+                         on? (update :sdr-label-counts
+                                     (fn [m]
+                                       (util/update-each m win-sdrs inc-label)))
+                         on? (update :sdr-last-matches
+                                     (fn [m]
+                                       (merge m (zipmap win-sdrs (repeat t)))))
+                         true
+                         (assoc :sdr-transitions nil ;; updated lazily
+                                :sdr-votes {:winners wc-sdrv
+                                            :active ac-sdrv
+                                            :pred pc-sdrv}
+                                :sdr-sizes sdr-sizes
+                                :gid-sizes gid-sizes
+                                :timestep t
+                                :threshold threshold))
             new-sdr-sizes (calc-sdr-sizes (->> (:cell-sdr-counts new-state*)
                                                (util/remap freqs->fracs)))
-            sdr-growth (merge-with - (select-keys new-sdr-sizes learn-sdrs)
-                                   (select-keys sdr-sizes learn-sdrs))
+            sdr-growth (merge-with - (select-keys new-sdr-sizes win-sdrs)
+                                   (select-keys sdr-sizes win-sdrs))
             new-gid-sizes (calc-sdr-sizes (->> (:col-gid-counts new-state*)
                                                (util/remap freqs->fracs)))
-            gid-growth (merge-with - (select-keys new-gid-sizes learn-gids)
-                                   (select-keys gid-sizes learn-gids))
-            new-state (cond-> (assoc new-state*
-                                     :updated-sdr-sizes new-sdr-sizes
-                                     :sdr-growth sdr-growth
-                                     :updated-gid-sizes new-gid-sizes
-                                     :gid-growth gid-growth)
-                        new-sdr (assoc-in [:sdr-votes :learn new-sdr]
-                                          (sdr-growth new-sdr)))]
+            gid-growth (merge-with - (select-keys new-gid-sizes win-gids)
+                                   (select-keys gid-sizes win-gids))
+            new-state (cond-> new-state*
+                        on? (assoc :updated-sdr-sizes new-sdr-sizes
+                                   :sdr-growth sdr-growth
+                                   :updated-gid-sizes new-gid-sizes
+                                   :gid-growth gid-growth)
+                        (and on? new-sdr) (assoc-in [:sdr-votes :winners new-sdr]
+                                                    (sdr-growth new-sdr)))]
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
 (defn cell-sdrs-plot-builder
