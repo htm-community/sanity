@@ -350,9 +350,12 @@
       })))
 
 (defn draw-cell-sdrs-plot!*
-  [ctx {:keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
-               kept-sdrs timestep threshold title]}
-   {:keys [group-contexts? ordering hide-conns-smaller]}]
+  [ctx
+   {:as plot-data
+    :keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
+           kept-sdrs hit-counts timestep threshold title]}
+   {:as plot-opts
+    :keys [group-contexts? ordering hide-conns-smaller]}]
   (let [lc-sdrv (:learn sdr-votes)
         ac-sdrv (:active sdr-votes)
         pc-sdrv (:pred sdr-votes)
@@ -373,7 +376,9 @@
                                           (+ offset gap dy gy)))
                                  [m offset]))
         title-px 16
-        width-px (.-width (.-canvas ctx))
+        hits-w-px 30
+        full-width-px (.-width (.-canvas ctx))
+        width-px (- full-width-px hits-w-px)
         full-height-px (.-height (.-canvas ctx))
         height-px (- full-height-px title-px)
         y-scale (/ height-px (max (* 50 gap) (+ y-max gap)))
@@ -386,8 +391,8 @@
         mid-x (quot width-px 2)
         label-width 50]
     (c/save ctx)
-    (c/clear-rect ctx {:x 0 :y 0 :w width-px :h full-height-px})
-    (c/translate ctx mid-x title-px)
+    (c/clear-rect ctx {:x 0 :y 0 :w full-width-px :h full-height-px})
+    (c/translate ctx (+ mid-x hits-w-px) title-px)
     ;; draw title
     (let [title-y 0]
       (c/text-align ctx :center)
@@ -490,18 +495,41 @@
                   (+ offset n))
                 (- (/ sdr-tot-count 2))
                 label-counts)))
+    ;; hit counts from spreading activation
+    (let [max-hits (apply max 5 (vals hit-counts))
+          x-left (- 0 mid-x hits-w-px)]
+      (c/text-align ctx :right)
+      (c/font-style ctx (str (round (* hits-w-px 0.5)) "px sans"))
+      (doseq [[sdr n-hits] hit-counts
+              :let [z (min 1.0 (/ n-hits max-hits))
+                    y-mid (* y-scale (sdr-ordinate sdr))
+                    sdr-height (* y-scale (sdr-sizes sdr))
+                    y-top (- y-mid (quot sdr-height 2))]]
+        (doto ctx
+          (c/alpha z)
+          (c/fill-style "black")
+          (c/fill-rect {:x x-left
+                        :y y-top
+                        :w hits-w-px
+                        :h sdr-height})
+          (c/alpha 1.0)
+          (c/fill-style (if (> z 0.5) "white" "black"))
+          (c/text {:x (+ x-left hits-w-px -5)
+                   :y y-mid
+                   :text n-hits}))))
     (c/restore ctx)))
 
 (defn cell-sdrs-plot-data-group-contexts
   [{:as plot-data
     :keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
-           sdr->gid gid-sizes gid-growth kept-sdrs
+           sdr->gid gid-sizes gid-growth kept-sdrs current-sdrs
            ]}]
   (let [kept-gids (-> (map sdr->gid kept-sdrs) ;; keep order by last appearance:
                       (reverse) (distinct) (reverse))]
     ;; TODO an abstraction for this kind of aggregation
     (-> plot-data
         (assoc :kept-sdrs kept-gids
+               :current-sdrs (distinct (map sdr->gid current-sdrs))
                :sdr-sizes gid-sizes
                :sdr-growth gid-growth
                :grouped? true)
@@ -547,6 +575,36 @@
                               vm)))
         )))
 
+(defn cell-sdrs-plot-spread-activation
+  [{:as plot-data
+    :keys [sdr-transitions sdr-last-matches timestep kept-sdrs current-sdrs]}
+   {:as plot-opts
+    :keys [spreading-activation-steps hide-conns-smaller]}]
+  (let [ok-transitions (->> (select-keys sdr-transitions kept-sdrs)
+                            (into {}
+                                  (map (fn [[from-sdr to-sdrs-counts]]
+                                         [from-sdr
+                                          (keep (fn [[id n]]
+                                                  (when (and (not= from-sdr id)
+                                                             (>= n hide-conns-smaller))
+                                                    id))
+                                                to-sdrs-counts)]))))
+        hit-counts
+        (loop [hit-counts (zipmap current-sdrs (repeat 0))
+               current-ids current-sdrs
+               n spreading-activation-steps]
+          (if (pos? n)
+            (let [next-ids (mapcat ok-transitions current-ids)
+                  next-counts (merge-with + hit-counts
+                                          (frequencies next-ids))]
+              (recur next-counts
+                     next-ids
+                     (dec n)))
+            ;; finished
+            hit-counts))]
+    (assoc plot-data
+           :hit-counts hit-counts)))
+
 (defn kept-sdrs-by-last-appearance
   "Applies options hide-states-older, hide-states-rarer to filter the
   list of sdrs, and returns them ordered by last appearance."
@@ -565,12 +623,19 @@
                        identity))))))
 
 (defn draw-cell-sdrs-plot!
-  [ctx plot-data* plot-opts]
+  [ctx
+   {:as plot-data*
+    :keys [sdr-last-matches timestep]}
+   plot-opts]
   (let [kept-sdrs (kept-sdrs-by-last-appearance plot-data* plot-opts)
+        current-sdrs (map key (subseq sdr-last-matches >= timestep))
         plot-data (cond->
-                      (assoc plot-data* :kept-sdrs kept-sdrs)
+                      (assoc plot-data* :kept-sdrs kept-sdrs
+                             :current-sdrs current-sdrs)
                     (:group-contexts? plot-opts)
-                    (cell-sdrs-plot-data-group-contexts))]
+                    (cell-sdrs-plot-data-group-contexts)
+                    (pos? (:spreading-activation-steps plot-opts))
+                    (cell-sdrs-plot-spread-activation plot-opts))]
     (draw-cell-sdrs-plot!* ctx plot-data plot-opts)))
 
 (defn fetch-transitions-data

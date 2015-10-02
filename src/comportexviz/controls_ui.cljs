@@ -189,6 +189,7 @@
 
 (def default-cell-sdrs-plot-options
   {:group-contexts? false
+   :spreading-activation-steps 0
    :ordering :first-appearance
    :hide-states-older 100
    :hide-states-rarer 1
@@ -246,11 +247,25 @@
                     :id :hide-conns-smaller
                     :preamble (gstr/unescapeEntities "&ge; ")
                     :postamble "-cell connections"}]
-     ] [:div.col-sm-6
+     ]
+    [:div.col-sm-6
      [:input {:field :range
               :min 1
               :max 16
               :id :hide-conns-smaller}]]
+    ]
+   [:div.row
+    [:div.col-sm-6
+     [:label.small {:field :label
+                    :id :spreading-activation-steps
+                    :preamble "spreading "
+                    :postamble " steps"}]
+     ]
+    [:div.col-sm-6
+     [:input {:field :range
+              :min 0
+              :max 12
+              :id :spreading-activation-steps}]]
     ]
    ])
 
