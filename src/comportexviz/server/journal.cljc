@@ -107,6 +107,25 @@
                                                   steps-subscriber)
                           viewports (assoc ::viewports viewports)))))
 
+            :consider-future
+            (let [[id input response-c] xs]
+              (put! response-c
+                    (if-let [htm (find-model id)]
+                      (zipmap (core/region-keys htm)
+                              (->> (-> htm
+                                       (p/htm-sense input nil)
+                                       p/htm-activate
+                                       core/region-seq)
+                                   (map core/column-state-freqs)))
+                      (id-missing-response id steps-offset))))
+
+            :decode-predictive-columns
+            (let [[id sense-id n response-c] xs]
+              (put! response-c
+                    (if-let [htm (find-model id)]
+                      (core/predictions htm sense-id n)
+                      (id-missing-response id steps-offset))))
+
             :get-steps
             (let [[response-c] xs]
               (put! response-c

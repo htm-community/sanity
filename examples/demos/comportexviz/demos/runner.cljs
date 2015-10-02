@@ -9,12 +9,16 @@
 
 (defn world-pane
   []
-  (into [:div
-         [:div {:style {:font "10px sans-serif"}} "sensed values"]]
-        (for [[sense-id v] (:sensed-values (main/selected-step))]
-          [:div {:style {:margin-top 30}}
-           [:p (name sense-id) [:br]
-            [:strong (str v)]]])))
+  (when (not-empty @main/steps)
+    (into [:div]
+          (for [[sense-id v] (:sensed-values (main/selected-step))]
+            [:div {:style {:margin-top 20}}
+             [:p
+              [:span {:style {:font-family "sans-serif"
+                              :font-size "9px"
+                              :font-weight "bold"}} (name sense-id)]
+              [:br]
+              [:strong (str v)]]]))))
 
 (defn ^:export init
   []

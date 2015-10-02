@@ -1219,39 +1219,43 @@
               height (or (when bottom
                            (+ bottom lay/extra-px-for-highlight))
                          0)]
-          (into [:div {:style {:font "10px sans-serif"
-                               :position "relative"}}]
-                (concat (for [path (grid-layout-paths layouts)
-                              :let [lay (get-in layouts path)
-                                    ids (subvec path 1)
-                                    sense? (= (first path) :senses)]]
-                          [:div {:style {:position "absolute"
-                                         :left (:x (layout-bounds lay))
-                                         :top 0}}
-                           (->> ids (map name) (interpose " ") (apply str))
-                           [:br]
-                           (scroll-status-str lay sense?)])
-                        (when-let [cslay (:cells-segments layouts)]
-                          [[:div {:style {:position "absolute"
-                                          :left (:x (layout-bounds cslay))
-                                          :top 0}}
-                            "cells and distal dendrite segments"]])
-                        [^{:key "main-canvas"}
-                         [canvas
-                          (assoc props
-                                 :style {:margin-top 30}
-                                 :on-click #(viz-click % @steps selection
-                                                       @viz-layouts))
-                          width height
-                          [selection steps steps-data ff-synapses-response
-                           cells-segs-response viz-layouts viz-options]
-                          (fn [ctx]
-                            (let [viz-steps (make-viz-steps @steps @steps-data)
-                                  opts @viz-options]
-                              (when (should-draw? viz-steps opts)
-                                (draw-viz! ctx viz-steps @ff-synapses-response
-                                           @cells-segs-response @viz-layouts
-                                           @selection opts))))]]))))})))
+          [:div
+           [:div {:style {:height 20
+                          :font "9px sans-serif"
+                          :font-weight "bold"
+                          :position "relative"}}
+            (when (not-empty @steps)
+              (into [:div
+                     (when-let [cslay (:cells-segments layouts)]
+                       [:div {:style {:position "absolute"
+                                      :left (:x (layout-bounds cslay))
+                                      :top 0}}
+                        "cells and distal dendrite segments"])]
+                    (for [path (grid-layout-paths layouts)
+                          :let [lay (get-in layouts path)
+                                ids (subvec path 1)
+                                sense? (= (first path) :senses)]]
+                      [:div {:style {:position "absolute"
+                                     :left (:x (layout-bounds lay))
+                                     :top 0}}
+                       (->> ids (map name) (interpose " ") (apply str))
+                       [:br]
+                       (scroll-status-str lay sense?)])))]
+           ^{:key "main-canvas"}
+           [canvas
+            (assoc props
+                   :on-click #(viz-click % @steps selection
+                                         @viz-layouts))
+            width height
+            [selection steps steps-data ff-synapses-response
+             cells-segs-response viz-layouts viz-options]
+            (fn [ctx]
+              (let [viz-steps (make-viz-steps @steps @steps-data)
+                    opts @viz-options]
+                (when (should-draw? viz-steps opts)
+                  (draw-viz! ctx viz-steps @ff-synapses-response
+                             @cells-segs-response @viz-layouts
+                             @selection opts))))]]))})))
 
 (defn inbits-display [topo state->bits d-opts]
   (let [d-opts (assoc d-opts :draw-steps 1)
