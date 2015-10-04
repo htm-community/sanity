@@ -17,7 +17,6 @@
 
 (def config
   (atom {:n-regions 1
-         :encoder :block
          :world-buffer-count 0}))
 
 (def world-buffer (async/buffer 5000))
@@ -86,11 +85,8 @@ Chifung has a friend."))
   []
   (with-ui-loading-message
     (let [n-regions (:n-regions @config)
-          sensor (case (:encoder @config)
-                   :block demo/block-sensor
-                   :random demo/random-sensor)
           init? (nil? @model)]
-      (reset! model (demo/n-region-model n-regions demo/spec sensor))
+      (reset! model (demo/n-region-model n-regions demo/spec))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/step-template (data/step-template-data @model))))))
@@ -120,13 +116,6 @@ Chifung has a friend."))
      [:input.form-control {:field :numeric
                            :id :n-regions}]]]
    [:div.form-group
-    [:label.col-sm-5 "Letter encoder:"]
-    [:div.col-sm-7
-     [:select.form-control {:field :list
-                            :id :encoder}
-      [:option {:key :block} "block"]
-      [:option {:key :random} "random"]]]]
-   [:div.form-group
     [:div.col-sm-offset-5.col-sm-7
      [:button.btn.btn-default
       {:on-click (fn [e]
@@ -139,9 +128,10 @@ Chifung has a friend."))
 (defn model-tab
   []
   [:div
-   [:p "In this example, text input is presented as a sequence of letters.
-        Allowed characters are letters, numbers, space, period and question
-        mark."]
+   [:p "In this example, text input is presented as a sequence of
+        letters, with independent unique encodings. It is transformed
+        to lower case, and all whitespace is squashed into single
+        spaces."]
 
    [:h3 "Input " [:small "Letter sequences"]]
    [:p.text-info

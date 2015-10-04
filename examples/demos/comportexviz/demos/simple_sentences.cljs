@@ -17,8 +17,7 @@
 
 (def config
   (atom {:n-regions 1
-         :encoder :block
-         :repeats 2
+         :repeats 1
          :text demo/input-text
          :world-buffer-count 0}))
 
@@ -75,11 +74,8 @@
   []
   (with-ui-loading-message
     (let [n-regions (:n-regions @config)
-          sensor (case (:encoder @config)
-                   :block (demo/make-block-sensor (:text @config))
-                   :random demo/random-sensor)
           init? (nil? @model)]
-      (reset! model (demo/n-region-model n-regions demo/spec sensor))
+      (reset! model (demo/n-region-model n-regions demo/spec))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/step-template (data/step-template-data @model))))))
@@ -138,13 +134,6 @@
       [:input.form-control {:field :numeric
                             :id :n-regions}]]]
     [:div.form-group
-     [:label.col-sm-5 "Word encoder:"]
-     [:div.col-sm-7
-      [:select.form-control {:field :list
-                             :id :encoder}
-       [:option {:key :block} "block"]
-       [:option {:key :random} "random"]]]]
-    [:div.form-group
      [:div.col-sm-offset-5.col-sm-7
       [:button.btn.btn-default
        {:on-click (fn [e]
@@ -157,10 +146,10 @@
 (defn model-tab
   []
   [:div
-   [:p "For looking at generalisation in sequence
-        learning. The text is split into sentences at each period (.)
-        and each sentence into words. The words are presented through
-        a category encoder, i.e. with non-overlapping input bits."]
+   [:p "In this example, text is presented as a sequence of words,
+        with independent unique encodings. The text is split into
+        sentences at each period (.) and each sentence into
+        words."]
    [bind-fields config-template config]
    ]
   )
