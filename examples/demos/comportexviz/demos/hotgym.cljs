@@ -351,7 +351,8 @@
             center-i (- center-dt dt0)
             draw-dts (range dt0 (min (+ dt0 draw-steps)
                                      (count @main/steps)))]
-        [:div {:style {:position "relative"}}
+        [:div {:style {:position "relative"
+                       :width (+ w-pad-left w w-pad-right)}}
          [:div {:style {:position "absolute"
                         :top 0
                         :left 0
@@ -561,9 +562,18 @@
   []
   [:div
    [:p "Numenta's \"hotgym\" dataset."]
-   [:p "Uses the solution from "
+   [:p "Uses the solution from:" [:br]
     [:a {:href "http://mrcslws.com/gorilla/?path=hotgym.clj"}
-     "Predicting power consumptions with HTM"]]])
+     "Predicting power consumptions with HTM"]]
+   [:p "This demo highlights the Anomaly Radar display on the left. The anomaly
+   scores for possible next inputs are sampled, and the sample points are shown
+   as dots. The prediction is a blue dash, and the actual value is a black
+   dash. The red->white scale represents the anomaly score. The anomaly score is
+   correct wherever there's a dot, and it's estimated elsewhere."]
+   [:p "Inspect the numbers by hovering your mouse over the Anomaly Radar. Click
+   to add your own samples. You might want to pause the simulation first."]
+   [:p "This demo chooses samples by decoding the predictive columns, as
+   explained in the essay above."]])
 
 (defn ^:export init
   []
