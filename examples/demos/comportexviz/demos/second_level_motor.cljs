@@ -19,7 +19,8 @@
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
-  (atom {:text demo/test-text}))
+  (atom {:text demo/test-text
+         :edit-text demo/test-text}))
 
 (def world-c
   (async/chan (async/buffer 1)
@@ -50,7 +51,8 @@
         y-scale (plt/scale-fn y-lim (:h plot-size))]
     (c/clear-rect ctx {:x 0 :y 0 :w width-px :h height-px})
     (plt/frame! plot)
-    (c/font-style ctx (str (int (/ height-px n-letters)) "px monospace"))
+    (c/font-style ctx (str (min 30 (int (/ height-px n-letters)))
+                           "px monospace"))
     (c/text-baseline ctx :middle)
     (c/fill-style ctx "black")
     (doseq [[y letter] (map-indexed vector sentence-flat)]
@@ -153,8 +155,10 @@
 
 (defn set-text!
   []
-  (let [sentences (demo/parse-sentences (:text @config))]
-    (put! control-c (fn [_] (demo/initial-inval sentences)))))
+  (let [text (:edit-text @config)
+        sentences (demo/parse-sentences text)]
+    (put! control-c (fn [_] (demo/initial-inval sentences)))
+    (swap! config assoc :text text)))
 
 (def config-template
   [:div
@@ -163,12 +167,14 @@
     [:div.form-group
      [:div.col-sm-12
       [:textarea.form-control {:field :textarea
-                               :id :text
+                               :id :edit-text
                                :rows 8}]]]
     [:div.form-group
      [:div.col-sm-8
       [:button.btn.btn-primary
-       {:on-click (fn [e]
+       {:field :container
+        :visible? #(not= (:edit-text %) (:text %))
+        :on-click (fn [e]
                     (set-text!)
                     (.preventDefault e))}
        "Set sentences"]]]

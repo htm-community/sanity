@@ -146,7 +146,7 @@ Chifung has a friend."))
                         (swap! config assoc :world-buffer-count (count world-buffer))
                         (recur)))
                     (.preventDefault e))}
-       "drain"])]
+       "Clear"])]
    [:div.well
     "Immediate input as you type: "
     [:input {:size 2 :maxLength 1
@@ -160,10 +160,15 @@ Chifung has a friend."))
                              (reset! text-to-send
                                      (-> e .-target forms/getValue))
                              (.preventDefault e))}]
-    [:button.btn.btn-primary {:on-click (fn [e]
-                                          (send-text!)
-                                          (.preventDefault e))}
-     "Send text block input"]]
+    [:button.btn {:class (if (pos? (count world-buffer))
+                           "btn-default"
+                           "btn-primary")
+                  :on-click (fn [e]
+                              (send-text!)
+                              (.preventDefault e))}
+     (if (pos? (count world-buffer))
+       "Queue more text input"
+       "Queue text input")]]
 
    [:h3 "HTM model"]
    [bind-fields config-template config]
@@ -174,5 +179,5 @@ Chifung has a friend."))
   []
   (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
                   (dom/getElement "comportexviz-app"))
-  (put! into-sim [:run])
+  (send-text!)
   (set-model!))

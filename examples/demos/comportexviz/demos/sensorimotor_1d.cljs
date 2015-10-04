@@ -13,7 +13,7 @@
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [cljs.core.async :as async :refer [put! <!]])
-  (:require-macros [cljs.core.async.macros :refer [go]]
+  (:require-macros [cljs.core.async.macros :refer [go go-loop]]
                    [comportexviz.macros :refer [with-ui-loading-message]]))
 
 (def config
@@ -152,12 +152,13 @@
   (let [field-key (:field @config)
         n-steps (:n-steps @config)
         field (demo/fields field-key)]
-    (async/onto-chan world-c
-                     (take n-steps (demo/input-seq
-                                    (demo/initial-world
-                                     field (swap! seed-counter inc))))
-                     false)
-    (swap! config assoc :world-buffer-count (count world-buffer))))
+    (go
+      (<! (async/onto-chan world-c
+                           (take n-steps (demo/input-seq
+                                          (demo/initial-world
+                                           field (swap! seed-counter inc))))
+                           false))
+      (swap! config assoc :world-buffer-count (count world-buffer)))))
 
 (defn set-model!
   []
@@ -171,9 +172,22 @@
 (def config-template
   [:div
    [:h3 "Input " [:small "Sensorimotor sequences"]]
-   [:p.text-info {:field :label
-                  :id :world-buffer-count
-                  :postamble " queued input values."}]
+   [:p.text-info
+    [:span {:field :label
+            :id :world-buffer-count
+            :postamble " queued input values."}]
+    " "
+    [:span {:field :container
+            :visible? #(pos? (:world-buffer-count %))}
+     [:button.btn.btn-warning.btn-xs
+      {:on-click (fn [e]
+                   (go-loop []
+                     (when (and (pos? (count world-buffer))
+                                (<! world-c))
+                       (swap! config assoc :world-buffer-count (count world-buffer))
+                       (recur)))
+                   (.preventDefault e))}
+      "Clear"]]]
    [:div.form-horizontal
     [:div.form-group
      [:label.col-sm-5 "Field of values (a world):"]
@@ -224,5 +238,5 @@
   []
   (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
                   (dom/getElement "comportexviz-app"))
-  (put! into-sim [:run])
+  (send-input-stream!)
   (set-model!))

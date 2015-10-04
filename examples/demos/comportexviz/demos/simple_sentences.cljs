@@ -106,7 +106,7 @@
                        (swap! config assoc :world-buffer-count (count world-buffer))
                        (recur)))
                    (.preventDefault e))}
-      "drain"]]]
+      "Clear"]]]
    [:div.form-horizontal
     [:div.form-group
      [:label.col-sm-5 "Repeats of each sentence:"]
@@ -121,10 +121,19 @@
     [:div.form-group
      [:div.col-sm-8
       [:button.btn.btn-primary
-       {:on-click (fn [e]
+       {:field :container
+        :visible? #(zero? (:world-buffer-count %))
+        :on-click (fn [e]
                     (send-text!)
                     (.preventDefault e))}
-       "Send text block input"]]]
+       "Queue text input"]
+      [:button.btn.btn-default
+       {:field :container
+        :visible? #(pos? (:world-buffer-count %))
+        :on-click (fn [e]
+                    (send-text!)
+                    (.preventDefault e))}
+       "Queue more text input"]]]
     ]
    [:h3 "HTM model"]
    [:div.form-horizontal
@@ -158,5 +167,5 @@
   []
   (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
                   (dom/getElement "comportexviz-app"))
-  (put! into-sim [:run])
+  (send-text!)
   (set-model!))
