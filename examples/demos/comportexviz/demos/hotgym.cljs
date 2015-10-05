@@ -573,7 +573,13 @@
    [:p "Inspect the numbers by hovering your mouse over the Anomaly Radar. Click
    to add your own samples. You might want to pause the simulation first."]
    [:p "This demo chooses samples by decoding the predictive columns, as
-   explained in the essay above."]])
+   explained in the essay above."]
+   [:p "It's fun to click the black dashes and see if it changes the
+   prediction. When this happens, it shows that the HTM actually predicted
+   something better than we thought, we just didn't sample the right points. You
+   could expand on this demo to try different strategies for choosing a clever
+   set of samples, finding the right balance between results and code
+   performance."]])
 
 (defn ^:export init
   []
