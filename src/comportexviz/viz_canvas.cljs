@@ -643,10 +643,10 @@
               dt-render-order (concat (->> (range keep-steps)
                                            (remove sel-dts))
                                       sel-dts)]
-          [:div {:style {:width "100%" :height "2em"
+          [:div {:style {:width "100%"
                          :direction "rtl"
                          :cursor "default"
-                         :overflow-x "scroll"
+                         :overflow-x "auto"
                          :overflow-y "hidden"}}
            [window-resize-listener size-invalidates-c]
            (into [:svg {:width width-px
