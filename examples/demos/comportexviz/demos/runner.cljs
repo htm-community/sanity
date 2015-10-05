@@ -8,17 +8,19 @@
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn world-pane
-  []
-  (when (not-empty @main/steps)
-    (into [:div]
-          (for [[sense-id v] (:sensed-values (main/selected-step))]
-            [:div {:style {:margin-top 20}}
-             [:p
-              [:span {:style {:font-family "sans-serif"
-                              :font-size "9px"
-                              :font-weight "bold"}} (name sense-id)]
-              [:br]
-              [:strong (str v)]]]))))
+  [steps selection]
+  (when (not-empty @steps)
+    (let [step (main/selected-step steps selection)]
+      (when (:input-value step)
+        (into [:div]
+              (for [[sense-id v] (:sensed-values step)]
+                [:div {:style {:margin-top 20}}
+                 [:p
+                  [:span {:style {:font-family "sans-serif"
+                                  :font-size "9px"
+                                  :font-weight "bold"}} (name sense-id)]
+                  [:br]
+                  [:strong (str v)]]]))))))
 
 (defn ^:export init
   []
@@ -38,5 +40,6 @@
         (put! into-journal [:ping])
         (recur)))
 
-    (reagent/render [main/comportexviz-app nil [world-pane] into-sim-in]
+    (reagent/render [main/comportexviz-app nil
+                     [world-pane main/steps main/selection] into-sim-in]
                     (dom/getElement "comportexviz-app"))))

@@ -2,6 +2,7 @@
   (:require [cognitect.transit :as transit]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
             [comportexviz.bridge.remote :as remote]
+            [comportexviz.demos.runner :as runner]
             [comportexviz.selection :as sel]
             [comportexviz.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
@@ -91,9 +92,16 @@
                           :tabIndex 1}
                          (when (> (count @steps) 1)
                            [viz/viz-timeline steps selection viz-options])
-                         [viz/viz-canvas {:tabIndex 0} steps
-                          selection step-template viz-options into-viz nil
-                          into-journal local-targets]]
+                         [:table
+                          [:tr
+                           [:td {:style {:border "none"
+                                         :vertical-align "top"}}
+                            [runner/world-pane steps selection]]
+                           [:td {:style {:border "none"
+                                         :vertical-align "top"}}
+                            [viz/viz-canvas {:tabIndex 0} steps
+                             selection step-template viz-options into-viz nil
+                             into-journal local-targets]]]]]
                         el)))))
 
 (defn ^:export release-viz [el serialized]

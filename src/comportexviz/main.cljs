@@ -104,6 +104,8 @@
 ;;; ## Exported helpers
 
 (defn selected-step
-  []
-  (when-let [dt (:dt (first @selection))]
-    (nth @steps dt nil)))
+  ([]
+   (selected-step steps selection))
+  ([steps selection]
+   (when-let [dt (:dt (first @selection))]
+     (nth @steps dt nil))))
