@@ -638,6 +638,53 @@
                     (cell-sdrs-plot-spread-activation plot-opts))]
     (draw-cell-sdrs-plot!* ctx plot-data plot-opts)))
 
+(defn cell-sdrs-context-analysis-cmp
+  [{:keys [sdr-history sdr-transitions sdr->gid sdr-label-counts timestep]}
+   {:keys [hide-states-older hide-conns-smaller]}]
+  (let [sdrseq (reverse (take hide-states-older sdr-history))
+        sdr->label (util/remap (fn [labm] (key (apply max-key val labm)))
+                               sdr-label-counts)
+        sdr->count (util/remap (fn [labm] (apply + (vals labm)))
+                               sdr-label-counts)
+        gid->sdrs (group-by sdr->gid (keys sdr->gid))
+        column-diversity (fn [gid]
+                           (let [sdrs (gid->sdrs gid)
+                                 sib-counts (map sdr->count sdrs)
+                                 total (reduce + sib-counts)]
+                             (- (reduce + (map (fn [n]
+                                                 (let [p (/ n total)]
+                                                   (* p (Math/log p))))
+                                               sib-counts)))))
+        context-plurality (fn [ctx-sdr]
+                            (->> (sdr-transitions ctx-sdr)
+                                 (keep (fn [[to-sdr n]]
+                                         (when (>= n hide-conns-smaller) to-sdr)))
+                                 (map sdr->gid)
+                                 (distinct)
+                                 (count)))]
+    [:table.table.table-condensed
+     [:thead
+      [:tr
+       [:th]
+       [:th.text-right "diversity of contexts input appears in"]
+       [:th.text-right "number of inputs appearing in this context"]]]
+     (into [:tbody]
+           (for [[prior-sdr sdr] (partition 2 1 sdrseq)
+                 :let [col-d (column-diversity (sdr->gid sdr))
+                       ctx-n (context-plurality prior-sdr)]]
+             [:tr
+              [:th (str (sdr->label sdr))]
+              [:td.text-right
+               (cond (>= col-d 1.5) {:class :danger}
+                     (>= col-d 0.5) {:class :warning}
+                     :else {})
+               (.toFixed col-d 2)]
+              [:td.text-right
+               (cond (>= ctx-n 3) {:class :danger}
+                     (>= ctx-n 2) {:class :warning}
+                     :else {})
+               ctx-n]]))]))
+
 (defn fetch-transitions-data
   [sel cell-sdr-counts into-journal local-targets]
   (when-let [[region layer] (sel/layer sel)]
@@ -704,6 +751,7 @@
                :pred {}}
    :sdr-transitions nil
    :sdr-last-matches (priority-map)
+   :sdr-history ()
    :timestep 0
    :threshold 0})
 
@@ -777,6 +825,7 @@
                          on? (update :sdr-last-matches
                                      (fn [m]
                                        (merge m (zipmap win-sdrs (repeat t)))))
+                         on? (update :sdr-history conj (first win-sdrs))
                          true
                          (assoc :sdr-transitions nil ;; updated lazily
                                 :sdr-votes {:winners wc-sdrv
@@ -854,7 +903,8 @@
             plot-opts]
            (fn [ctx]
              (draw-cell-sdrs-plot! ctx @plot-data @plot-opts))
-           size-invalidates-c]]))
+           size-invalidates-c]
+          (cell-sdrs-context-analysis-cmp @plot-data @plot-opts)]))
      :teardown
      (fn []
        (remove-watch steps ::cell-sdrs-plot)
