@@ -232,9 +232,10 @@
               (put! response-c
                     (if-let [htm (find-model id)]
                       (let [layer (get-in htm [:regions region-key layer-id])]
-                        {:learn-cells (p/learnable-cells layer)
+                        {:winner-cells (p/winner-cells layer)
                          :active-cells (p/active-cells layer)
-                         :pred-cells (p/predictive-cells layer)})
+                         :pred-cells (p/predictive-cells layer)
+                         :engaged? (get-in layer [:state :engaged?])})
                       (id-missing-response id steps-offset))))
 
             :get-transitions-data

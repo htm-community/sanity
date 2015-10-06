@@ -188,6 +188,7 @@
         learning (:distal-learning (:state lyr))
         seg-up (first (vals (select-keys learning (for [ci (range depth)] [col ci]))))
         {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
+        winner-cell? (p/winner-cells lyr)
         segs-by-cell (->> (:distal-sg lyr)
                           (all-cell-segments col depth))
         p-segs-by-cell (when prev-htm
@@ -213,6 +214,7 @@
                           cell-predictive? :predicted
                           cell-active? :active
                           :else :inactive)
+            :winner-cell? (winner-cell? cell-id)
             :selected-cell? (if sel-ci-si
                               (== ci (first sel-ci-si))
                               cell-learning?)
@@ -401,17 +403,16 @@
 
 (defn cell-excitation-data
   [htm prior-htm rgn-id lyr-id sel-col]
-  (let [lc (get-in htm [:regions rgn-id lyr-id :state :learn-cells])
-        lc+ (if sel-col
-              (let [prior-lc (get-in prior-htm [:regions rgn-id lyr-id :state
-                                                :learn-cells])
+  (let [wc (p/winner-cells (get-in htm [:regions rgn-id lyr-id]))
+        wc+ (if sel-col
+              (let [prior-wc (p/winner-cells (get-in prior-htm [:regions rgn-id lyr-id]))
                     sel-cell (or (first (filter (fn [[col _]]
                                                   (= col sel-col))
-                                                (concat prior-lc lc)))
+                                                (concat prior-wc wc)))
                                  [sel-col 0])]
-                (conj lc sel-cell))
-              lc)]
-    (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id lc+)))
+                (conj wc sel-cell))
+              wc)]
+    (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id wc+)))
 
 (defn step-template-data
   [htm]

@@ -297,7 +297,7 @@
                         (enable!)
                         (.preventDefault e))}
            "Start from selected timestep"]
-          [:p.small "So to start from the beginning, select timestep 1 first."]
+          [:p.small.text-warning "So to start from the beginning, select timestep 1 first."]
           [:p.small "Not enabled by default because it can be slow."]]
          ;; enabled content
          [:div
@@ -318,7 +318,7 @@
          participates in states A and B an equal number of times, it
          will count only half as much to A as a cell fully specific to
          A."]
-       [:p "If the active learning cells match a known state
+       [:p "If the active winner cells match a known state
         sufficiently well (meeting " [:code "seg-learn-threshold"]
         ") then the state is extended to include all current
         cells. Otherwise, a new state is created."]
@@ -337,7 +337,7 @@
         [:li "Similarly, any predictive cells (predicting activation for the "
          [:strong "next"] " time step) will be shaded blue."]
         [:li "If any of a state's cells are the
-         current " [:i "learning cells"] " that fraction will be
+         current " [:i "winner cells"] " that fraction will be
          outlined in black."]
         [:li "When a matching state will be extended to include new
          cells, those are shown in green."]
