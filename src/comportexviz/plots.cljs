@@ -639,29 +639,39 @@
     (draw-cell-sdrs-plot!* ctx plot-data plot-opts)))
 
 (defn cell-sdrs-context-analysis-cmp
-  [{:keys [sdr-history sdr-transitions sdr->gid sdr-label-counts timestep]}
-   {:keys [hide-states-older hide-conns-smaller]}]
+  [{:as plot-data
+    :keys [sdr-history sdr-transitions sdr->gid sdr-label-counts timestep]}
+   {:as plot-opts
+    :keys [hide-states-older hide-conns-smaller]}]
   (let [sdrseq (reverse (take hide-states-older sdr-history))
         sdr->label (util/remap (fn [labm] (key (apply max-key val labm)))
                                sdr-label-counts)
         sdr->count (util/remap (fn [labm] (apply + (vals labm)))
                                sdr-label-counts)
         gid->sdrs (group-by sdr->gid (keys sdr->gid))
+        kept-sdrs (kept-sdrs-by-last-appearance plot-data plot-opts)
+        ok-transitions (->> (select-keys sdr-transitions kept-sdrs)
+                            (into {}
+                                  (map (fn [[from-sdr to-sdrs-counts]]
+                                         [from-sdr
+                                          (keep (fn [[id n]]
+                                                  (when (and (not= from-sdr id)
+                                                             (>= n hide-conns-smaller))
+                                                    id))
+                                                to-sdrs-counts)]))))
         column-diversity (fn [gid]
-                           (let [sdrs (gid->sdrs gid)
-                                 sib-counts (map sdr->count sdrs)
-                                 total (reduce + sib-counts)]
+                           (let [instances (gid->sdrs gid)
+                                 counts (map sdr->count instances)
+                                 total (reduce + counts)]
                              (- (reduce + (map (fn [n]
                                                  (let [p (/ n total)]
                                                    (* p (Math/log p))))
-                                               sib-counts)))))
-        context-plurality (fn [ctx-sdr]
-                            (->> (sdr-transitions ctx-sdr)
-                                 (keep (fn [[to-sdr n]]
-                                         (when (>= n hide-conns-smaller) to-sdr)))
-                                 (map sdr->gid)
-                                 (distinct)
-                                 (count)))]
+                                               counts)))))
+        context-alternatives (fn [ctx-sdr]
+                               (->> (ok-transitions ctx-sdr)
+                                    (map sdr->gid)
+                                    (distinct)))
+        curr-sdr (first sdr-history)]
     [:table.table.table-condensed
      [:thead
       [:tr
@@ -669,21 +679,50 @@
        [:th.text-right "diversity of contexts input appears in"]
        [:th.text-right "number of inputs appearing in this context"]]]
      (into [:tbody]
-           (for [[prior-sdr sdr] (partition 2 1 sdrseq)
+           (for [[prior-sdr sdr] (partition 2 1 (cons nil sdrseq))
                  :let [col-d (column-diversity (sdr->gid sdr))
-                       ctx-n (context-plurality prior-sdr)]]
+                       ctx-n (if prior-sdr
+                               (count (context-alternatives prior-sdr))
+                               0)]]
              [:tr
-              [:th (str (sdr->label sdr))]
+              [:th (if (== sdr curr-sdr) {:class :active})
+               (str (sdr->label sdr))]
               [:td.text-right
-               (cond (>= col-d 1.5) {:class :danger}
-                     (>= col-d 0.5) {:class :warning}
+               (cond (>= col-d 1.5) {:class :success}
+                     (>= col-d 1.2) {:class :info}
+                     (>= col-d 0.68) {:class :warning}
                      :else {})
                (.toFixed col-d 2)]
               [:td.text-right
-               (cond (>= ctx-n 3) {:class :danger}
-                     (>= ctx-n 2) {:class :warning}
-                     :else {})
-               ctx-n]]))]))
+               (cond (>= ctx-n 4) {:class :success}
+                     (>= ctx-n 3) {:class :info}
+                     (>= ctx-n 2) {:class :warning})
+               ctx-n]]))
+     (let [sdr (first sdr-history)
+           prev-sdr (second sdr-history)
+           alternatives (context-alternatives prev-sdr)
+           instances (gid->sdrs (sdr->gid sdr))
+           transitions-to (fn [sdr]
+                            (keep (fn [[from-sdr to-sdrs]]
+                                    (when (some #(= sdr %) to-sdrs)
+                                      from-sdr))
+                                  ok-transitions))]
+       [:tfoot
+        [:tr
+         [:th]
+         [:td.text-right
+          ;; contexts input appears in
+          (into [:ol]
+                (for [i-sdr instances]
+                  [:li (->> (transitions-to i-sdr)
+                            (map sdr->label)
+                            (str/join " / "))
+                   " (...)"]))]
+         [:td.text-right
+          ;; inputs appearing in this context
+          (into [:ol]
+                (for [a-sdr alternatives]
+                  [:li (sdr->label a-sdr)]))]]])]))
 
 (defn fetch-transitions-data
   [sel cell-sdr-counts into-journal local-targets]
