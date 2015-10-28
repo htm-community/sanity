@@ -929,9 +929,10 @@
                          ;; dt may be outdated at this point
                          (reset! cells-segs-response [(dissoc sel1 :dt)
                                                       (<! response-c)]))
+                       ;; TODO: get both distal and apical segments, display side by side, selection?
                        (put! into-journal
                              [:get-cells-segments model-id rgn-id lyr-id bit
-                              cell-seg viewport-token
+                              cell-seg :distal viewport-token
                               (channel-proxy/register! local-targets
                                                        response-c)])
                        true))))

@@ -82,7 +82,7 @@
                      (if (contains? sig-bits id) " S")
                      (if (contains? bits id)
                        (str " A "
-                            (let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id)
+                            (let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id :ff-deps)
                                   src-rgn (get-in htm [:regions src-k])]
                               (if src-rgn
                                 (let [src-cell (p/source-of-bit src-rgn src-i)]

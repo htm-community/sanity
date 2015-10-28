@@ -1,4 +1,4 @@
-(defproject comportexviz "0.0.11-SNAPSHOT"
+(defproject comportexviz "0.0.12-SNAPSHOT"
   :description "Web visualisation of HTM algorithm as implemented in comportex"
   :url "https://github.com/nupic-community/comportexviz"
 
@@ -6,7 +6,7 @@
                  [org.clojure/clojurescript "1.7.107"]
                  [org.clojure/core.async "0.1.346.0-17112a-alpha"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
-                 [org.nfrac/comportex "0.0.11-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.12-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
                  [reagent-forms "0.5.6"]

@@ -140,7 +140,7 @@
                           (if (input-layer? [rgn-id lyr-id])
                             ;; input from another region
                             (let [[src-id src-i]
-                                  (core/source-of-incoming-bit htm rgn-id i)]
+                                  (core/source-of-incoming-bit htm rgn-id i :ff-deps)]
                               [src-id (output-layer src-id) src-i])
                             ;; input from another layer in same region (hardcoded)
                             [rgn-id :layer-4 i])
@@ -172,28 +172,38 @@
           path->synapses)))))
 
 (defn cells-segments-data
-  [htm prev-htm sel-rgn sel-lyr col sel-ci-si opts]
+  "type is :distal or :apical"
+  [htm prev-htm sel-rgn sel-lyr col sel-ci-si type opts]
   (let [regions (:regions htm)
         lyr (get-in regions [sel-rgn sel-lyr])
         spec (p/params lyr)
-        stimulus-th (:seg-stimulus-threshold spec)
-        learning-th (:seg-learn-threshold spec)
-        pcon (:distal-perm-connected spec)
-        pinit (:distal-perm-init spec)
+        dspec (get spec type)
+        stimulus-th (:stimulus-threshold dspec)
+        learning-th (:learn-threshold dspec)
+        pcon (:perm-connected dspec)
+        pinit (:perm-init dspec)
         ac (p/active-cells lyr)
-        prev-lyr (get-in prev-htm [:regions sel-rgn sel-lyr])
-        prev-pc (:pred-cells (:prior-distal-state lyr))
-        prev-aci (:distal-bits (:prior-distal-state lyr))
+        prev-pc (p/prior-predictive-cells lyr)
+        on-bits (:on-bits (case type
+                            :distal (:prior-distal-state lyr)
+                            :apical (:prior-apical-state lyr)))
         depth (p/layer-depth lyr)
-        learning (:distal-learning (:state lyr))
+        learning (case type
+                   :distal (:distal-learning (:state lyr))
+                   :apical (:apical-learning (:state lyr)))
         seg-up (first (vals (select-keys learning (for [ci (range depth)] [col ci]))))
         {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
         winner-cell? (p/winner-cells lyr)
-        segs-by-cell (->> (:distal-sg lyr)
+        sg-key (case type :distal :distal-sg :apical :apical-sg)
+        segs-by-cell (->> (get lyr sg-key)
                           (all-cell-segments col depth))
+        ;; get synapse info from before learning -- so from prev step:
         p-segs-by-cell (when prev-htm
-                         (->> (get-in prev-htm [:regions sel-rgn sel-lyr :distal-sg])
-                              (all-cell-segments col depth)))]
+                         (->> (get-in prev-htm [:regions sel-rgn sel-lyr sg-key])
+                              (all-cell-segments col depth)))
+        source-of-bit (case type
+                        :distal core/source-of-distal-bit
+                        :apical core/source-of-apical-bit)]
     (into
      {}
      (for [[ci segs] (map-indexed vector segs-by-cell)
@@ -221,7 +231,7 @@
             :segments (into
                        {}
                        (for [[si seg] (map-indexed vector use-segs)
-                             :let [grouped-syns (group-synapses seg prev-aci pcon)
+                             :let [grouped-syns (group-synapses seg on-bits pcon)
                                    conn-act (count (grouped-syns [:connected :active]))
                                    conn-tot (+ (count (grouped-syns [:connected :inactive]))
                                                conn-act)
@@ -239,7 +249,7 @@
                                    (util/remap (fn [syns]
                                                  (map (fn [[i p]]
                                                         [i
-                                                         (core/source-of-distal-bit
+                                                         (source-of-bit
                                                           htm sel-rgn sel-lyr i)
                                                          p])
                                                       syns))
@@ -398,7 +408,7 @@
                                     (assoc :break?
                                            (-> lyr
                                                (get-in [:prior-distal-state
-                                                        :distal-bits])
+                                                        :on-bits])
                                                empty?)))]))]))})
 
 (defn cell-excitation-data
