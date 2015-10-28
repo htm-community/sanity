@@ -97,7 +97,7 @@
              :bit-shrink 0.85
              :col-d-px 5
              :col-shrink 0.85
-             :cell-label-h-px 8
+             :cell-label-h-px 16
              :cell-r-px 10
              :cells-segs-w-px 250
              :seg-w-px 30
@@ -129,7 +129,7 @@
 
 (defn non-grid-layout-paths
   [m]
-  (for [k [:cells-segments]
+  (for [k [:cells-segments :apical-segments]
         :when (get m k)]
     [k]))
 
@@ -351,11 +351,11 @@
   (clicked-seg [this x y]))
 
 (defn cells-segments-layout
-  [nsegbycell cells-left opts]
-  (let [nsegbycell-pad (map (partial max 1) nsegbycell)
+  [nsegbycell cells-left h-offset-px v-offset-px opts]
+  (let [nsegbycell-pad (map (partial max 1) (vals (sort nsegbycell)))
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
-        segs-left (+ cells-left (:seg-h-space-px d-opts))
+        segs-left (+ cells-left h-offset-px)
         col-d-px (:col-d-px d-opts)
         col-r-px (* col-d-px 0.5)
         cell-r-px (:cell-r-px d-opts)
@@ -377,11 +377,12 @@
         (let [i-all (apply + si (take ci nsegbycell-pad))
               frac (/ i-all nseg-pad)]
           [segs-left
-           (+ our-top (* frac our-height))]))
+           (+ our-top (* frac our-height) v-offset-px)]))
       (cell-xy
         [this ci]
-        (let [[_ sy] (seg-xy this ci 0)]
-          [cells-left sy]))
+        (let [i-all (apply + (take ci nsegbycell-pad))
+              frac (/ i-all nseg-pad)]
+          [cells-left (+ our-top (* frac our-height))]))
       (col-cell-line
         [this ctx ci src-lay col dt]
         (let [[col-x col-y] (element-xy src-lay col dt)
@@ -404,7 +405,7 @@
         [this x y]
         (when (<= (- cells-left cell-r-px) x
                   (+ segs-left seg-w-px 5))
-          (first (for [[ci nsegs] (map-indexed vector nsegbycell)
+          (first (for [[ci nsegs] nsegbycell
                        si (range nsegs)
                        :let [[_ seg-y] (seg-xy this ci si)]
                        :when (<= (- seg-y seg-h-px) y
@@ -414,67 +415,101 @@
 (defn draw-cells-segments
   [ctx cells-segs-response steps layouts opts]
   (c/save ctx)
-  (let [[sel1 cells-segments] cells-segs-response
+  (let [[sel1 cells-segs] cells-segs-response
         {col :bit model-id :model-id sel-ci-si :cell-seg} sel1
         dt (utilv/index-of steps #(= model-id (:model-id %)))]
     (when dt
       (let [sel-lay (get-in layouts (:path sel1))
-            cslay (:cells-segments layouts)
             col-d-px (get-in opts [:drawing :col-d-px])
             cell-r-px (get-in opts [:drawing :cell-r-px])
             seg-h-px (get-in opts [:drawing :seg-h-px])
             seg-w-px (get-in opts [:drawing :seg-w-px])
             seg-r-px (* seg-w-px 0.5)]
-        (doseq [[ci cell-data] cells-segments
-                :let [[cell-x cell-y] (cell-xy cslay ci)
-                      {:keys [cell-active? cell-predictive? selected-cell?
-                              winner-cell? cell-state segments]} cell-data]]
+        ;; background pass
+        (doseq [layout-key [:cells-segments :apical-segments]
+                :let [cslay (get layouts layout-key)
+                      data-key (case layout-key
+                                 :cells-segments :distal
+                                 :apical-segments :apical)]
+                [ci cell-data] (get cells-segs data-key)
+                :let [{:keys [cell-active?]} cell-data]]
           ;; draw background lines to cell from column and from segments
-          (c/stroke-width ctx col-d-px)
-          (c/stroke-style ctx (:background state-colors))
-          (col-cell-line cslay ctx ci sel-lay col dt)
-          (doseq [si (range (count segments))]
-            (cell-seg-line cslay ctx ci si))
-          (when cell-active?
-            (doto ctx
-              (c/stroke-style (:active state-colors))
-              (c/stroke-width 2))
-            (col-cell-line cslay ctx ci sel-lay col dt))
+          (doseq [[si seg] (:segments cell-data)
+                  :let [{:keys [n-conn-act stimulus-th]} seg]]
+            (c/stroke-style ctx (:background state-colors))
+            (c/stroke-width ctx col-d-px)
+            (cell-seg-line cslay ctx ci si)
+            (when (>= n-conn-act stimulus-th)
+              (doto ctx
+                (c/stroke-style (:active state-colors))
+                (c/stroke-width 2))
+              (cell-seg-line cslay ctx ci si)))
+          ;; cell-specific stuff - don't duplicate (in apical case)
+          (when (= data-key :distal)
+            (c/stroke-style ctx (:background state-colors))
+            (c/stroke-width ctx col-d-px)
+            (col-cell-line cslay ctx ci sel-lay col dt)
+            (when cell-active?
+              (doto ctx
+                (c/stroke-style (:active state-colors))
+                (c/stroke-width 2))
+              (col-cell-line cslay ctx ci sel-lay col dt))
+            ))
+        ;; foreground pass
+        (doseq [layout-key [:cells-segments :apical-segments]
+                :let [cslay (get layouts layout-key)
+                      data-key (case layout-key
+                                 :cells-segments :distal
+                                 :apical-segments :apical)]
+                [ci cell-data] (get cells-segs data-key)
+                :let [[cell-x cell-y] (cell-xy cslay ci)
+                      {:keys [selected-cell? winner-cell? cell-state]} cell-data]]
           ;; draw the cell itself
-          (when selected-cell?
+          ;; don't duplicate (in apical case)
+          (c/text-align ctx :start)
+          (when (= data-key :distal)
+            (when selected-cell?
+              (doto ctx
+                (c/fill-style (:highlight state-colors))
+                (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
+                (c/fill)))
             (doto ctx
-              (c/fill-style (:highlight state-colors))
-              (c/circle {:x cell-x :y cell-y :r (+ cell-r-px 8)})
-              (c/fill)))
-          (doto ctx
-            (c/fill-style (state-colors cell-state))
-            (c/stroke-style "black")
-            (c/stroke-width 1)
-            (c/circle {:x cell-x :y cell-y :r cell-r-px})
-            (c/stroke)
-            (c/fill))
-          (c/fill-style ctx "black")
-          (c/text ctx {:text (str "cell " ci
-                                  (if winner-cell? " - winner" ""))
-                       :x (+ cell-x 10) :y (- cell-y cell-r-px)})
-          ;; draw each segment
-          (doseq [[si seg] segments
+              (c/fill-style (state-colors cell-state))
+              (c/stroke-style "black")
+              (c/stroke-width 1)
+              (c/circle {:x cell-x :y cell-y :r cell-r-px})
+              (c/stroke)
+              (c/fill))
+            (c/fill-style ctx "black")
+            (c/text ctx {:text (str "cell " ci
+                                    (if winner-cell? " - winner" ""))
+                         :x (+ cell-x 10) :y (- cell-y cell-r-px)}))
+          (when (and (= data-key :apical)
+                     (pos? (count (:segments cell-data))))
+            (let [[sx sy] (seg-xy cslay ci 0)
+                  h2 (int (/ seg-h-px 2))]
+              (c/fill-style ctx "black")
+              (c/text ctx {:text "apical"
+                           :x sx :y (- sy h2 5)})))
+          ;; draw segments
+          (c/text-align ctx :right)
+          (doseq [[si seg] (:segments cell-data)
                   :let [[sx sy] (seg-xy cslay ci si)
                         {:keys [learn-seg? selected-seg? n-conn-act n-conn-tot
                                 n-disc-act n-disc-tot stimulus-th learning-th
                                 syns-by-state]} seg
-                        scale-factor (/ seg-w-px stimulus-th)
-                        scale #(-> % (* scale-factor) int)
+                                scale-factor (/ seg-w-px stimulus-th)
+                                scale #(-> % (* scale-factor) int)
 
-                        h2 (int (/ seg-h-px 2))
-                        conn-th-r {:x sx :y (- sy h2)
-                                   :w seg-w-px :h seg-h-px}
-                        conn-tot-r (assoc conn-th-r :w (scale n-conn-tot))
-                        conn-act-r (assoc conn-th-r :w (scale n-conn-act))
-                        disc-th-r {:x sx :y (+ sy h2)
-                                   :w (scale learning-th) :h seg-h-px}
-                        disc-tot-r (assoc disc-th-r :w (scale n-disc-tot))
-                        disc-act-r (assoc disc-th-r :w (scale n-disc-act))]]
+                                h2 (int (/ seg-h-px 2))
+                                conn-th-r {:x sx :y (- sy h2)
+                                           :w seg-w-px :h seg-h-px}
+                                conn-tot-r (assoc conn-th-r :w (scale n-conn-tot))
+                                conn-act-r (assoc conn-th-r :w (scale n-conn-act))
+                                disc-th-r {:x sx :y (+ sy h2)
+                                           :w (scale learning-th) :h seg-h-px}
+                                disc-tot-r (assoc disc-th-r :w (scale n-disc-tot))
+                                disc-act-r (assoc disc-th-r :w (scale n-disc-act))]]
             ;; draw segment as a rectangle
             (when selected-seg?
               (doto ctx
@@ -497,17 +532,10 @@
               (c/fill-rect disc-act-r)
               (c/stroke-rect disc-th-r)
               (c/alpha 1.0))
-            (when (>= n-conn-act stimulus-th)
-              (doto ctx
-                (c/stroke-style (:active state-colors))
-                (c/stroke-width 2))
-              (cell-seg-line cslay ctx ci si))
             (c/fill-style ctx "black")
-            (c/text-align ctx :right)
             (c/text ctx {:text (str "seg " si "") :x (- sx 3) :y sy})
-            (c/text-align ctx :start)
             (when learn-seg?
-              (c/text ctx {:text (str "learning") :x (+ sx seg-w-px 10) :y sy}))
+              (c/text ctx {:text (str "learning") :x (- sx 3) :y (+ sy 10)}))
             ;; draw distal synapses
             (c/stroke-width ctx 1)
             (doseq [[syn-state syns] syns-by-state]
@@ -862,7 +890,9 @@
         (swap! selection #(conj (empty %) sel1))))
     ;; check cells
     (when ((every-pred sel/layer #(pos? (:bit %))) (peek @selection))
-      (when-let [cslay (:cells-segments layouts)]
+      (doseq [cslay [(:cells-segments layouts)
+                     (:apical-segments layouts)]
+              :when cslay]
         (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
           (swap! selection #(conj (pop %)
@@ -929,10 +959,9 @@
                          ;; dt may be outdated at this point
                          (reset! cells-segs-response [(dissoc sel1 :dt)
                                                       (<! response-c)]))
-                       ;; TODO: get both distal and apical segments, display side by side, selection?
                        (put! into-journal
                              [:get-cells-segments model-id rgn-id lyr-id bit
-                              cell-seg :distal viewport-token
+                              cell-seg viewport-token
                               (channel-proxy/register! local-targets
                                                        response-c)])
                        true))))
@@ -1166,26 +1195,46 @@
                                             local-targets)))
 
         (add-watch cells-segs-response ::cells-segments-layout
-                   (fn [_ _ _ [sel1 cells-segments]]
-                     (swap! viz-layouts assoc :cells-segments
-                            (when cells-segments
-                              (let [n-segs-by-cell (->> cells-segments
-                                                        (into (sorted-map))
-                                                        (map (fn [[_ d]]
-                                                               (-> d
-                                                                   :segments
-                                                                   count))))
-                                    space-px (get-in @viz-options
-                                                     [:drawing
-                                                      :seg-h-space-px])
-                                    cells-left (->> @viz-layouts
-                                                    grid-layout-vals
-                                                    (map lay/right-px)
-                                                    (apply max)
-                                                    (+ space-px))]
-                                (cells-segments-layout n-segs-by-cell
-                                                       cells-left
-                                                       @viz-options)))))))
+                   (fn [_ _ _ [sel1 {d-cell-segs :distal
+                                     a-cell-segs :apical}]]
+                     (swap! viz-layouts
+                            (fn [layouts]
+                              (if-not d-cell-segs
+                                (assoc layouts
+                                       :cells-segments nil
+                                       :apical-segments nil)
+                                (let [n-segs-by-cell (merge-with
+                                                      max
+                                                      (util/remap (comp count :segments)
+                                                                  d-cell-segs)
+                                                      (util/remap (comp count :segments)
+                                                                  a-cell-segs))
+                                      space-px (get-in @viz-options
+                                                       [:drawing
+                                                        :seg-h-space-px])
+                                      seg-w-px (get-in @viz-options
+                                                       [:drawing
+                                                        :seg-w-px])
+                                      cells-left (->> @viz-layouts
+                                                      grid-layout-vals
+                                                      (map lay/right-px)
+                                                      (apply max)
+                                                      (+ space-px))]
+                                  (assoc layouts
+                                         :cells-segments
+                                         (cells-segments-layout n-segs-by-cell
+                                                                cells-left
+                                                                space-px
+                                                                0
+                                                                @viz-options)
+                                         :apical-segments
+                                         (cells-segments-layout n-segs-by-cell
+                                                                cells-left
+                                                                (+ space-px seg-w-px space-px)
+                                                                -16
+                                                                @viz-options))
+                                  )))
+                            ))))
 
       :component-will-unmount
       (fn [_]
@@ -1232,7 +1281,7 @@
                        [:div {:style {:position "absolute"
                                       :left (:x (layout-bounds cslay))
                                       :top 0}}
-                        "cells and distal dendrite segments"])]
+                        "cells and distal / apical dendrite segments"])]
                     (for [path (grid-layout-paths layouts)
                           :let [lay (get-in layouts path)
                                 ids (subvec path 1)

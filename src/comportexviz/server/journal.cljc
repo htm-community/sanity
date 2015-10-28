@@ -181,12 +181,16 @@
                       (id-missing-response id steps-offset))))
 
             :get-cells-segments
-            (let [[id rgn-id lyr-id col ci-si type token response-c] xs
+            (let [[id rgn-id lyr-id col ci-si token response-c] xs
                   [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (data/cells-segments-data htm prev-htm rgn-id lyr-id col
-                                                ci-si type opts)
+                      (let [types [:distal :apical]]
+                        (zipmap
+                         types
+                         (for [type types]
+                           (data/cells-segments-data htm prev-htm rgn-id lyr-id
+                                                     col ci-si type opts))))
                       (id-missing-response id steps-offset))))
 
             :get-details-text
