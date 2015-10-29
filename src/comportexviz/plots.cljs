@@ -813,7 +813,7 @@
             pc (:pred-cells cells-by-state)
             on? (:engaged? cells-by-state)
             threshold (get-in @step-template [:regions region layer
-                                              :spec :seg-learn-threshold])
+                                              :spec :distal :learn-threshold])
             ;; for each cell, represents its specificity to each SDR
             cell-sdr-fracs (->> (:cell-sdr-counts state)
                                 (util/remap freqs->fracs))

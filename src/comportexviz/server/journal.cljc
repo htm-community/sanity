@@ -185,8 +185,12 @@
                   [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [[prev-htm htm] (find-model-pair id)]
-                      (data/cells-segments-data htm prev-htm rgn-id lyr-id col
-                                                ci-si opts)
+                      (let [types [:distal :apical]]
+                        (zipmap
+                         types
+                         (for [type types]
+                           (data/cells-segments-data htm prev-htm rgn-id lyr-id
+                                                     col ci-si type opts))))
                       (id-missing-response id steps-offset))))
 
             :get-details-text

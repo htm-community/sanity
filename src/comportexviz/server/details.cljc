@@ -60,12 +60,12 @@
         (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
               p-prox-sg (:proximal-sg p-lyr)
               p-distal-sg (:distal-sg p-lyr)
-              d-pcon (:distal-perm-connected (p/params p-lyr))
-              ff-pcon (:ff-perm-connected (p/params p-lyr))
+              d-pcon (:perm-connected (:distal (p/params p-lyr)))
+              ff-pcon (:perm-connected (:proximal (p/params p-lyr)))
               bits (:in-ff-bits (:state lyr))
               sig-bits (:in-stable-ff-bits (:state lyr))
-              d-bits (:distal-bits (:prior-distal-state lyr))
-              d-lc-bits (:distal-lc-bits (:prior-distal-state lyr))
+              d-bits (:on-bits (:prior-distal-state lyr))
+              d-lc-bits (:on-lc-bits (:prior-distal-state lyr))
               ]
           ["__Column overlap__"
            (str (get (:col-overlaps (:state lyr)) [col 0]))
@@ -75,30 +75,28 @@
            (for [[si syns] (map-indexed vector (p/cell-segments p-prox-sg [col 0]))
                  :when (seq syns)]
              [(str "FF segment " si)
-              (for [[id p] (sort syns)]
-                (str "  " id
+              (for [[id p] (sort syns)
+                    :let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id :ff-deps)
+                          src-rgn (get-in htm [:regions src-k])
+                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)
+                          ]]
+                (str "  " src-k " " src-id
                      (if (>= p ff-pcon) " :=> " " :.: ")
                      (to-fixed p 2)
-                     (if (contains? sig-bits id) " S")
-                     (if (contains? bits id)
-                       (str " A "
-                            (let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id)
-                                  src-rgn (get-in htm [:regions src-k])]
-                              (if src-rgn
-                                (let [src-cell (p/source-of-bit src-rgn src-i)]
-                                  (str src-k " " src-cell))
-                                (str src-k " " src-i)))))))])
-           "__Cells and their Dendrite segments__"
+                     (if (contains? sig-bits id) " S"
+                         (if (contains? bits id) " A"))))])
+           "__Cells and their distal dendrite segments__"
            (for [ci (range (p/layer-depth lyr))
                  :let [segs (p/cell-segments p-distal-sg [col ci])]]
              [(str "CELL " ci)
               (str (count segs) " = " (map count segs))
-              #_(str "Distal excitation from this cell: "
-                     (p/targets-connected-from p-distal-sg (+ ci (* depth col)))) ;; TODO cell->id
               (for [[si syns] (map-indexed vector segs)]
                 [(str "  SEGMENT " si)
-                 (for [[id p] (sort syns)]
-                   (str "  " id
+                 (for [[id p] (sort syns)
+                       :let [[src-k _ src-i] (core/source-of-distal-bit htm rgn-id lyr-id id)
+                             src-rgn (get-in htm [:regions src-k])
+                             src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)]]
+                   (str "    " src-k " " src-id
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (to-fixed p 2)
                         (if (contains? d-lc-bits id) " L"

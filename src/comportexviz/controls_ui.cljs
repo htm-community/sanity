@@ -35,6 +35,54 @@
     (vector? v) :vector
     :else :number))
 
+(defn- spec-form
+  [step-template partypes spec spec-path skip-set]
+  (for [[k v] (sort spec)
+        :when (not (skip-set k))
+        :let [typ (or (get @partypes k)
+                      (get (swap! partypes assoc k (param-type v))
+                           k))
+              setv! #(swap! step-template assoc-in spec-path
+                            (assoc spec k %))]]
+    [:div.row {:class (when (or (nil? v) (string? v))
+                        "has-error")}
+     [:div.col-sm-8
+      [:label.control-label.text-left (name k)]]
+     [:div.col-sm-4
+      (case typ
+        ;; boolean
+        :boolean
+        [:input.form-control.input-sm
+         {:type :checkbox
+          :checked (if v true)
+          :on-change #(setv! (not v))}]
+        ;; vector
+        :vector
+        [:input.form-control.input-sm
+         {:value (str v)
+          :on-change (fn [e]
+                       (let [s (-> e .-target forms/getValue)
+                             x (try (cljs.reader/read-string s)
+                                    (catch :default _ s))
+                             newval (if (and (vector? x)
+                                             (every? integer? x))
+                                      x s)]
+                         (setv! newval)))}]
+        ;; number
+        :number
+        [:input.form-control.input-sm
+         {:value v
+          :on-change (fn [e]
+                       (let [s (-> e .-target forms/getValue)
+                             parsed (js/parseFloat s)
+                             newval (if (or (empty? s)
+                                            (js/isNaN parsed))
+                                      nil
+                                      (->> (if (not= s (str parsed))
+                                             s
+                                             parsed)))]
+                         (setv! newval)))}])]]))
+
 (defn parameters-tab
   [step-template _ into-sim _]
 
@@ -64,50 +112,18 @@
            (let [spec-path [:regions sel-region sel-layer :spec]
                  spec (get-in @step-template spec-path)]
              (concat
-              (for [[k v] (sort spec)
-                    :let [typ (or (get @partypes k)
-                                  (get (swap! partypes assoc k (param-type v))
-                                       k))
-                          setv! #(swap! step-template assoc-in spec-path
-                                        (assoc spec k %))]]
-                [:div.row {:class (when (or (nil? v) (string? v))
-                                    "has-error")}
-                 [:div.col-sm-8
-                  [:label.control-label.text-left (name k)]]
-                 [:div.col-sm-4
-                  (case typ
-                    ;; boolean
-                    :boolean
-                    [:input.form-control.input-sm
-                     {:type :checkbox
-                      :checked (if v true)
-                      :on-change #(setv! (not v))}]
-                    ;; vector
-                    :vector
-                    [:input.form-control.input-sm
-                     {:value (str v)
-                      :on-change (fn [e]
-                                   (let [s (-> e .-target forms/getValue)
-                                         x (try (cljs.reader/read-string s)
-                                                (catch :default _ s))
-                                         newval (if (and (vector? x)
-                                                         (every? integer? x))
-                                                  x s)]
-                                     (setv! newval)))}]
-                    ;; number
-                    :number
-                    [:input.form-control.input-sm
-                     {:value v
-                      :on-change (fn [e]
-                                   (let [s (-> e .-target forms/getValue)
-                                         parsed (js/parseFloat s)
-                                         newval (if (or (empty? s)
-                                                        (js/isNaN parsed))
-                                                  nil
-                                                  (->> (if (not= s (str parsed))
-                                                         s
-                                                         parsed)))]
-                                     (setv! newval)))}])]])
+              (spec-form step-template partypes spec spec-path
+                         #{:proximal :distal :apical})
+              (for [[sub-k title] [[:proximal "Proximal dendrites"]
+                                   [:distal "Distal (lateral) dendrites"]
+                                   [:apical "Apical dendrites"]]]
+                [:div.panel.panel-default
+                 [:div.panel-heading [:h4.panel-title title]]
+                 [:div.panel-body
+                  (into
+                   [:div.form-horizontal]
+                   (spec-form step-template partypes
+                              (get spec sub-k) (conj spec-path sub-k) #{}))]])
               [
                [:div.panel.panel-default
                 [:div.panel-heading [:h4.panel-title "Note"]]
