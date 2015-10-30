@@ -637,15 +637,13 @@
 
 (defn viz-timeline [_ _ _]
   (let [size-invalidates-c (async/chan)
-        container-width-px (atom 0)
-        container-height-px (atom 0)]
+        container-width-px (atom 0)]
     (reagent/create-class
      {:component-did-mount
       (fn [component]
         (go-loop []
           (let [size-px (-> component reagent/dom-node style/getSize)]
             (reset! container-width-px (.-width size-px))
-            (reset! container-height-px (.-height size-px))
             (when (not (nil? (<! size-invalidates-c)))
               (recur)))))
 
@@ -663,7 +661,8 @@
               t-width (max (/ @container-width-px keep-steps)
                            min-t-width)
               width-px (* t-width keep-steps)
-              y-px (/ @container-height-px 2)
+              height-px 28
+              y-px (/ height-px 2)
               ry-max y-px
               rx (* t-width 0.5)
               ry (min ry-max rx)
@@ -679,7 +678,7 @@
                          :overflow-y "hidden"}}
            [window-resize-listener size-invalidates-c]
            (into [:svg {:width width-px
-                        :height @container-height-px}]
+                        :height height-px}]
                  (for [dt dt-render-order
                        :let [kept? (< dt (count steps))
                              sel? (and kept? (contains? sel-dts dt))
