@@ -82,9 +82,10 @@
       (when-not (nil? (<! size-invalidates-c))
         (recur)))
     (fn [world-pane into-sim]
-      [:div {:on-click #(put! into-viz [:background-clicked])
-             :on-key-down #(viz/viz-key-down % into-viz)
-             :tabIndex 1}
+      [:div.container-fluid {:on-click #(put! into-viz [:background-clicked])
+                             :on-key-down #(viz/viz-key-down % into-viz)
+                             :tabIndex 1
+                             :style {:overflow-x "hidden"}}
        [:div.row
         [viz/viz-timeline steps selection viz-options]]
        [:div.row
