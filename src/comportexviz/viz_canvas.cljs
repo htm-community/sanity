@@ -1263,7 +1263,7 @@
                                           [0 0]))
               max-width (get-in @viz-options [:drawing :max-width-px])
               width (or (when right
-                          (cond-> right
+                          (cond-> (+ right lay/extra-px-for-highlight)
                             max-width (min max-width)))
                         0)
               height (or (when bottom
