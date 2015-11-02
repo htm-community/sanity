@@ -827,7 +827,8 @@
       the layer will remain selected. Its parameters can be seen and edited in
       the 'params' tab."]
        [:p "Input bits can also be selected. For multiple selections,
-       hold Command / Windows key while clicking."]]
+       hold Command / Ctrl key while clicking (on Mac / Windows,
+       respectively)."]]
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Colour legend"]
        [:ul
@@ -849,7 +850,64 @@
         " step forward / back in time; "
         [:kbd "space"]
         " starts or stops running. "
-        ]]]
+        ]]
+      [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Segment diagrams"]
+       (let [conn-act-px 115
+             disc-act-px 25
+             stimulus-th-px 100
+             learning-th-px 60
+             conn-tot-px 130
+             disc-tot-px 40
+             width-label (fn [y-transform width label-above? text]
+                           [:g {:transform (str "translate(0," y-transform ")")}
+                            [:line {:x1 0 :y1 -3 :x2 0 :y2 3
+                                    :stroke "black" :stroke-width 1}]
+                            [:line {:x1 width :y1 -3 :x2 width :y2 3
+                                    :stroke "black" :stroke-width 1}]
+                            [:line {:x1 0 :y1 0 :x2 width :y2 0
+                                    :stroke "black" :stroke-width 1}]
+                            [:text {:x 0 :y (if label-above? -5 15)
+                                    :font-family "sans-serif"
+                                    :font-size "13px"}
+                             text]])]
+         [:div
+          [:p "Segments are displayed as a pair of progress bars.
+              The meaning of each of the widths is shown below."]
+          [:div {:style {:margin-left 20}}
+           [:svg {:width 200 :height 220}
+            ;; Hand-coded adjustment to avoid cutoff.
+            [:g {:transform (str "translate(1,0)")}
+             [width-label 15 conn-tot-px true "connected synapses"]
+             [width-label 45 conn-act-px true "active connected synapses"]
+             [width-label 75 stimulus-th-px true "stimulus threshold"]
+             [:g {:transform (str "translate(0," 90 ")")}
+              ;; Connected totals
+              [:rect {:x 0 :y 1 :width conn-tot-px :height 8
+                      :stroke "none"
+                      :fill "black"
+                      :fill-opacity "0.1"}]
+              [:rect {:x 0 :y 11 :width disc-tot-px :height 8
+                      :stroke "none"
+                      :fill "black"
+                      :fill-opacity "0.1"}]
+              ;; Actives
+              [:rect {:x 0 :y 1 :width conn-act-px :height 8
+                      :stroke "none"
+                      :fill "red"}]
+              [:rect {:x 0 :y 11 :width disc-act-px :height 8
+                      :stroke "none"
+                      :fill "red"}]
+              ;; Thresholds
+              [:rect {:x 0 :y 0 :width stimulus-th-px :height 10
+                      :stroke "black"
+                      :fill-opacity 0}]
+              [:rect {:x 0 :y 10 :width learning-th-px :height 10
+                      :stroke "black"
+                      :fill-opacity 0}]]
+             [width-label 125 learning-th-px false "learning threshold"]
+             [width-label 155 disc-tot-px false "disconnected synapses"]
+             [width-label 185 disc-act-px false "active disconnected synapses"]]]]])]]
      [:hr]]))
 
 (defn comportexviz-app
