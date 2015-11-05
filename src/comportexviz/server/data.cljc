@@ -79,7 +79,7 @@
                                                     adjusted-bit)))]]))))
 
 (defn ff-in-synapses-data
-  [htm rgn-id lyr-id only-ids opts]
+  [htm rgn-id lyr-id only-ids trace-back? opts]
   (let [do-growing? (get-in opts [:ff-synapses :growing])
         do-inactive? (get-in opts [:ff-synapses :inactive])
         do-disconn? (get-in opts [:ff-synapses :disconnected])
@@ -156,14 +156,16 @@
                   do-perm? (assoc :perm perm)
                   src-lyr (assoc :src-lyr src-lyr)))]
           (recur (first more)
-                 (->> syns-to-draw
-                      (map (fn [{:keys [src-id src-lyr src-col]}]
-                             (when src-lyr
-                               ;; source is a cell not an input bit, so continue
-                               ;; tracing
-                               [src-id src-lyr src-col])))
-                      (remove nil?)
-                      (into (next more)))
+                 (if trace-back?
+                   (->> syns-to-draw
+                        (map (fn [{:keys [src-id src-lyr src-col]}]
+                               (when src-lyr
+                                 ;; source is a cell not an input bit, so continue
+                                 ;; tracing
+                                 [src-id src-lyr src-col])))
+                        (remove nil?)
+                        (into (next more)))
+                   (next more))
                  (assoc path->synapses
                         path syns-to-draw)))
         ;; go on to next

@@ -487,6 +487,7 @@
                 [:option {:key :selected} "selected column"]
                 [:option {:key :none} "none"]
                 ]]
+              (chbox :ff-synapses.trace-back? "Trace back")
               (chbox :ff-synapses.disconnected "Disconnected")
               (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.predicted "Predictive")

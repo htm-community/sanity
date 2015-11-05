@@ -165,11 +165,12 @@
                       (id-missing-response id steps-offset))))
 
             :get-ff-in-synapses
-            (let [[id rgn-id lyr-id only-ids token response-c] xs
+            (let [[id rgn-id lyr-id only-ids trace-back? token response-c] xs
                   [opts] (get-in @client-info [::viewports token])]
               (put! response-c
                     (if-let [htm (find-model id)]
-                      (data/ff-in-synapses-data htm rgn-id lyr-id only-ids opts)
+                      (data/ff-in-synapses-data htm rgn-id lyr-id only-ids
+                                                trace-back? opts)
                       (id-missing-response id steps-offset))))
 
             :get-ff-out-synapses

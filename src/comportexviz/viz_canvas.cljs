@@ -75,6 +75,7 @@
              :temporal-pooling true
              :refresh-index 0}
    :ff-synapses {:to :selected ;; :selected, :all, :none
+                 :trace-back? true
                  :growing true
                  :predicted true
                  :inactive nil
@@ -928,6 +929,7 @@
       ;; in-synapses
       (when-let [[rgn-id lyr-id] (sel/layer sel1)]
         (let [to (get-in opts [:ff-synapses :to])
+              trace-back? (get-in opts [:ff-synapses :trace-back?])
               [continue? only-ids] (case to
                                      :all [true nil]
                                      :selected (if bit
@@ -940,7 +942,7 @@
                 (swap! ff-synapses-response assoc-in
                        [:in-synapses sel1] (<! response-c)))
               (put! into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
-                                  only-ids viewport-token
+                                  only-ids trace-back? viewport-token
                                   (channel-proxy/register! local-targets
                                                            response-c)])
               true))))
