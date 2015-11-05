@@ -838,22 +838,33 @@
    37 :left
    38 :up
    39 :right
-   40 :down})
-
-(def key->control-k
-  {:left :step-backward
-   :right :step-forward
-   :up :bit-up
-   :down :bit-down
-   :page-up :scroll-up
-   :page-down :scroll-down
-   :space :toggle-run})
+   40 :down
+   191 :slash
+   220 :backslash
+   187 :equals
+   45 :minus
+   173 :minus
+   189 :minus
+   })
 
 (defn viz-key-down
   [e commands-in]
   (if-let [k (code-key (.-keyCode e))]
     (do
-      (put! commands-in [(key->control-k k)])
+      (put! commands-in
+            (case k
+              :left [:step-backward]
+              :right [:step-forward]
+              :up [:bit-up]
+              :down [:bit-down]
+              :page-up [:scroll-up]
+              :page-down [:scroll-down]
+              :space [:toggle-run]
+              :slash [:sort (.-shiftKey e)]
+              :backslash [:clear-sort (.-shiftKey e)]
+              :equals [:add-facet (.-shiftKey e)]
+              :minus [:clear-facets (.-shiftKey e)]
+              ))
       (.preventDefault e))
     true))
 
