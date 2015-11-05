@@ -249,14 +249,14 @@
   (invalidate! viz-options paths))
 
 (defn active-ids
+  "Returns the set of active columns or bits for the sense/layer."
   [viz-step path]
   (let [[lyr-type & _] path]
     (-> (:inbits-cols viz-step)
         (get-in path)
         (get (case lyr-type
                :regions :active-columns
-               :senses :active-bits))
-        sort)))
+               :senses :active-bits)))))
 
 (defn add-facets!
   [viz-layouts viz-options paths step]
@@ -266,7 +266,7 @@
                      (update-in m path
                                 (fn [lay]
                                   (lay/add-facet lay
-                                                 (active-ids step path)
+                                                 (sort (active-ids step path))
                                                  (:timestep step)))))
                    m
                    paths)))

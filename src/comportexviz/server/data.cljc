@@ -321,7 +321,7 @@
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
               [sense-id (cond-> {}
                           (get-in opts [:inbits :active])
-                          (assoc :active-bits (active-bits sense))
+                          (assoc :active-bits (set (active-bits sense)))
 
                           (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
                           (assoc :pred-bits-alpha

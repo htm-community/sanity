@@ -468,13 +468,17 @@
 
   PTemporalSortable
   (sort-by-recent-activity [this ids-ts]
+    (assert (every? set? ids-ts))
     (let [ftotal (reduce + (map second facets))
           faceted (take ftotal (keys order))
           ord-ids (loop [ids-ts ids-ts
                          ord (transient (vec faceted))
                          ord-set (transient (set faceted))]
                     (if-let [ids (first ids-ts)]
-                      (let [new-ids (doall (remove ord-set ids))]
+                      (let [new-ids (->> (remove ord-set ids)
+                                         (sort-by (fn [id]
+                                                    (mapv #(boolean (% id))
+                                                          ids-ts))))]
                         (recur (next ids-ts)
                                (reduce conj! ord new-ids)
                                (reduce conj! ord-set new-ids)))
