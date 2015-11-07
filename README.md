@@ -90,9 +90,10 @@ in `examples/demos/comportexviz/demos/`.
 
 ## License
 
-Copyright © 2015 Marcus Lewis, Felix Andrews and contributors.
-Copyright © 2014 Felix Andrews and contributors.
+Copyright © 2015 Marcus Lewis and Felix Andrews
+
+Copyright © 2014 Felix Andrews
 
 Distributed under your choice of
 * the Eclipse Public License, the same as Clojure.
-* the GNU Public Licence, Version 3 http://www.gnu.org/licenses/gpl.html, the same as NuPIC.
+* the [GNU Affero General Public Licence, Version 3](http://www.gnu.org/licenses/agpl-3.0.en.html), the same as NuPIC.
