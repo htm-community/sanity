@@ -15,3 +15,7 @@ comportexviz*.js
 *.js.map
 *~
 .idea
+.gorilla-port
+.lein-repl-history
+.nrepl-port
+comportexviz.iml
