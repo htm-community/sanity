@@ -75,6 +75,7 @@
              :temporal-pooling true
              :refresh-index 0}
    :ff-synapses {:to :selected ;; :selected, :all, :none
+                 :trace-back? true
                  :growing true
                  :predicted true
                  :inactive nil
@@ -249,14 +250,14 @@
   (invalidate! viz-options paths))
 
 (defn active-ids
+  "Returns the set of active columns or bits for the sense/layer."
   [viz-step path]
   (let [[lyr-type & _] path]
     (-> (:inbits-cols viz-step)
         (get-in path)
         (get (case lyr-type
                :regions :active-columns
-               :senses :active-bits))
-        sort)))
+               :senses :active-bits)))))
 
 (defn add-facets!
   [viz-layouts viz-options paths step]
@@ -266,7 +267,7 @@
                      (update-in m path
                                 (fn [lay]
                                   (lay/add-facet lay
-                                                 (active-ids step path)
+                                                 (sort (active-ids step path))
                                                  (:timestep step)))))
                    m
                    paths)))
@@ -838,22 +839,33 @@
    37 :left
    38 :up
    39 :right
-   40 :down})
-
-(def key->control-k
-  {:left :step-backward
-   :right :step-forward
-   :up :bit-up
-   :down :bit-down
-   :page-up :scroll-up
-   :page-down :scroll-down
-   :space :toggle-run})
+   40 :down
+   191 :slash
+   220 :backslash
+   187 :equals
+   45 :minus
+   173 :minus
+   189 :minus
+   })
 
 (defn viz-key-down
   [e commands-in]
   (if-let [k (code-key (.-keyCode e))]
     (do
-      (put! commands-in [(key->control-k k)])
+      (put! commands-in
+            (case k
+              :left [:step-backward]
+              :right [:step-forward]
+              :up [:bit-up]
+              :down [:bit-down]
+              :page-up [:scroll-up]
+              :page-down [:scroll-down]
+              :space [:toggle-run]
+              :slash [:sort (.-shiftKey e)]
+              :backslash [:clear-sort (.-shiftKey e)]
+              :equals [:add-facet (.-shiftKey e)]
+              :minus [:clear-facets (.-shiftKey e)]
+              ))
       (.preventDefault e))
     true))
 
@@ -917,6 +929,7 @@
       ;; in-synapses
       (when-let [[rgn-id lyr-id] (sel/layer sel1)]
         (let [to (get-in opts [:ff-synapses :to])
+              trace-back? (get-in opts [:ff-synapses :trace-back?])
               [continue? only-ids] (case to
                                      :all [true nil]
                                      :selected (if bit
@@ -929,7 +942,7 @@
                 (swap! ff-synapses-response assoc-in
                        [:in-synapses sel1] (<! response-c)))
               (put! into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
-                                  only-ids viewport-token
+                                  only-ids trace-back? viewport-token
                                   (channel-proxy/register! local-targets
                                                            response-c)])
               true))))

@@ -2,7 +2,7 @@
 
 ;; **
 ;;; # Comportex
-;;; 
+;;;
 ;; **
 
 ;; **
@@ -36,9 +36,9 @@
   {:column-dimensions [800]
    :global-inhibition? false
    :depth 5
-   :max-segments 5
-   :seg-stimulus-threshold 5
-   :seg-learn-threshold 3})
+   :distal {:max-segments 5
+            :stimulus-threshold 5
+            :learn-threshold 3}})
 
 (def encoder (e/linear-encoder [200] 10 [0 24]))
 

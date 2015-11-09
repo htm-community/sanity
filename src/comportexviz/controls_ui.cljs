@@ -487,6 +487,7 @@
                 [:option {:key :selected} "selected column"]
                 [:option {:key :none} "none"]
                 ]]
+              (chbox :ff-synapses.trace-back? "Trace back")
               (chbox :ff-synapses.disconnected "Disconnected")
               (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.predicted "Predictive")
@@ -830,6 +831,30 @@
        hold Command / Ctrl key while clicking (on Mac / Windows,
        respectively)."]]
       [:div.col-lg-3.col-md-4.col-sm-6
+       [:h4 "Key controls"]
+       [:p "When the main canvas is in focus, "
+        [:ul
+         [:li [:kbd "up"] "/" [:kbd "down"]
+          " select columns; "]
+         [:li
+          [:kbd "page up"] "/" [:kbd "page down"]
+          " scroll the visible field; "]
+         [:li
+          [:kbd "right"] "/" [:kbd "left"]
+          " step forward / back in time; "]
+         [:li
+          [:kbd "space"]
+          " starts or stops running. "]
+         [:li
+          [:kbd "/"] " sorts the selected layer (Shift for all);"]
+         [:li
+          [:kbd "\\"] " clears sorting (Shift for all);"]
+         [:li
+          [:kbd "+"] " adds a facet (Shift for all);"]
+         [:li
+          [:kbd "-"] " clears facets (Shift for all);"]]
+        ]]
+      [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Colour legend"]
        [:ul
         [:li [:b {:style {:color "red"}} "Red"]
@@ -839,18 +864,7 @@
         [:li [:b {:style {:color "purple"}} "Purple"]
          ": active+predicted (i.e. recognised)"]
         [:li [:b {:style {:color "green"}} "Green"]
-         ": growing (new synapses) or temporal pooling"]]
-       [:h4 "Key controls"]
-       [:p "When the main canvas is in focus, "
-        [:kbd "up"] "/" [:kbd "down"]
-        " select columns; "
-        [:kbd "page up"] "/" [:kbd "page down"]
-        " scroll the visible field; "
-        [:kbd "right"] "/" [:kbd "left"]
-        " step forward / back in time; "
-        [:kbd "space"]
-        " starts or stops running. "
-        ]]
+         ": growing (new synapses) or temporal pooling"]]]
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Segment diagrams"]
        (let [conn-act-px 115
