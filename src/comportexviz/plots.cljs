@@ -844,7 +844,7 @@
                           (calc-sdr-sizes col-gid-fracs))
             inc-win-sdrs (partial merge-with + (zipmap win-sdrs (repeat 1)))
             inc-win-gids (partial merge-with + (zipmap win-gids (repeat 1)))
-            label (:label (:input-value step))
+            label (let [v (:input-value step)] (get v :label v))
             inc-label (partial merge-with + {label (/ 1 (count win-sdrs))})
             t (:timestep step)
             new-state* (cond-> state
