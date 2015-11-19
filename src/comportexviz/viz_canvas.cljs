@@ -16,7 +16,6 @@
             [comportexviz.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
@@ -167,8 +166,8 @@
         ;; for now draw senses and layers in a horizontal stack
         [s-lays s-right]
         (reduce (fn [[lays left] sense-id]
-                  (let [topo (:topology (senses sense-id))
-                        lay (lay/grid-layout topo top-px left d-opts true
+                  (let [dims (:dimensions (senses sense-id))
+                        lay (lay/grid-layout dims top-px left d-opts true
                                              display-mode)]
                     [(assoc lays sense-id lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -176,8 +175,8 @@
                 (keys senses))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
-                  (let [topo (:topology (get-in regions [rgn-id lyr-id]))
-                        lay (lay/grid-layout topo top-px left d-opts false
+                  (let [dims (:dimensions (get-in regions [rgn-id lyr-id]))
+                        lay (lay/grid-layout dims top-px left d-opts false
                                              display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))

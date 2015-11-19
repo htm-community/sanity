@@ -376,22 +376,21 @@
       :circles? (if inbits? false true)})))
 
 (defn grid-layout
-  [topo top left opts inbits? display-mode]
-  (let [n-elements (p/size topo)]
+  [dims top left opts inbits? display-mode]
+  (let [n-elements (reduce * dims)]
     (case display-mode
       :one-d (grid-1d-layout (topology/one-d-topology n-elements)
                              top left opts inbits?)
-      :two-d (grid-2d-layout n-elements
-                             (if (= 2 (count (p/dimensions topo)))
-                               topo ;; keep actual topology if possible
-                               (let [w (-> (Math/sqrt n-elements)
-                                           Math/ceil
-                                           (min 20))
-                                     h (-> n-elements
-                                           (/ w)
-                                           Math/ceil)]
-                                 (topology/two-d-topology w h)))
-                             top left opts inbits?))))
+      :two-d (let [[width height] (if (= 2 (count dims))
+                                    dims ;; keep actual topology if possible
+                                    (let [w (-> (Math/sqrt n-elements)
+                                                Math/ceil
+                                                (min 20))]
+                                      [w (-> n-elements
+                                             (/ w)
+                                             Math/ceil)]))]
+               (grid-2d-layout n-elements (topology/two-d-topology width height)
+                               top left opts inbits?)))))
 
 
 ;;; # Orderable layouts
