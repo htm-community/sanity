@@ -16,16 +16,10 @@
 (def connection-changes-c (async/chan))
 (def connection-changes-mult (async/mult connection-changes-c))
 
-(def write-handlers
-  (transit/record-write-handlers
-   org.nfrac.comportex.topology.OneDTopology
-   org.nfrac.comportex.topology.TwoDTopology
-   org.nfrac.comportex.topology.ThreeDTopology))
-
 (defn transit-str
   [m]
   (let [out (ByteArrayOutputStream.)
-        writer (transit/writer out :json {:handlers write-handlers})]
+        writer (transit/writer out :json)]
     (transit/write writer m)
     (.toString out)))
 
@@ -86,7 +80,7 @@
   (reify
     renderable/Renderable
     (render [_]
-      (let [topo (p/topology enc)
+      (let [dims (p/dims-of enc)
             state->bits {:active (p/encode enc input)}
             d-opts (merge {:display-mode :two-d}
                           d-opts)]
@@ -96,7 +90,7 @@
                     "(function(el) {
                        comportexviz.demos.notebook.display_inbits(el, %s);
                      })"
-                    (pr-str (transit-str [topo state->bits d-opts])))
+                    (pr-str (transit-str [dims state->bits d-opts])))
          :willUnmount "(function(el) {
                          comportexviz.demos.notebook.release_inbits(el);
                        })"

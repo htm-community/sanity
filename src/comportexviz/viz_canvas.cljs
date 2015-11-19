@@ -1322,11 +1322,11 @@
                              @cells-segs-response @viz-layouts
                              @selection opts))))]]))})))
 
-(defn inbits-display [topo state->bits d-opts]
+(defn inbits-display [dims state->bits d-opts]
   (let [d-opts (assoc d-opts :draw-steps 1)
-        lay (lay/grid-layout topo 0 0 d-opts true (:display-mode d-opts))
+        lay (lay/grid-layout dims 0 0 d-opts true (:display-mode d-opts))
         {:keys [x y w h]} (layout-bounds lay)]
-    [canvas nil w h [topo state->bits]
+    [canvas nil w h [dims state->bits]
      (fn [ctx]
        (c/clear-rect ctx {:x 0 :y 0 :w w :h h})
        (c/fill-style ctx (:background state-colors))
