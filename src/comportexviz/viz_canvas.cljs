@@ -423,6 +423,7 @@
             cell-r-px (get-in opts [:drawing :cell-r-px])
             seg-h-px (get-in opts [:drawing :seg-h-px])
             seg-w-px (get-in opts [:drawing :seg-w-px])
+            draw-from (get-in opts [:distal-synapses :from])
             seg-r-px (* seg-w-px 0.5)]
         ;; background pass
         (doseq [layout-key [:cells-segments :apical-segments]
@@ -537,19 +538,22 @@
               (c/text ctx {:text (str "learning") :x (- sx 3) :y (+ sy 10)}))
             ;; draw distal synapses
             (c/stroke-width ctx 1)
-            (doseq [[syn-state syns] syns-by-state]
-              (c/stroke-style ctx (state-colors syn-state))
-              (doseq [{:keys [src-col src-id src-lyr perm]} syns
-                      :let [src-lay (get-in layouts (if src-lyr
-                                                      [:regions src-id src-lyr]
-                                                      [:senses src-id]))
-                            [src-x src-y] (element-xy src-lay src-col (inc dt))]]
-                (when perm (c/alpha ctx perm))
-                (doto ctx
-                  (c/begin-path)
-                  (c/move-to sx sy)
-                  (c/line-to (+ src-x 1) src-y) ;; +1 avoid obscuring colour
-                  (c/stroke))))
+            (when (or (and (= draw-from :selected)
+                           selected-seg?)
+                      (= draw-from :all))
+              (doseq [[syn-state syns] syns-by-state]
+                (c/stroke-style ctx (state-colors syn-state))
+                (doseq [{:keys [src-col src-id src-lyr perm]} syns
+                        :let [src-lay (get-in layouts (if src-lyr
+                                                        [:regions src-id src-lyr]
+                                                        [:senses src-id]))
+                              [src-x src-y] (element-xy src-lay src-col (inc dt))]]
+                  (when perm (c/alpha ctx perm))
+                  (doto ctx
+                    (c/begin-path)
+                    (c/move-to sx sy)
+                    (c/line-to (+ src-x 1) src-y) ;; +1 avoid obscuring colour
+                    (c/stroke)))))
             (c/alpha ctx 1.0)))
         (c/restore ctx))))
   ctx)

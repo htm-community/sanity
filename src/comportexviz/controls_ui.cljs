@@ -467,6 +467,8 @@
                      (t-chbox :ff-synapses.capture?
                               "Save")
                      [:div {:field :container
+                            ;; for consistent checkbox layout
+                            :style {:margin-top -5}
                             :visible? #(get-in % [:ff-synapses :capture?])}
                       (t-chbox :ff-synapses.only-active?
                                "Only if active")]]
@@ -489,9 +491,12 @@
                      (t-chbox :distal-synapses.capture?
                               "Save")
                      [:div {:field :container
+                            :style {:margin-top -5}
                             :visible? #(get-in % [:distal-synapses :capture?])}
                       (t-chbox :distal-synapses.only-active?
-                               "Only if active")]]
+                               "Only if active")
+                      (t-chbox :distal-synapses.only-noteworthy-columns?
+                               "Only active / predicted columns")]]
         capture-options]]]]]])
 
 (def viz-options-template
