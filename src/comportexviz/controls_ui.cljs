@@ -845,12 +845,16 @@
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 1))}
                     "limit to 1 step/sec."]]]])
-          [:li (if @show-help {:class "active"})
-           [:a {:href "#"
-                :on-click (fn [e]
-                            (swap! show-help not)
-                            (.preventDefault e))}
-            "Help"]]
+          [:li
+           [:button.btn.btn-default.navbar-btn
+            (cond-> {:type :button
+                     :on-click (fn [e]
+                                 (swap! show-help not)
+                                 (.preventDefault e))
+                     :title "Help"}
+              @show-help (assoc :class "active"))
+            [:span.glyphicon.glyphicon-question-sign {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Help"]]]
           ]
          ]
         ]])))
