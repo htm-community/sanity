@@ -7,20 +7,28 @@
             [cljs.core.async :as async :refer [put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
+(defn key-value-display
+  [k v]
+  [:div {:style {:margin-top 20}}
+   [:p
+    [:span {:style {:font-family "sans-serif"
+                    :font-size "9px"
+                    :font-weight "bold"}} k]
+    [:br]
+    [:strong v]]])
+
 (defn world-pane
   [steps selection]
   (when (not-empty @steps)
-    (let [step (main/selected-step steps selection)]
-      (when (:input-value step)
-        (into [:div]
-              (for [[sense-id v] (:sensed-values step)]
-                [:div {:style {:margin-top 20}}
-                 [:p
-                  [:span {:style {:font-family "sans-serif"
-                                  :font-size "9px"
-                                  :font-weight "bold"}} (name sense-id)]
-                  [:br]
-                  [:strong (str v)]]]))))))
+    (let [step (main/selected-step steps selection)
+          kvs (if-let [display-value (:display-value step)]
+                (seq display-value)
+                (when (:input-value step)
+                  (for [[sense-id v] (:sensed-values step)]
+                    [(name sense-id) (str v)])))]
+      (into [:div]
+            (for [[k v] kvs]
+              [key-value-display k v])))))
 
 (defn ^:export init
   [title ws-url & feature-list]
