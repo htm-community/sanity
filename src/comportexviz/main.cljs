@@ -97,10 +97,10 @@
           into-viz into-sim into-journal local-targets]]]])))
 
 (defn comportexviz-app
-  [model-tab world-pane into-sim]
-  [cui/comportexviz-app model-tab [main-pane world-pane into-sim]
-   capture-options viz-options selection steps step-template viz/state-colors
-   into-viz into-sim into-journal local-targets])
+  [title model-tab world-pane features into-sim]
+  [cui/comportexviz-app title model-tab [main-pane world-pane into-sim]
+   features capture-options viz-options selection steps step-template
+   viz/state-colors into-viz into-sim into-journal local-targets])
 
 ;;; ## Exported helpers
 

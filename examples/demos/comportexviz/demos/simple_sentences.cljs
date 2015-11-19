@@ -2,6 +2,7 @@
   (:require [org.nfrac.comportex.demos.simple-sentences :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
+            [comportexviz.demos.comportex-common :refer [all-features]]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
             [comportexviz.bridge.browser :as server]
@@ -165,7 +166,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "comportexviz-app"))
   (send-text!)
   (set-model!))

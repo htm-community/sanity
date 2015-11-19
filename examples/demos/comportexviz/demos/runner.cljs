@@ -23,14 +23,13 @@
                   [:strong (str v)]]]))))))
 
 (defn ^:export init
-  []
+  [title ws-url & feature-list]
   (let [into-sim-in (async/chan)
         into-sim-mult (async/mult into-sim-in)
         into-sim-eavesdrop (tap-c into-sim-mult)
         into-journal main/into-journal
-        pipe-to-remote-target! (bridge/init
-                                (str "ws://" js/location.host "/ws/")
-                                main/local-targets)]
+        pipe-to-remote-target! (bridge/init ws-url main/local-targets)
+        features (into #{} (map keyword) feature-list)]
     (pipe-to-remote-target! :into-journal into-journal)
     (pipe-to-remote-target! :into-sim (tap-c into-sim-mult))
 
@@ -40,6 +39,7 @@
         (put! into-journal [:ping])
         (recur)))
 
-    (reagent/render [main/comportexviz-app nil
-                     [world-pane main/steps main/selection] into-sim-in]
+    (reagent/render [main/comportexviz-app title nil
+                     [world-pane main/steps main/selection] features
+                     into-sim-in]
                     (dom/getElement "comportexviz-app"))))
