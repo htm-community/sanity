@@ -423,6 +423,77 @@
             "Dump entire model to console"])
          ])})))
 
+(defn t-chbox
+  [id label]
+  [:div.checkbox
+   [:label
+    [:input {:field :checkbox :id id}]
+    " "
+    label]])
+
+(defn capture-tab [capture-options]
+  [:div
+   [:p.text-muted {:style {:margin-top 15
+                           :margin-bottom 15}}
+    "Choose data the server should capture."]
+   [:div.row
+    [:div.col-xs-12
+     [:div.panel.panel-default
+      [:div.panel-body
+       [bind-fields [:label {:style {:font-weight "normal"}}
+                     "Keep "
+                     [:input {:field :numeric
+                              :id :keep-steps
+                              :style {:text-align "center"}
+                              :size 4}]
+                     " steps of history"]
+        capture-options]]]]]
+   [:div.row
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Feed-forward synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :ff-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :ff-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            :visible? #(get-in % [:ff-synapses :capture?])}
+                      (t-chbox :ff-synapses.only-active?
+                               "Only if active")]]
+        capture-options]]]]
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Distal synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :distal-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :distal-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            :visible? #(get-in % [:distal-synapses :capture?])}
+                      (t-chbox :distal-synapses.only-active?
+                               "Only if active")]]
+        capture-options]]]]]])
+
 (def viz-options-template
   (let [chbox (fn [id label]
                 [:div.checkbox
@@ -430,21 +501,17 @@
                   [:input {:field :checkbox :id id}]
                   (str " " label)]])
         group (fn [title content]
-                [:div.col-sm-6
+                [:div.col-lg-6.col-sm-12
                  [:div.panel.panel-default
                   [:div.panel-heading
                    [:h4.panel-title title]]
                   content]])]
     [:div
-     [:p.text-muted "Select drawing options, with immediate effect."]
+     [:p.text-muted {:style {:margin-top 15
+                             :margin-bottom 15}}
+      "Select drawing options, with immediate effect."]
      [:div.panel.panel-default
       [:div.panel-body
-       [:div
-        [:label " Keep "
-         [:input {:field :numeric
-                  :id :keep-steps
-                  :size 4}]
-         " steps of history"]]
        [:div.radio
         [:label
          [:input {:field :radio
@@ -925,14 +992,15 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [_ _ _ selection steps step-template _ _ _ into-journal local-targets]
+  [_ _ _ _ selection steps step-template _ _ _ into-journal local-targets]
   (let [show-help (atom false)
         viz-expanded (atom false)
         time-plots-tab (time-plots-tab-builder steps into-journal local-targets)
         cell-sdrs-tab (cell-sdrs-tab-builder steps step-template selection
                                              into-journal local-targets)]
-    (fn [model-tab main-pane viz-options selection steps step-template
-         series-colors into-viz into-sim into-journal local-targets]
+    (fn [model-tab main-pane capture-options viz-options selection steps
+         step-template series-colors into-viz into-sim into-journal
+         local-targets]
       [:div
        [navbar steps show-help viz-options viz-expanded step-template into-viz
         into-sim local-targets]
@@ -946,7 +1014,8 @@
            (into (if model-tab
                    [[:model model-tab]]
                    [])
-                 [[:drawing [bind-fields viz-options-template viz-options]]
+                 [[:capture [capture-tab capture-options]]
+                  [:drawing [bind-fields viz-options-template viz-options]]
                   [:params [parameters-tab step-template selection into-sim
                             local-targets]]
                   [:time-plots [time-plots-tab series-colors]]

@@ -85,7 +85,6 @@
                      :inactive nil
                      :disconnected nil
                      :permanences true}
-   :keep-steps 50
    ;; triggers a rebuild & redraw of the layouts when changed:
    :drawing {:display-mode :one-d ;; :one-d, :two-d
              :draw-steps 16
@@ -621,7 +620,7 @@
         (zero? (mod t anim-every))))))
 
 (defn timeline-click
-  [e click-dt steps selection opts]
+  [e click-dt steps selection]
   (.stopPropagation e)
   (let [append? (.-metaKey e)
         sel1 {:dt click-dt
@@ -648,16 +647,16 @@
               (recur)))))
 
       :reagent-render
-      (fn [viz-steps selection viz-options]
+      (fn [viz-steps selection capture-options]
         (let [steps @viz-steps
-              opts @viz-options
               sel @selection
               sel-dts (into #{} (map :dt sel))
-              keep-steps (:keep-steps opts)
-              min-t-width (* (if (pos? (count steps))
-                               (count (str (:timestep (first steps))))
-                               2)
-                             8)
+              keep-steps (or (:keep-steps @capture-options)
+                             50)
+              min-t-width (* (cond-> 2
+                               (pos? (count steps))
+                               (max (count (str (:timestep (first steps))))))
+                             12)
               t-width (max (/ @container-width-px keep-steps)
                            min-t-width)
               width-px (* t-width keep-steps)
@@ -686,15 +685,15 @@
                    [:g (cond-> {:text-anchor "middle"
                                 :font-family "sans-serif"
                                 :font-weight "bold"
-                                :font-size "10px"}
+                                :font-size "11px"}
                          kept?
                          (assoc :on-click
-                                #(timeline-click % dt steps selection opts)))
+                                #(timeline-click % dt steps selection)))
                     [:ellipse {:cx x-px :cy y-px
                                :rx (if sel? sel-rx rx)
                                :ry (if sel? sel-ry ry)
                                :fill "black"
-                               :fill-opacity (cond sel? 1.0 kept? 0.3 :else 0.1)}]
+                               :fill-opacity (cond sel? 1.0 kept? 0.5 :else 0.1)}]
                     (when (and (pos? (count steps))
                                (or sel?
                                    (and kept? (< keep-steps 100))))
