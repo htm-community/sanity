@@ -499,6 +499,31 @@
                                "Only if active")
                       (t-chbox :distal-synapses.only-noteworthy-columns?
                                "Only active / predicted columns")]]
+        capture-options]]]]
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Apical synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :apical-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :apical-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            :style {:margin-top -5}
+                            :visible? #(get-in % [:apical-synapses :capture?])}
+                      (t-chbox :apical-synapses.only-active?
+                               "Only if active")
+                      (t-chbox :apical-synapses.only-noteworthy-columns?
+                               "Only active / predicted columns")]]
         capture-options]]]]]])
 
 (def viz-options-template
