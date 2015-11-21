@@ -428,23 +428,27 @@
 
 (defn step-template-data
   [htm]
-  {:senses (into
-            {}
-            (for [sense-id (core/sense-keys htm)
-                  :let [sense (get-in htm [:senses sense-id])]]
-              [sense-id {:dimensions (p/dims-of sense)}]))
-
-   :regions (into
-             {}
-             (for [rgn-id (core/region-keys htm)
-                   :let [rgn (get-in htm [:regions rgn-id])]]
-               [rgn-id (into
-                        {}
-                        (for [lyr-id (core/layers rgn)
-                              :let [lyr (get rgn lyr-id)
-                                    spec (p/params lyr)]]
-                          [lyr-id {:spec (p/params lyr)
-                                   :dimensions (p/dims-of lyr)}]))]))})
+  (let [sense-keys (core/sense-keys htm)]
+    {:senses (->> (map vector (range) sense-keys)
+                  (reduce (fn [st [ordinal sense-id]]
+                            (let [sense (get-in htm [:senses sense-id])]
+                              (assoc st sense-id
+                                     {:dimensions (p/dims-of sense)
+                                      :ordinal ordinal})))
+                          {}))
+     :regions (->> (map vector (range)
+                        (for [rgn-id (core/region-keys htm)
+                              :let [rgn (get-in htm [:regions rgn-id])]
+                              lyr-id (core/layers rgn)]
+                          [rgn-id lyr-id]))
+                   (reduce (fn [rt [ordinal [rgn-id lyr-id]]]
+                             (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                               (assoc-in rt [rgn-id lyr-id]
+                                         {:spec (p/params lyr)
+                                          :dimensions (p/dims-of lyr)
+                                          :ordinal (+ ordinal
+                                                      (count sense-keys))})))
+                           {}))}))
 
 (defn- cell->id
   [depth [col ci]]
