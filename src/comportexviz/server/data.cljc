@@ -432,7 +432,7 @@
             {}
             (for [sense-id (core/sense-keys htm)
                   :let [sense (get-in htm [:senses sense-id])]]
-              [sense-id {:topology (p/topology sense)}]))
+              [sense-id {:dimensions (p/dims-of sense)}]))
 
    :regions (into
              {}
@@ -444,7 +444,7 @@
                               :let [lyr (get rgn lyr-id)
                                     spec (p/params lyr)]]
                           [lyr-id {:spec (p/params lyr)
-                                   :topology (p/topology lyr)}]))]))})
+                                   :dimensions (p/dims-of lyr)}]))]))})
 
 (defn- cell->id
   [depth [col ci]]

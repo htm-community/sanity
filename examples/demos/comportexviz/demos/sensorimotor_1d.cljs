@@ -1,6 +1,7 @@
 (ns comportexviz.demos.sensorimotor-1d
   (:require [org.nfrac.comportex.demos.sensorimotor-1d :as demo]
             [org.nfrac.comportex.core :as core]
+            [comportexviz.demos.comportex-common :refer [all-features]]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
@@ -236,7 +237,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "comportexviz-app"))
   (send-input-stream!)
   (set-model!))

@@ -6,9 +6,6 @@
             [comportexviz.selection :as sel]
             [comportexviz.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.topology :refer [map->OneDTopology
-                                                  map->TwoDTopology
-                                                  map->ThreeDTopology]]
             [org.nfrac.comportex.util :as util]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
@@ -26,19 +23,14 @@
   (reset! pipe-to-remote-target!
           (remote/init url local-targets)))
 
-(def handlers
-  {"org.nfrac.comportex.topology.OneDTopology" map->OneDTopology
-   "org.nfrac.comportex.topology.TwoDTopology" map->TwoDTopology
-   "org.nfrac.comportex.topology.ThreeDTopology" map->ThreeDTopology})
-
 (defn read-transit-str
   [s]
-  (-> (transit/reader :json {:handlers handlers})
+  (-> (transit/reader :json)
       (transit/read s)))
 
 (defn ^:export display-inbits [el serialized]
-  (let [[topo state->bits d-opts] (read-transit-str serialized)]
-    (reagent/render [viz/inbits-display topo state->bits
+  (let [[dims state->bits d-opts] (read-transit-str serialized)]
+    (reagent/render [viz/inbits-display dims state->bits
                      (merge (:drawing viz/default-viz-options)
                             d-opts)]
                     el)))

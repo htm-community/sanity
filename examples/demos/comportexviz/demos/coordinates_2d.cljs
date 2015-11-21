@@ -2,6 +2,7 @@
   (:require [org.nfrac.comportex.demos.coordinates-2d :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
+            [comportexviz.demos.comportex-common :refer [all-features]]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers :refer [resizing-canvas]]
             [comportexviz.plots-canvas :as plt]
@@ -197,7 +198,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "comportexviz-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (set-model!))

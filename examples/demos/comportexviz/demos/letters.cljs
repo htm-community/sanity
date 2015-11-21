@@ -1,6 +1,7 @@
 (ns comportexviz.demos.letters
   (:require [org.nfrac.comportex.demos.letters :as demo]
             [org.nfrac.comportex.core :as core]
+            [comportexviz.demos.comportex-common :refer [all-features]]
             [org.nfrac.comportex.util :as util]
             [comportexviz.main :as main]
             [comportexviz.helpers :as helpers]
@@ -177,7 +178,8 @@ Chifung has a friend."))
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "comportexviz-app"))
   (send-text!)
   (set-model!))

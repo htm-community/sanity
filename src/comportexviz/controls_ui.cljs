@@ -423,6 +423,109 @@
             "Dump entire model to console"])
          ])})))
 
+(defn t-chbox
+  [id label]
+  [:div.checkbox
+   [:label
+    [:input {:field :checkbox :id id}]
+    " "
+    label]])
+
+(def keep-steps-template
+  [:div.row
+   [:div.col-xs-12
+    [:div.panel.panel-default
+     [:div.panel-body
+      [:label {:style {:font-weight "normal"}}
+       "Keep "
+       [:input {:field :numeric
+                :id :keep-steps
+                :style {:text-align "center"}
+                :size 4}]
+       " steps of history"]]]]])
+
+(defn capture-tab [capture-options]
+  [:div
+   [:p.text-muted {:style {:margin-top 15
+                           :margin-bottom 15}}
+    "Choose data the server should capture."]
+   [bind-fields keep-steps-template capture-options]
+   [:div.row
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Feed-forward synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :ff-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :ff-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            ;; for consistent checkbox layout
+                            :style {:margin-top -5}
+                            :visible? #(get-in % [:ff-synapses :capture?])}
+                      (t-chbox :ff-synapses.only-active?
+                               "Only if active")]]
+        capture-options]]]]
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Distal synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :distal-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :distal-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            :style {:margin-top -5}
+                            :visible? #(get-in % [:distal-synapses :capture?])}
+                      (t-chbox :distal-synapses.only-active?
+                               "Only if active")
+                      (t-chbox :distal-synapses.only-noteworthy-columns?
+                               "Only active / predicted columns")]]
+        capture-options]]]]
+    [:div.col-lg-6.col-sm-12
+     [:div.panel.panel-default
+      [:div.panel-heading
+       [:h4.panel-title "Apical synapses"]]
+      [:div.panel-body
+       [bind-fields [:div
+                     [:label {:style {:display "block"
+                                      :font-weight "normal"}}
+                      "If permanence "
+                      [:div {:style {:display "inline-block"}}
+                       "≥ "
+                       [:input {:field :numeric
+                                :id :apical-synapses.min-perm
+                                :size 3
+                                :style {:text-align "center"}}]]]
+                     (t-chbox :apical-synapses.capture?
+                              "Save")
+                     [:div {:field :container
+                            :style {:margin-top -5}
+                            :visible? #(get-in % [:apical-synapses :capture?])}
+                      (t-chbox :apical-synapses.only-active?
+                               "Only if active")
+                      (t-chbox :apical-synapses.only-noteworthy-columns?
+                               "Only active / predicted columns")]]
+        capture-options]]]]]])
+
 (def viz-options-template
   (let [chbox (fn [id label]
                 [:div.checkbox
@@ -430,21 +533,14 @@
                   [:input {:field :checkbox :id id}]
                   (str " " label)]])
         group (fn [title content]
-                [:div.col-sm-6
+                [:div.col-lg-6.col-sm-12
                  [:div.panel.panel-default
                   [:div.panel-heading
                    [:h4.panel-title title]]
                   content]])]
     [:div
-     [:p.text-muted "Select drawing options, with immediate effect."]
      [:div.panel.panel-default
       [:div.panel-body
-       [:div
-        [:label " Keep "
-         [:input {:field :numeric
-                  :id :keep-steps
-                  :size 4}]
-         " steps of history"]]
        [:div.radio
         [:label
          [:input {:field :radio
@@ -508,6 +604,16 @@
               ])]
      ]))
 
+(defn drawing-tab
+  [features viz-options capture-options]
+  [:div
+   [:p.text-muted {:style {:margin-top 15
+                           :margin-bottom 15}}
+    "Select drawing options, with immediate effect."]
+   (when-not (features :capture)
+     [bind-fields keep-steps-template capture-options])
+   [bind-fields viz-options-template viz-options]])
+
 (defn send-command [ch command & xs]
   (fn [e]
     (put! ch (into [command] xs))
@@ -520,7 +626,8 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [steps show-help viz-options viz-expanded step-template into-viz into-sim local-targets]
+  [_ _ steps show-help viz-options viz-expanded step-template into-viz into-sim
+   local-targets]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -556,7 +663,7 @@
                    (when (first @steps)
                      (gather-start-data! run-start @steps)))))
 
-    (fn [_ _ _ _ _ _]
+    (fn [title features _ _ _ _ _ _]
       [:nav.navbar.navbar-default
        [:div.container-fluid
         [:div.navbar-header
@@ -564,7 +671,7 @@
                                            :data-target "#comportex-navbar-collapse"}
           [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
          [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
-          "ComportexViz"]]
+          title]]
         [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
          [:ul.nav.navbar-nav
           ;; step back
@@ -726,48 +833,53 @@
            [:p.navbar-text (str (.toFixed (sim-rate (first @steps) @run-start)
                                           1) "/sec.")]]
           ;; sim / anim options
-          [:li.dropdown
-           [:a.dropdown-toggle {:data-toggle "dropdown"
-                                :role "button"
-                                :href "#"}
-            "Speed" [:span.caret]]
-           [:ul.dropdown-menu {:role "menu"}
-            [:li [:a {:href "#"
-                      :on-click (fn []
-                                  (put! into-sim [:set-step-ms 0])
-                                  (swap! viz-options assoc-in
-                                         [:drawing :anim-every] 1))}
-                  "max sim speed"]]
-            [:li [:a {:href "#"
-                      :on-click (fn []
-                                  (put! into-sim [:set-step-ms 0])
-                                  (swap! viz-options assoc-in
-                                         [:drawing :anim-every] 100))}
-                  "max sim speed, draw every 100 steps"]]
-            [:li [:a {:href "#"
-                      :on-click (fn []
-                                  (put! into-sim [:set-step-ms 250])
-                                  (swap! viz-options assoc-in
-                                         [:drawing :anim-every] 1))}
-                  "limit to 4 steps/sec."]]
-            [:li [:a {:href "#"
-                      :on-click (fn []
-                                  (put! into-sim [:set-step-ms 500])
-                                  (swap! viz-options assoc-in
-                                         [:drawing :anim-every] 1))}
-                  "limit to 2 steps/sec."]]
-            [:li [:a {:href "#"
-                      :on-click (fn []
-                                  (put! into-sim [:set-step-ms 1000])
-                                  (swap! viz-options assoc-in
-                                         [:drawing :anim-every] 1))}
-                  "limit to 1 step/sec."]]]]
-          [:li (if @show-help {:class "active"})
-           [:a {:href "#"
-                :on-click (fn [e]
-                            (swap! show-help not)
-                            (.preventDefault e))}
-            "Help"]]
+          (when (features :speed)
+            [:li.dropdown
+             [:a.dropdown-toggle {:data-toggle "dropdown"
+                                  :role "button"
+                                  :href "#"}
+              "Speed" [:span.caret]]
+             [:ul.dropdown-menu {:role "menu"}
+              [:li [:a {:href "#"
+                        :on-click (fn []
+                                    (put! into-sim [:set-step-ms 0])
+                                    (swap! viz-options assoc-in
+                                           [:drawing :anim-every] 1))}
+                    "max sim speed"]]
+              [:li [:a {:href "#"
+                        :on-click (fn []
+                                    (put! into-sim [:set-step-ms 0])
+                                    (swap! viz-options assoc-in
+                                           [:drawing :anim-every] 100))}
+                    "max sim speed, draw every 100 steps"]]
+              [:li [:a {:href "#"
+                        :on-click (fn []
+                                    (put! into-sim [:set-step-ms 250])
+                                    (swap! viz-options assoc-in
+                                           [:drawing :anim-every] 1))}
+                    "limit to 4 steps/sec."]]
+              [:li [:a {:href "#"
+                        :on-click (fn []
+                                    (put! into-sim [:set-step-ms 500])
+                                    (swap! viz-options assoc-in
+                                           [:drawing :anim-every] 1))}
+                    "limit to 2 steps/sec."]]
+              [:li [:a {:href "#"
+                        :on-click (fn []
+                                    (put! into-sim [:set-step-ms 1000])
+                                    (swap! viz-options assoc-in
+                                           [:drawing :anim-every] 1))}
+                    "limit to 1 step/sec."]]]])
+          [:li
+           [:button.btn.btn-default.navbar-btn
+            (cond-> {:type :button
+                     :on-click (fn [e]
+                                 (swap! show-help not)
+                                 (.preventDefault e))
+                     :title "Help"}
+              @show-help (assoc :class "active"))
+            [:span.glyphicon.glyphicon-question-sign {:aria-hidden "true"}]
+            [:span.visible-xs-inline " Help"]]]
           ]
          ]
         ]])))
@@ -925,17 +1037,22 @@
      [:hr]]))
 
 (defn comportexviz-app
-  [_ _ _ selection steps step-template _ _ _ into-journal local-targets]
+  [_ _ _ features _ _ selection steps step-template _ _ _ into-journal
+   local-targets]
   (let [show-help (atom false)
         viz-expanded (atom false)
-        time-plots-tab (time-plots-tab-builder steps into-journal local-targets)
-        cell-sdrs-tab (cell-sdrs-tab-builder steps step-template selection
-                                             into-journal local-targets)]
-    (fn [model-tab main-pane viz-options selection steps step-template
-         series-colors into-viz into-sim into-journal local-targets]
+        time-plots-tab (when (features :time-plots)
+                         (time-plots-tab-builder steps into-journal
+                                                 local-targets))
+        cell-sdrs-tab (when (features :cell-SDRs)
+                        (cell-sdrs-tab-builder steps step-template selection
+                                               into-journal local-targets))]
+    (fn [title model-tab main-pane _ capture-options viz-options selection steps
+         step-template series-colors into-viz into-sim into-journal
+         local-targets]
       [:div
-       [navbar steps show-help viz-options viz-expanded step-template into-viz
-        into-sim local-targets]
+       [navbar title features steps show-help viz-options viz-expanded
+        step-template into-viz into-sim local-targets]
        [help-block show-help]
        [:div.container-fluid
         [:div.row
@@ -943,15 +1060,25 @@
           main-pane]
          [:div.col-sm-3
           [tabs
-           (into (if model-tab
-                   [[:model model-tab]]
-                   [])
-                 [[:drawing [bind-fields viz-options-template viz-options]]
-                  [:params [parameters-tab step-template selection into-sim
-                            local-targets]]
-                  [:time-plots [time-plots-tab series-colors]]
-                  [:cell-SDRs [cell-sdrs-tab]]
-                  [:sources [sources-tab step-template selection series-colors
-                             into-journal local-targets]]
-                  [:details [details-tab selection into-journal local-targets]]])]]]
+           (remove nil?
+                   [(when model-tab
+                      [:model model-tab])
+                    (when (features :capture)
+                      [:capture [capture-tab capture-options]])
+                    (when (features :drawing)
+                      [:drawing [drawing-tab features viz-options
+                                 capture-options]])
+                    (when (features :params)
+                      [:params [parameters-tab step-template selection into-sim
+                                local-targets]])
+                    (when time-plots-tab
+                      [:time-plots [time-plots-tab series-colors]])
+                    (when cell-sdrs-tab
+                      [:cell-SDRs [cell-sdrs-tab]])
+                    (when (features :sources)
+                      [:sources [sources-tab step-template selection
+                                 series-colors into-journal local-targets]])
+                    (when (features :details)
+                      [:details [details-tab selection into-journal
+                                 local-targets]])])]]]
         [:div#loading-message "loading"]]])))

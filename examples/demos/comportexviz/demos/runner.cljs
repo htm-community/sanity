@@ -7,30 +7,37 @@
             [cljs.core.async :as async :refer [put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
+(defn key-value-display
+  [k v]
+  [:div {:style {:margin-top 20}}
+   [:p
+    [:span {:style {:font-family "sans-serif"
+                    :font-size "9px"
+                    :font-weight "bold"}} k]
+    [:br]
+    [:strong v]]])
+
 (defn world-pane
   [steps selection]
   (when (not-empty @steps)
-    (let [step (main/selected-step steps selection)]
-      (when (:input-value step)
-        (into [:div]
-              (for [[sense-id v] (:sensed-values step)]
-                [:div {:style {:margin-top 20}}
-                 [:p
-                  [:span {:style {:font-family "sans-serif"
-                                  :font-size "9px"
-                                  :font-weight "bold"}} (name sense-id)]
-                  [:br]
-                  [:strong (str v)]]]))))))
+    (let [step (main/selected-step steps selection)
+          kvs (if-let [display-value (:display-value step)]
+                (seq display-value)
+                (when (:input-value step)
+                  (for [[sense-id v] (:sensed-values step)]
+                    [(name sense-id) (str v)])))]
+      (into [:div]
+            (for [[k v] kvs]
+              [key-value-display k v])))))
 
 (defn ^:export init
-  []
+  [title ws-url & feature-list]
   (let [into-sim-in (async/chan)
         into-sim-mult (async/mult into-sim-in)
         into-sim-eavesdrop (tap-c into-sim-mult)
         into-journal main/into-journal
-        pipe-to-remote-target! (bridge/init
-                                (str "ws://" js/location.host "/ws/")
-                                main/local-targets)]
+        pipe-to-remote-target! (bridge/init ws-url main/local-targets)
+        features (into #{} (map keyword) feature-list)]
     (pipe-to-remote-target! :into-journal into-journal)
     (pipe-to-remote-target! :into-sim (tap-c into-sim-mult))
 
@@ -40,6 +47,7 @@
         (put! into-journal [:ping])
         (recur)))
 
-    (reagent/render [main/comportexviz-app nil
-                     [world-pane main/steps main/selection] into-sim-in]
+    (reagent/render [main/comportexviz-app title nil
+                     [world-pane main/steps main/selection] features
+                     into-sim-in]
                     (dom/getElement "comportexviz-app"))))

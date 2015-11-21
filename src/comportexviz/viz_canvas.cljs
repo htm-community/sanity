@@ -16,7 +16,6 @@
             [comportexviz.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
@@ -86,7 +85,6 @@
                      :inactive nil
                      :disconnected nil
                      :permanences true}
-   :keep-steps 50
    ;; triggers a rebuild & redraw of the layouts when changed:
    :drawing {:display-mode :one-d ;; :one-d, :two-d
              :draw-steps 16
@@ -167,8 +165,8 @@
         ;; for now draw senses and layers in a horizontal stack
         [s-lays s-right]
         (reduce (fn [[lays left] sense-id]
-                  (let [topo (:topology (senses sense-id))
-                        lay (lay/grid-layout topo top-px left d-opts true
+                  (let [dims (:dimensions (senses sense-id))
+                        lay (lay/grid-layout dims top-px left d-opts true
                                              display-mode)]
                     [(assoc lays sense-id lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -176,8 +174,8 @@
                 (keys senses))
         [r-lays r-right]
         (reduce (fn [[lays left] [rgn-id lyr-id]]
-                  (let [topo (:topology (get-in regions [rgn-id lyr-id]))
-                        lay (lay/grid-layout topo top-px left d-opts false
+                  (let [dims (:dimensions (get-in regions [rgn-id lyr-id]))
+                        lay (lay/grid-layout dims top-px left d-opts false
                                              display-mode)]
                     [(assoc-in lays [rgn-id lyr-id] lay)
                      (+ (lay/right-px lay) spacer)]))
@@ -425,6 +423,7 @@
             cell-r-px (get-in opts [:drawing :cell-r-px])
             seg-h-px (get-in opts [:drawing :seg-h-px])
             seg-w-px (get-in opts [:drawing :seg-w-px])
+            draw-from (get-in opts [:distal-synapses :from])
             seg-r-px (* seg-w-px 0.5)]
         ;; background pass
         (doseq [layout-key [:cells-segments :apical-segments]
@@ -539,19 +538,22 @@
               (c/text ctx {:text (str "learning") :x (- sx 3) :y (+ sy 10)}))
             ;; draw distal synapses
             (c/stroke-width ctx 1)
-            (doseq [[syn-state syns] syns-by-state]
-              (c/stroke-style ctx (state-colors syn-state))
-              (doseq [{:keys [src-col src-id src-lyr perm]} syns
-                      :let [src-lay (get-in layouts (if src-lyr
-                                                      [:regions src-id src-lyr]
-                                                      [:senses src-id]))
-                            [src-x src-y] (element-xy src-lay src-col (inc dt))]]
-                (when perm (c/alpha ctx perm))
-                (doto ctx
-                  (c/begin-path)
-                  (c/move-to sx sy)
-                  (c/line-to (+ src-x 1) src-y) ;; +1 avoid obscuring colour
-                  (c/stroke))))
+            (when (or (and (= draw-from :selected)
+                           selected-seg?)
+                      (= draw-from :all))
+              (doseq [[syn-state syns] syns-by-state]
+                (c/stroke-style ctx (state-colors syn-state))
+                (doseq [{:keys [src-col src-id src-lyr perm]} syns
+                        :let [src-lay (get-in layouts (if src-lyr
+                                                        [:regions src-id src-lyr]
+                                                        [:senses src-id]))
+                              [src-x src-y] (element-xy src-lay src-col (inc dt))]]
+                  (when perm (c/alpha ctx perm))
+                  (doto ctx
+                    (c/begin-path)
+                    (c/move-to sx sy)
+                    (c/line-to (+ src-x 1) src-y) ;; +1 avoid obscuring colour
+                    (c/stroke)))))
             (c/alpha ctx 1.0)))
         (c/restore ctx))))
   ctx)
@@ -622,7 +624,7 @@
         (zero? (mod t anim-every))))))
 
 (defn timeline-click
-  [e click-dt steps selection opts]
+  [e click-dt steps selection]
   (.stopPropagation e)
   (let [append? (.-metaKey e)
         sel1 {:dt click-dt
@@ -649,16 +651,16 @@
               (recur)))))
 
       :reagent-render
-      (fn [viz-steps selection viz-options]
+      (fn [viz-steps selection capture-options]
         (let [steps @viz-steps
-              opts @viz-options
               sel @selection
               sel-dts (into #{} (map :dt sel))
-              keep-steps (:keep-steps opts)
-              min-t-width (* (if (pos? (count steps))
-                               (count (str (:timestep (first steps))))
-                               2)
-                             8)
+              keep-steps (or (:keep-steps @capture-options)
+                             50)
+              min-t-width (* (cond-> 2
+                               (pos? (count steps))
+                               (max (count (str (:timestep (first steps))))))
+                             12)
               t-width (max (/ @container-width-px keep-steps)
                            min-t-width)
               width-px (* t-width keep-steps)
@@ -687,15 +689,15 @@
                    [:g (cond-> {:text-anchor "middle"
                                 :font-family "sans-serif"
                                 :font-weight "bold"
-                                :font-size "10px"}
+                                :font-size "11px"}
                          kept?
                          (assoc :on-click
-                                #(timeline-click % dt steps selection opts)))
+                                #(timeline-click % dt steps selection)))
                     [:ellipse {:cx x-px :cy y-px
                                :rx (if sel? sel-rx rx)
                                :ry (if sel? sel-ry ry)
                                :fill "black"
-                               :fill-opacity (cond sel? 1.0 kept? 0.3 :else 0.1)}]
+                               :fill-opacity (cond sel? 1.0 kept? 0.5 :else 0.1)}]
                     (when (and (pos? (count steps))
                                (or sel?
                                    (and kept? (< keep-steps 100))))
@@ -1320,11 +1322,11 @@
                              @cells-segs-response @viz-layouts
                              @selection opts))))]]))})))
 
-(defn inbits-display [topo state->bits d-opts]
+(defn inbits-display [dims state->bits d-opts]
   (let [d-opts (assoc d-opts :draw-steps 1)
-        lay (lay/grid-layout topo 0 0 d-opts true (:display-mode d-opts))
+        lay (lay/grid-layout dims 0 0 d-opts true (:display-mode d-opts))
         {:keys [x y w h]} (layout-bounds lay)]
-    [canvas nil w h [topo state->bits]
+    [canvas nil w h [dims state->bits]
      (fn [ctx]
        (c/clear-rect ctx {:x 0 :y 0 :w w :h h})
        (c/fill-style ctx (:background state-colors))

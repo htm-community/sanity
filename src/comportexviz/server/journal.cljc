@@ -38,10 +38,21 @@
   [steps-c commands-c current-model n-keep]
   (let [steps-offset (atom 0)
         model-steps (atom [])
-        keep-steps (atom n-keep)
         steps-in (async/chan)
         steps-mult (async/mult steps-in)
         client-infos (atom {})
+        capture-options (atom {:keep-steps n-keep
+                               :ff-synapses {:capture? true
+                                             :min-perm 0.0
+                                             :only-active? false}
+                               :distal-synapses {:capture? true
+                                                 :min-perm 0.0
+                                                 :only-active? false
+                                                 :only-noteworthy-columns? false}
+                               :apical-synapses {:capture? true
+                                                 :min-perm 0.0
+                                                 :only-active? false
+                                                 :only-noteworthy-columns? false}})
         find-model (fn [id]
                      (when (number? id)
                        (let [i (- id @steps-offset)]
@@ -64,8 +75,9 @@
       (when-let [model (<! steps-c)]
         (let [model-id (+ @steps-offset (count @model-steps))
               added (conj @model-steps model)
-              to-drop (if (not (neg? @keep-steps))
-                        (max 0 (- (count added) @keep-steps))
+              keep-steps (:keep-steps @capture-options)
+              to-drop (if (not (neg? keep-steps))
+                        (max 0 (- (count added) keep-steps))
                         0)]
           (reset! model-steps (cond-> added
                                 (pos? to-drop)
@@ -134,13 +146,13 @@
                           vec)]))
 
             :subscribe
-            (let [[keep-n-steps steps-c response-c] xs]
-              (reset! keep-steps keep-n-steps)
+            (let [[steps-c response-c] xs]
               (async/tap steps-mult steps-c)
               (swap! client-info assoc ::steps-subscriber steps-c)
               (println "JOURNAL: Client subscribed to steps.")
-              (->> (data/step-template-data @current-model)
-                   (put! response-c)))
+              (put! response-c
+                    [(data/step-template-data @current-model)
+                     @capture-options]))
 
             :register-viewport
             (let [[viewport response-c] xs]
@@ -152,9 +164,9 @@
             (let [[token] xs]
               (swap! client-info update ::viewports dissoc token))
 
-            :set-keep-steps
-            (let [[keep-n-steps] xs]
-              (reset! keep-steps keep-n-steps))
+            :set-capture-options
+            (let [[co] xs]
+              (reset! capture-options co))
 
             :get-inbits-cols
             (let [[id token response-c] xs

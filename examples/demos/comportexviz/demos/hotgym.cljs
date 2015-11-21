@@ -3,6 +3,7 @@
             [cljs.reader :as edn]
             [comportexviz.bridge.browser :as server]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [comportexviz.demos.comportex-common :refer [all-features]]
             [comportexviz.main :as main]
             [comportexviz.server.data :as data]
             [comportexviz.viz-canvas :as viz]
@@ -583,6 +584,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "comportexviz-app"))
   (set-model!))

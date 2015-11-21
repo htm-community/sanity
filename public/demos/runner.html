@@ -31,7 +31,9 @@
   <script type="text/javascript" src="out/comportexviz.js"></script>
   <script type="text/javascript">goog.require("comportexviz.demos.runner");</script>
   <script type="text/javascript">
-    comportexviz.demos.runner.init();
+    var wsUrl = "ws://" + location.host + "/ws/";
+    comportexviz.demos.runner.init("Comportex", wsUrl, "drawing", "params", "time-plots",
+        "cell-SDRs", "sources", "details", "speed");
   </script>
 </body>
 </html>

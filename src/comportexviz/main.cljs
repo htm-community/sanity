@@ -20,6 +20,7 @@
 (def steps (atom []))
 (def step-template (atom nil))
 (def selection (atom sel/blank-selection))
+(def capture-options (atom nil))
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
 
@@ -28,26 +29,25 @@
 (defn subscribe-to-steps! [into-j]
   (let [steps-c (async/chan)
         response-c (async/chan)]
-    (put! into-j [:subscribe (:keep-steps @viz-options)
-                  (channel-proxy/register! local-targets steps-c)
-                  (channel-proxy/register! local-targets response-c)])
+    (put! into-j [:subscribe (channel-proxy/register! local-targets steps-c)
+                   (channel-proxy/register! local-targets response-c)])
     (go
       ;; Get the template before getting any steps.
-      (reset! step-template (<! response-c))
+      (let [[st co] (<! response-c)]
+        (reset! step-template st)
+        (reset! capture-options co))
       (let [[region-key rgn] (-> @step-template :regions seq first)
             layer-id (-> rgn keys first)]
         (reset! selection
                 [{:dt 0
                   :path [:regions region-key layer-id]}]))
-      (add-watch viz-options ::keep-steps
-                 (fn [_ _ prev-opts opts]
-                   (let [n (:keep-steps opts)]
-                     (when (not= n (:keep-steps prev-opts))
-                       (put! into-j [:set-keep-steps n])))))
+      (add-watch capture-options ::push-to-server
+                 (fn [_ _ _ opts]
+                   (put! into-j [:set-capture-options opts])))
 
       (loop []
         (when-let [step (<! steps-c)]
-          (let [keep-steps (:keep-steps @viz-options)
+          (let [keep-steps (:keep-steps @capture-options)
                 [kept dropped] (split-at keep-steps
                                          (cons step @steps))]
             (reset! steps kept))
@@ -87,7 +87,7 @@
                              :tabIndex 1
                              :style {:overflow-x "hidden"}}
        [:div.row
-        [viz/viz-timeline steps selection viz-options]]
+        [viz/viz-timeline steps selection capture-options]]
        [:div.row
         [:div.col-sm-3.col-lg-2
          world-pane]
@@ -97,10 +97,10 @@
           into-viz into-sim into-journal local-targets]]]])))
 
 (defn comportexviz-app
-  [model-tab world-pane into-sim]
-  [cui/comportexviz-app model-tab [main-pane world-pane into-sim] viz-options
-   selection steps step-template viz/state-colors into-viz into-sim into-journal
-   local-targets])
+  [title model-tab world-pane features into-sim]
+  [cui/comportexviz-app title model-tab [main-pane world-pane into-sim]
+   features capture-options viz-options selection steps step-template
+   viz/state-colors into-viz into-sim into-journal local-targets])
 
 ;;; ## Exported helpers
 
