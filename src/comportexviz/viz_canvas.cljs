@@ -98,11 +98,12 @@
              :col-shrink 0.85
              :cell-label-h-px 16
              :cell-r-px 10
-             :cells-segs-w-px 250
+             :min-cells-segs-w-px 100
              :seg-w-px 30
              :seg-h-px 8
              :seg-h-space-px 55
              :h-space-px 45
+             :h-space-for-text-px 25
              :anim-go? true
              :anim-every 1}})
 
@@ -182,22 +183,24 @@
                                 [ordinal
                                  [path (fn [left-px]
                                          (let [lay (lay/grid-layout
-                                                    dimensions top-px left-px
+                                                    dimensions top-px
+                                                    (+ spacer left-px)
                                                     d-opts true
                                                     display-mode)]
                                            [{path lay}
-                                            (+ (lay/right-px lay) spacer)]))]])
+                                            (lay/right-px lay)]))]])
                               (for [[rgn-id rgn] regions
                                     [lyr-id {:keys [ordinal dimensions]}] rgn
                                     :let [path [:regions rgn-id lyr-id]]]
                                 [ordinal
                                  [path (fn [left-px]
                                          (let [lay (lay/grid-layout
-                                                    dimensions top-px left-px
+                                                    dimensions top-px
+                                                    (+ spacer left-px)
                                                     d-opts false
                                                     display-mode)]
                                            [{path lay}
-                                            (+ (lay/right-px lay) spacer)]))]]))
+                                            (lay/right-px lay)]))]]))
                       (sort-by (fn [[ordinal _]]
                                  ordinal))
                       (map (fn [[_ path-layfn]]
@@ -382,7 +385,7 @@
   (clicked-seg [this x y]))
 
 (defn cells-segments-layout
-  [nsegbycell cells-left h-offset-px v-offset-px opts]
+  [cell-segs nsegbycell cells-left h-offset-px v-offset-px opts]
   (let [nsegbycell-pad (map (partial max 1) (vals (sort nsegbycell)))
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
@@ -392,7 +395,20 @@
         cell-r-px (:cell-r-px d-opts)
         seg-h-px (:seg-h-px d-opts)
         seg-w-px (:seg-w-px d-opts)
-        cells-segs-w-px (:cells-segs-w-px d-opts)
+        longest-seg-w-px (apply max
+                                0
+                                (for [[_ cell-data] cell-segs
+                                      [_ seg] (:segments cell-data)
+                                      :let [{:keys [n-conn-act n-conn-tot
+                                                    n-disc-act n-disc-tot
+                                                    stimulus-th]} seg
+                                            scale-factor (/ seg-w-px stimulus-th)]]
+                                  (* scale-factor
+                                     (max n-conn-act n-conn-tot
+                                          n-disc-act n-disc-tot
+                                          stimulus-th))))
+        cells-segs-w-px (max (int (+ h-offset-px longest-seg-w-px))
+                             (:min-cells-segs-w-px d-opts))
         max-height-px (:max-height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px (:cell-label-h-px d-opts))
         our-height (cond-> (* nseg-pad (* 8 cell-r-px))
@@ -463,21 +479,28 @@
                                        [:drawing
                                         :seg-w-px])
                       cells-left (+ left-px space-px)
-                      distal-lay (cells-segments-layout n-segs-by-cell
+                      distal-lay (cells-segments-layout d-cell-segs
+                                                        n-segs-by-cell
                                                         cells-left
                                                         space-px
                                                         0
                                                         opts)
-                      apical-lay (cells-segments-layout n-segs-by-cell
-                                                        cells-left
-                                                        (+ space-px
-                                                           seg-w-px
-                                                           space-px)
-                                                        -16
-                                                        opts)]
-                  [{[:cells-segments] distal-lay
-                    [:apical-segments] apical-lay}
-                   (lay/right-px apical-lay)]))}))))
+                      apical-lay (when (first
+                                        (for [[_ cell-data] a-cell-segs
+                                              [_ seg] (:segments cell-data)]
+                                          seg))
+                                   (cells-segments-layout a-cell-segs
+                                                          n-segs-by-cell
+                                                          cells-left
+                                                          (+ space-px
+                                                             seg-w-px
+                                                             space-px)
+                                                          -16
+                                                          opts))]
+                  [(cond-> {[:cells-segments] distal-lay}
+                     apical-lay (assoc [:apical-segments] apical-lay))
+                   (cond-> (lay/right-px distal-lay)
+                     apical-lay (max (lay/right-px apical-lay)))]))}))))
 
 (defn draw-cells-segments
   [ctx cells-segs-response steps layouts opts]
@@ -495,8 +518,9 @@
             seg-r-px (* seg-w-px 0.5)]
         ;; background pass
         (doseq [layout-key [:cells-segments :apical-segments]
-                :let [cslay (get layouts layout-key)
-                      data-key (case layout-key
+                :let [cslay (get layouts layout-key)]
+                :when cslay
+                :let [data-key (case layout-key
                                  :cells-segments :distal
                                  :apical-segments :apical)]
                 [ci cell-data] (get cells-segs data-key)
@@ -525,8 +549,9 @@
             ))
         ;; foreground pass
         (doseq [layout-key [:cells-segments :apical-segments]
-                :let [cslay (get layouts layout-key)
-                      data-key (case layout-key
+                :let [cslay (get layouts layout-key)]
+                :when cslay
+                :let [data-key (case layout-key
                                  :cells-segments :distal
                                  :apical-segments :apical)]
                 [ci cell-data] (get cells-segs data-key)
@@ -1310,7 +1335,9 @@
                                   (reduce (fn [result r-and-b]
                                             (map max result r-and-b))
                                           [0 0]))
-              max-width (get-in @viz-options [:drawing :max-width-px])
+              d-opts (:drawing @viz-options)
+              max-width (:max-width-px d-opts)
+              text-px (:h-space-for-text-px d-opts)
               width (or (when right
                           (cond-> (+ right lay/extra-px-for-highlight)
                             max-width (min max-width)))
@@ -1326,16 +1353,21 @@
             (when (not-empty @steps)
               (into [:div
                      (when-let [cslay (:cells-segments layouts)]
-                       [:div {:style {:position "absolute"
-                                      :left (:x (layout-bounds cslay))
-                                      :top 0}}
-                        "cells and distal / apical dendrite segments"])]
+                       (let [cell-r (:cell-r-px d-opts)
+                             {:keys [x w]} (layout-bounds cslay)]
+                         [:div {:style {:position "absolute"
+                                        :left (- x cell-r)
+                                        :width (+ w cell-r)
+                                        :top 0}}
+                          "cells and distal / apical dendrite segments"]))]
                     (for [path (grid-layout-paths layouts)
                           :let [lay (get-in layouts path)
+                                {:keys [x w]} (layout-bounds lay)
                                 ids (subvec path 1)
                                 sense? (= (first path) :senses)]]
                       [:div {:style {:position "absolute"
-                                     :left (:x (layout-bounds lay))
+                                     :left x
+                                     :width (+ w text-px)
                                      :top 0}}
                        (->> ids (map name) (interpose " ") (apply str))
                        [:br]
