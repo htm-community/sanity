@@ -224,15 +224,21 @@
 
 (defn rebuild-layouts
   "Used when the model remains the same but the display has
-  changed. Maintains any sorting and facets on each layer/sense
-  layout. I.e. replaces the GridLayout within each OrderableLayout."
+  changed. Maintains any sorting, facets, and dt/scroll position on
+  each layer/sense layout. I.e. replaces the GridLayout within each
+  OrderableLayout."
   [viz-layouts step-template opts insertions]
   (let [new-layouts (create-layouts step-template opts insertions)
         sorted-layouts (reduce (fn [m path]
-                                 (update-in m path
+                                 (let [prev-lay (get-in viz-layouts path)
+                                       scraps (select-keys (:layout prev-lay)
+                                                           [:dt-offset
+                                                            :scroll-top])]
+                                   (update-in m path
                                             (fn [lay]
-                                              (assoc (get-in viz-layouts path)
-                                                     :layout lay))))
+                                              (assoc prev-lay
+                                                     :layout (merge lay
+                                                                    scraps))))))
                                new-layouts
                                (grid-layout-paths new-layouts))]
     (reset-layout-caches sorted-layouts)))
