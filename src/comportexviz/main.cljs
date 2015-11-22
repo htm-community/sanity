@@ -85,7 +85,7 @@
       [:div.container-fluid {:on-click #(put! into-viz [:background-clicked])
                              :on-key-down #(viz/viz-key-down % into-viz)
                              :tabIndex 1
-                             :style {:overflow-x "hidden"}}
+                             :style {:overflow "auto"}}
        [:div.row
         [viz/viz-timeline steps selection capture-options]]
        [:div.row
