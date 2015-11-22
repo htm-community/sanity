@@ -84,14 +84,13 @@
     (fn [world-pane into-sim]
       [:div.container-fluid {:on-click #(put! into-viz [:background-clicked])
                              :on-key-down #(viz/viz-key-down % into-viz)
-                             :tabIndex 1
-                             :style {:overflow-x "hidden"}}
+                             :tabIndex 1}
        [:div.row
         [viz/viz-timeline steps selection capture-options]]
        [:div.row
         [:div.col-sm-3.col-lg-2
          world-pane]
-        [:div.col-sm-9.col-lg-10
+        [:div.col-sm-9.col-lg-10 {:style {:overflow "auto"}}
          [window-resize-listener size-invalidates-c]
          [viz/viz-canvas nil steps selection step-template viz-options
           into-viz into-sim into-journal local-targets]]]])))

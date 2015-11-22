@@ -12,7 +12,7 @@
                                                       resizing-canvas
                                                       window-resize-listener]]
             [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.util :as utilv :refer [tap-c]]
+            [comportexviz.util :as utilv :refer [tap-c index-of]]
             [comportexviz.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
@@ -98,11 +98,12 @@
              :col-shrink 0.85
              :cell-label-h-px 16
              :cell-r-px 10
-             :cells-segs-w-px 250
+             :min-cells-segs-w-px 100
              :seg-w-px 30
              :seg-h-px 8
              :seg-h-space-px 55
              :h-space-px 45
+             :h-space-for-text-px 25
              :anim-go? true
              :anim-every 1}})
 
@@ -150,61 +151,95 @@
           m
           (grid-layout-paths m)))
 
+(defn stack-layouts
+  "`layoutfns` is a sequence of functions that return:
+
+  - A sequence of [path layout] pairs
+  - The right edge of this sequence of layouts, i.e. the start point of the next
+    layout 'up' the visual stack"
+  [layoutfns]
+  (let [[layouts _] (->> layoutfns
+                         (reduce (fn [[lays left] f]
+                                   (let [[changes right] (f left)]
+                                     [(reduce (fn [lays [path lay]]
+                                                (assoc-in lays path lay))
+                                              lays changes)
+                                      right]))
+                                 [{} 20]))]
+    layouts))
+
 (defn create-layouts
-  [step opts]
-  (let [senses (:senses step)
-        regions (:regions step)
-        layerseq (mapcat (fn [rgn-id]
-                           (map vector (repeat rgn-id)
-                                (keys (regions rgn-id))))
-                         (keys regions))
+  [step-template opts insertions]
+  (let [senses (:senses step-template)
+        regions (:regions step-template)
         d-opts (:drawing opts)
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
         top-px (:top-px d-opts)
-        ;; for now draw senses and layers in a horizontal stack
-        [s-lays s-right]
-        (reduce (fn [[lays left] sense-id]
-                  (let [dims (:dimensions (senses sense-id))
-                        lay (lay/grid-layout dims top-px left d-opts true
-                                             display-mode)]
-                    [(assoc lays sense-id lay)
-                     (+ (lay/right-px lay) spacer)]))
-                [{} 20]
-                (keys senses))
-        [r-lays r-right]
-        (reduce (fn [[lays left] [rgn-id lyr-id]]
-                  (let [dims (:dimensions (get-in regions [rgn-id lyr-id]))
-                        lay (lay/grid-layout dims top-px left d-opts false
-                                             display-mode)]
-                    [(assoc-in lays [rgn-id lyr-id] lay)
-                     (+ (lay/right-px lay) spacer)]))
-                [{} s-right]
-                layerseq)]
-    {:senses s-lays
-     :regions r-lays}))
+        paths-layfns (->>
+                      (concat (for [[sense-id
+                                     {:keys [ordinal dimensions]}] senses
+                                     :let [path [:senses sense-id]]]
+                                [ordinal
+                                 [path (fn [left-px]
+                                         (let [lay (lay/grid-layout
+                                                    dimensions top-px
+                                                    (+ spacer left-px)
+                                                    d-opts true
+                                                    display-mode)]
+                                           [{path lay}
+                                            (lay/right-px lay)]))]])
+                              (for [[rgn-id rgn] regions
+                                    [lyr-id {:keys [ordinal dimensions]}] rgn
+                                    :let [path [:regions rgn-id lyr-id]]]
+                                [ordinal
+                                 [path (fn [left-px]
+                                         (let [lay (lay/grid-layout
+                                                    dimensions top-px
+                                                    (+ spacer left-px)
+                                                    d-opts false
+                                                    display-mode)]
+                                           [{path lay}
+                                            (lay/right-px lay)]))]]))
+                      (sort-by (fn [[ordinal _]]
+                                 ordinal))
+                      (map (fn [[_ path-layfn]]
+                             path-layfn)))
+        paths-layfns (->> insertions
+                          (reduce (fn [plfns [after-path layfn]]
+                                    (let [idx (if (nil? after-path)
+                                                0
+                                                (-> plfns
+                                                    (index-of (fn [[path _]]
+                                                                (= path
+                                                                   after-path)))
+                                                    inc))
+                                          [before after] (split-at idx plfns)
+                                          dummy [after-path :after]]
+                                      (concat before [[dummy layfn]] after)))
+                                  paths-layfns))]
+    (stack-layouts (->> paths-layfns
+                        (map (fn [[_ layfn]]
+                               layfn))))))
 
 (defn rebuild-layouts
   "Used when the model remains the same but the display has
   changed. Maintains any sorting and facets on each layer/sense
   layout. I.e. replaces the GridLayout within each OrderableLayout."
-  [viz-layouts step opts]
-  (let [new-layouts (create-layouts step opts)
-        absorbed-grid (reduce (fn [m path]
-                                (update-in m path assoc :layout
-                                           (get-in new-layouts path)))
-                              viz-layouts
-                              (grid-layout-paths viz-layouts))
-        absorbed-remaining (reduce (fn [m path]
-                                     (assoc-in m path
-                                               (get-in new-layouts path)))
-                                   absorbed-grid
-                                   (non-grid-layout-paths new-layouts))]
-    (reset-layout-caches absorbed-remaining)))
+  [viz-layouts step-template opts insertions]
+  (let [new-layouts (create-layouts step-template opts insertions)
+        sorted-layouts (reduce (fn [m path]
+                                 (update-in m path
+                                            (fn [lay]
+                                              (assoc (get-in viz-layouts path)
+                                                     :layout lay))))
+                               new-layouts
+                               (grid-layout-paths new-layouts))]
+    (reset-layout-caches sorted-layouts)))
 
 (defn init-layouts
-  [step opts]
-  (let [layouts (create-layouts step opts)]
+  [step-template opts]
+  (let [layouts (create-layouts step-template opts nil)]
     (->
      (reduce (fn [m path]
                (update-in m path
@@ -350,7 +385,7 @@
   (clicked-seg [this x y]))
 
 (defn cells-segments-layout
-  [nsegbycell cells-left h-offset-px v-offset-px opts]
+  [cell-segs nsegbycell cells-left h-offset-px v-offset-px opts]
   (let [nsegbycell-pad (map (partial max 1) (vals (sort nsegbycell)))
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
@@ -360,7 +395,20 @@
         cell-r-px (:cell-r-px d-opts)
         seg-h-px (:seg-h-px d-opts)
         seg-w-px (:seg-w-px d-opts)
-        cells-segs-w-px (:cells-segs-w-px d-opts)
+        longest-seg-w-px (apply max
+                                0
+                                (for [[_ cell-data] cell-segs
+                                      [_ seg] (:segments cell-data)
+                                      :let [{:keys [n-conn-act n-conn-tot
+                                                    n-disc-act n-disc-tot
+                                                    stimulus-th]} seg
+                                            scale-factor (/ seg-w-px stimulus-th)]]
+                                  (* scale-factor
+                                     (max n-conn-act n-conn-tot
+                                          n-disc-act n-disc-tot
+                                          stimulus-th))))
+        cells-segs-w-px (max (int (+ h-offset-px longest-seg-w-px))
+                             (:min-cells-segs-w-px d-opts))
         max-height-px (:max-height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px (:cell-label-h-px d-opts))
         our-height (cond-> (* nseg-pad (* 8 cell-r-px))
@@ -411,6 +459,49 @@
                                  (+ seg-y seg-h-px 5))]
                    [ci si])))))))
 
+(defn cells-segments-insertions
+  [cells-segs-response opts]
+  (let [[sel1 {d-cell-segs :distal
+               a-cell-segs :apical}] cells-segs-response]
+    (when d-cell-segs
+      (let [{:keys [path]} sel1]
+        {path (fn [left-px]
+                (let [n-segs-by-cell (merge-with
+                                      max
+                                      (util/remap (comp count :segments)
+                                                  d-cell-segs)
+                                      (util/remap (comp count :segments)
+                                                  a-cell-segs))
+                      space-px (get-in opts
+                                       [:drawing
+                                        :seg-h-space-px])
+                      seg-w-px (get-in opts
+                                       [:drawing
+                                        :seg-w-px])
+                      cells-left (+ left-px space-px)
+                      distal-lay (cells-segments-layout d-cell-segs
+                                                        n-segs-by-cell
+                                                        cells-left
+                                                        space-px
+                                                        0
+                                                        opts)
+                      apical-lay (when (first
+                                        (for [[_ cell-data] a-cell-segs
+                                              [_ seg] (:segments cell-data)]
+                                          seg))
+                                   (cells-segments-layout a-cell-segs
+                                                          n-segs-by-cell
+                                                          cells-left
+                                                          (+ space-px
+                                                             seg-w-px
+                                                             space-px)
+                                                          -16
+                                                          opts))]
+                  [(cond-> {[:cells-segments] distal-lay}
+                     apical-lay (assoc [:apical-segments] apical-lay))
+                   (cond-> (lay/right-px distal-lay)
+                     apical-lay (max (lay/right-px apical-lay)))]))}))))
+
 (defn draw-cells-segments
   [ctx cells-segs-response steps layouts opts]
   (c/save ctx)
@@ -427,8 +518,9 @@
             seg-r-px (* seg-w-px 0.5)]
         ;; background pass
         (doseq [layout-key [:cells-segments :apical-segments]
-                :let [cslay (get layouts layout-key)
-                      data-key (case layout-key
+                :let [cslay (get layouts layout-key)]
+                :when cslay
+                :let [data-key (case layout-key
                                  :cells-segments :distal
                                  :apical-segments :apical)]
                 [ci cell-data] (get cells-segs data-key)
@@ -457,8 +549,9 @@
             ))
         ;; foreground pass
         (doseq [layout-key [:cells-segments :apical-segments]
-                :let [cslay (get layouts layout-key)
-                      data-key (case layout-key
+                :let [cslay (get layouts layout-key)]
+                :when cslay
+                :let [data-key (case layout-key
                                  :cells-segments :distal
                                  :apical-segments :apical)]
                 [ci cell-data] (get cells-segs data-key)
@@ -1192,8 +1285,10 @@
                    (fn layouts<-viz-options [_ _ old-opts opts]
                      (when (not= (:drawing opts)
                                  (:drawing old-opts))
-                       (swap! viz-layouts rebuild-layouts @step-template
-                              opts))))
+                       (when-let [st @step-template]
+                         (swap! viz-layouts rebuild-layouts st opts
+                                (cells-segments-insertions @cells-segs-response
+                                                           opts))))))
         (add-watch selection ::update-dt-offsets
                    (fn dt-offsets<-selection [_ _ old-sel sel]
                      (let [dt-sel (:dt (peek sel))]
@@ -1209,46 +1304,10 @@
                                             local-targets)))
 
         (add-watch cells-segs-response ::cells-segments-layout
-                   (fn [_ _ _ [sel1 {d-cell-segs :distal
-                                     a-cell-segs :apical}]]
-                     (swap! viz-layouts
-                            (fn [layouts]
-                              (if-not d-cell-segs
-                                (assoc layouts
-                                       :cells-segments nil
-                                       :apical-segments nil)
-                                (let [n-segs-by-cell (merge-with
-                                                      max
-                                                      (util/remap (comp count :segments)
-                                                                  d-cell-segs)
-                                                      (util/remap (comp count :segments)
-                                                                  a-cell-segs))
-                                      space-px (get-in @viz-options
-                                                       [:drawing
-                                                        :seg-h-space-px])
-                                      seg-w-px (get-in @viz-options
-                                                       [:drawing
-                                                        :seg-w-px])
-                                      cells-left (->> @viz-layouts
-                                                      grid-layout-vals
-                                                      (map lay/right-px)
-                                                      (apply max)
-                                                      (+ space-px))]
-                                  (assoc layouts
-                                         :cells-segments
-                                         (cells-segments-layout n-segs-by-cell
-                                                                cells-left
-                                                                space-px
-                                                                0
-                                                                @viz-options)
-                                         :apical-segments
-                                         (cells-segments-layout n-segs-by-cell
-                                                                cells-left
-                                                                (+ space-px seg-w-px space-px)
-                                                                -16
-                                                                @viz-options))
-                                  )))
-                            ))))
+                   (fn [_ _ _ csr]
+                     (let [opts @viz-options]
+                       (swap! viz-layouts rebuild-layouts @step-template opts
+                              (cells-segments-insertions csr opts))))))
 
       :component-will-unmount
       (fn [_]
@@ -1276,7 +1335,9 @@
                                   (reduce (fn [result r-and-b]
                                             (map max result r-and-b))
                                           [0 0]))
-              max-width (get-in @viz-options [:drawing :max-width-px])
+              d-opts (:drawing @viz-options)
+              max-width (:max-width-px d-opts)
+              text-px (:h-space-for-text-px d-opts)
               width (or (when right
                           (cond-> (+ right lay/extra-px-for-highlight)
                             max-width (min max-width)))
@@ -1292,16 +1353,21 @@
             (when (not-empty @steps)
               (into [:div
                      (when-let [cslay (:cells-segments layouts)]
-                       [:div {:style {:position "absolute"
-                                      :left (:x (layout-bounds cslay))
-                                      :top 0}}
-                        "cells and distal / apical dendrite segments"])]
+                       (let [cell-r (:cell-r-px d-opts)
+                             {:keys [x w]} (layout-bounds cslay)]
+                         [:div {:style {:position "absolute"
+                                        :left (- x cell-r)
+                                        :width (+ w cell-r)
+                                        :top 0}}
+                          "cells and distal / apical dendrite segments"]))]
                     (for [path (grid-layout-paths layouts)
                           :let [lay (get-in layouts path)
+                                {:keys [x w]} (layout-bounds lay)
                                 ids (subvec path 1)
                                 sense? (= (first path) :senses)]]
                       [:div {:style {:position "absolute"
-                                     :left (:x (layout-bounds lay))
+                                     :left x
+                                     :width (+ w text-px)
                                      :top 0}}
                        (->> ids (map name) (interpose " ") (apply str))
                        [:br]
