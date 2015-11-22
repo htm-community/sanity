@@ -360,10 +360,10 @@
     (doseq [[[rgn-id lyr-id col] synapses] ff-synapses
             :let [this-lay (get-in r-lays [rgn-id lyr-id])
                   [this-x this-y] (element-xy this-lay col dt)]]
-      (doseq [{:keys [src-id src-col perm src-lyr syn-state]} synapses
+      (doseq [{:keys [src-id src-col perm src-lyr src-dt syn-state]} synapses
               :let [src-lay (or (get s-lays src-id)
                                 (get-in r-lays [src-id src-lyr]))
-                    [src-x src-y] (element-xy src-lay src-col dt)]]
+                    [src-x src-y] (element-xy src-lay src-col (+ dt src-dt))]]
         (doto ctx
           (c/stroke-style (state-colors syn-state))
           (c/alpha (if perm perm 1))
@@ -642,11 +642,12 @@
                       (= draw-from :all))
               (doseq [[syn-state syns] syns-by-state]
                 (c/stroke-style ctx (state-colors syn-state))
-                (doseq [{:keys [src-col src-id src-lyr perm]} syns
+                (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts (if src-lyr
                                                         [:regions src-id src-lyr]
                                                         [:senses src-id]))
-                              [src-x src-y] (element-xy src-lay src-col (inc dt))]]
+                              [src-x src-y] (element-xy src-lay src-col
+                                                        (+ dt src-dt))]]
                   (when perm (c/alpha ctx perm))
                   (doto ctx
                     (c/begin-path)

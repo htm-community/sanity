@@ -152,6 +152,7 @@
                                     src-i)]]
                 (cond-> {:src-id src-id
                          :src-col src-col
+                         :src-dt 0
                          :syn-state syn-state}
                   do-perm? (assoc :perm perm)
                   src-lyr (assoc :src-lyr src-lyr)))]
@@ -305,7 +306,8 @@
                                                                       src-i)
 
                                                                     :src-id src-id
-                                                                    :src-lyr src-lyr}
+                                                                    :src-lyr src-lyr
+                                                                    :src-dt 1}
 
                                                              (get-in opts [:distal-synapses :permanences])
                                                              (assoc :perm p))))))))]))}]))))
