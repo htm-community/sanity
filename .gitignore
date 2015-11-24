@@ -11,11 +11,11 @@ pom.xml
 .lein-cljsbuild-compiler*
 /public/*/out/
 /public/out/
-comportexviz*.js
+sanity*.js
 *.js.map
 *~
 .idea
 .gorilla-port
 .lein-repl-history
 .nrepl-port
-comportexviz.iml
+sanity.iml

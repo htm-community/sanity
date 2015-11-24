@@ -1,6 +1,6 @@
-(defproject comportexviz "0.0.12-SNAPSHOT"
-  :description "Web visualisation of HTM algorithm as implemented in comportex"
-  :url "https://github.com/nupic-community/comportexviz"
+(defproject org.numenta/sanity "0.0.12-SNAPSHOT"
+  :description "Web visualisation of the HTM algorithm"
+  :url "https://github.com/nupic-community/sanity"
 
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/clojurescript "1.7.107"]
@@ -23,7 +23,7 @@
             [com.cemerick/austin "0.1.6"]
             [org.clojure/tools.nrepl "0.2.10"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]
-                 :init-ns comportexviz.server.launchpad}
+                 :init-ns org.numenta.sanity.comportex.launchpad}
 
   :source-paths ["src"]
 
@@ -42,18 +42,18 @@
                         :source-paths ["src" "examples/demos"]
                         :compiler {:optimizations :whitespace
                                    :output-dir "public/demos/out"
-                                   :source-map "public/demos/out/comportexviz.js.map"
-                                   :output-to "public/demos/out/comportexviz.js"}}
+                                   :source-map "public/demos/out/sanity.js.map"
+                                   :output-to "public/demos/out/sanity.js"}}
                        {:id "cortical-io"
                         :source-paths ["src" "examples/cortical_io"]
                         :compiler {:optimizations :whitespace
                                    :output-dir "public/cortical_io/out"
-                                   :source-map "public/cortical_io/out/comportexviz_cio.js.map"
-                                   :output-to "public/cortical_io/out/comportexviz_cio.js"}}
+                                   :source-map "public/cortical_io/out/sanity_cio.js.map"
+                                   :output-to "public/cortical_io/out/sanity_cio.js"}}
                        {:id "inh"
                         :source-paths ["src" "examples/local_inhibition"]
                         :compiler {:optimizations :whitespace
                                    :output-dir "public/local_inhibition/out"
-                                   :source-map "public/local_inhibition/out/comportexviz_inh.js.map"
-                                   :output-to "public/local_inhibition/out/comportexviz_inh.js"}}
+                                   :source-map "public/local_inhibition/out/sanity_inh.js.map"
+                                   :output-to "public/local_inhibition/out/sanity_inh.js"}}
                        ]})

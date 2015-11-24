@@ -5,7 +5,7 @@
 ;; **
 
 ;; @@
-(ns comportexviz.worksheet-shrink
+(ns org.numenta.sanity.worksheet-shrink
   (:require [clojure.data.codec.base64 :as base64]
             [clojure.java.io :as io]
             [clojure.string :as string])

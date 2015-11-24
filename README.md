@@ -89,7 +89,7 @@ do a `cljsbuild`, as above.
 
 Now open `public/demos/*.html` in a web browser.
 Each HTML page loads the corresponding model defined
-in `examples/demos/comportexviz/demos/`.
+in `examples/demos/sanity/demos/`.
 
 
 ## License

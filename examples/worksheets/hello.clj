@@ -13,9 +13,9 @@
 (ns my-notebook
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
-            [comportexviz.server.launchpad :refer [start-runner
-                                                   stop-all-runners]]
-            [comportexviz.server.notebook :refer [viz]]
+            [org.numenta.sanity.comportex.launchpad :refer [start-runner
+                                                            stop-all-runners]]
+            [org.numenta.sanity.comportex.notebook :refer [viz]]
             [gorilla-plot.core :as plot]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.encoders :as e]
