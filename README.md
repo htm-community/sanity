@@ -1,7 +1,11 @@
-# ComportexViz
+# Sanity
 
-A web-based visualization layer for
-[Comportex](http://github.com/nupic-community/comportex/).
+A web-based visualization layer for HTMs.
+
+It works with:
+
+- [Comportex](http://github.com/nupic-community/comportex/)
+- [NuPIC](https://github.com/numenta/nupic) via [sanity-nupic](https://github.com/nupic-community/sanity-nupic)
 
 See it in action in [the online demos](https://nupic-community.github.io/comportexviz/).
 
@@ -10,7 +14,7 @@ post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-th
 
 ## The Runner
 
-ComportexViz runs HTM models from the browser with interactive
+Sanity runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
 back in time. You can inspect input values, encoded input bits, and the
 columns that make up cortical region layers. Within a column you can inspect
@@ -24,21 +28,21 @@ these may be shown in 2D grids from a single time step, or as one
 vertical line per timestep, allowing several time steps to be shown
 in series. Also, summarised time series are shown in the 'plots' tab.
 
-ComportexViz can run HTM models:
+Sanity can run HTM models:
 
 - Inside the browser
 - On a remote / localhost server
 
 ## The Notebook
 
-ComportexViz interactive visualizations are also available in notebook
+Sanity interactive visualizations are also available in notebook
 form, similar to IPython Notebook or Mathematica. It builds on
 [Gorilla REPL](https://github.com/JonyEpsilon/gorilla-repl).
 
 The notebook:
 
 - Is a fun-filled way to drive and present HTM models
-- Is a launchpad for ComportexViz runners
+- Is a launchpad for Sanity runners
 - Is [built for blogging](https://github.com/nupic-community/comportexviz/wiki/Putting-notebooks-on-the-web).
   Interactive graphics are saved as images in the state that you left them.
 
@@ -55,7 +59,7 @@ cd comportex
 lein install
 ```
 
-Clone ComportexViz, and then build it:
+Clone Sanity, and then build it:
 
 ```
 cd comportexviz
@@ -75,7 +79,7 @@ From the REPL, start a notebook:
 ```
 
 You can now launch it in a web browser. The notebook will show you how
-to launch your own ComportexViz runner.
+to launch your own Sanity runner.
 
 
 ## Online demos
