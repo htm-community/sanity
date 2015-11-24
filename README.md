@@ -7,7 +7,7 @@ It works with:
 - [Comportex](http://github.com/nupic-community/comportex/)
 - [NuPIC](https://github.com/numenta/nupic) via [sanity-nupic](https://github.com/nupic-community/sanity-nupic)
 
-See it in action in [the online demos](https://nupic-community.github.io/comportexviz/).
+See it in action in [the online demos](https://nupic-community.github.io/sanity/).
 
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
@@ -43,7 +43,7 @@ The notebook:
 
 - Is a fun-filled way to drive and present HTM models
 - Is a launchpad for Sanity runners
-- Is [built for blogging](https://github.com/nupic-community/comportexviz/wiki/Putting-notebooks-on-the-web).
+- Is [built for blogging](https://github.com/nupic-community/sanity/wiki/Putting-notebooks-on-the-web).
   Interactive graphics are saved as images in the state that you left them.
 
 ## Usage
@@ -62,7 +62,7 @@ lein install
 Clone Sanity, and then build it:
 
 ```
-cd comportexviz
+cd sanity
 lein do clean, cljsbuild once demos
 ```
 
@@ -84,7 +84,7 @@ to launch your own Sanity runner.
 
 ## Online demos
 
-To host [the online demos](https://nupic-community.github.io/comportexviz/) locally,
+To host [the online demos](https://nupic-community.github.io/sanity/) locally,
 do a `cljsbuild`, as above.
 
 Now open `public/demos/*.html` in a web browser.
