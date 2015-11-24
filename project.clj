@@ -1,4 +1,4 @@
-(defproject sanity "0.0.12-SNAPSHOT"
+(defproject org.numenta/sanity "0.0.12-SNAPSHOT"
   :description "Web visualisation of the HTM algorithm"
   :url "https://github.com/nupic-community/sanity"
 
