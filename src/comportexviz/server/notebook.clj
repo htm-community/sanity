@@ -1,10 +1,10 @@
-(ns comportexviz.server.notebook
+(ns org.numenta.sanity.comportex.notebook
   (:require [clojure.core.async :as async]
             [cognitect.transit :as transit]
             [compojure.route :as route]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.server.journal :as journal]
-            [comportexviz.server.runner :as runner]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.comportex.journal :as journal]
+            [org.numenta.sanity.comportex.runner :as runner]
             [gorilla-renderable.core :as renderable]
             [gorilla-repl.core :as g]
             [org.nfrac.comportex.protocols :as p])
@@ -39,7 +39,7 @@
   "(function(el) {
      return {
        'type': 'html',
-       'content': comportexviz.demos.notebook.exported_viz(el)
+       'content': org.numenta.sanity.demos.notebook.exported_viz(el)
      };
    })")
 
@@ -65,12 +65,12 @@
            :content ""
            :didMount (format
                       "(function(el) {
-                         comportexviz.demos.notebook.add_viz(el, %s);
+                         org.numenta.sanity.demos.notebook.add_viz(el, %s);
                        })"
                       (pr-str (transit-str [target-id viz-options])))
            :willUnmount (format
                          "(function(el) {
-                            comportexviz.demos.notebook.release_viz(el, %s);
+                            org.numenta.sanity.demos.notebook.release_viz(el, %s);
                           })"
                          (pr-str (transit-str target-id)))
            :saveHook save-canvases})))))
@@ -88,11 +88,11 @@
          :content ""
          :didMount (format
                     "(function(el) {
-                       comportexviz.demos.notebook.display_inbits(el, %s);
+                       org.numenta.sanity.demos.notebook.display_inbits(el, %s);
                      })"
                     (pr-str (transit-str [dims state->bits d-opts])))
          :willUnmount "(function(el) {
-                         comportexviz.demos.notebook.release_inbits(el);
+                         org.numenta.sanity.demos.notebook.release_inbits(el);
                        })"
          :saveHook save-canvases}))))
 
@@ -106,20 +106,20 @@
      "<script type='text/javascript' src='%s'></script>
       <script type='text/javascript' src='%s'></script>
       <script type='text/javascript'>
-        goog.require('comportexviz.demos.notebook');
+        goog.require('org.numenta.sanity.demos.notebook');
       </script>
       <script type='text/javascript'>
-        comportexviz.demos.notebook.connect('%s');
+        org.numenta.sanity.demos.notebook.connect('%s');
       </script>"
      (script-url "goog/base.js")
-     (script-url "comportexviz.js")
+     (script-url "sanity.js")
       ws-url)))
 
 (defn start
   [comportex-port]
   (let [server (g/run-gorilla-server {:port 0
                                       :version "0.3.5"
-                                      :project "comportexviz"
+                                      :project "sanity"
                                       :extra-head-html (head-html
                                                         comportex-port)})]
     (:local-port (meta server))))

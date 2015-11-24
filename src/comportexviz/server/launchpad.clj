@@ -1,9 +1,9 @@
-(ns comportexviz.server.launchpad
+(ns org.numenta.sanity.comportex.launchpad
   (:require [clojure.core.async :as async]
             [compojure.route :as route]
-            [comportexviz.server.runner :as runner]
-            [comportexviz.server.notebook :as notebook]
-            [comportexviz.server.websocket :as server-ws]
+            [org.numenta.sanity.comportex.runner :as runner]
+            [org.numenta.sanity.comportex.notebook :as notebook]
+            [org.numenta.sanity.comportex.websocket :as server-ws]
             [org.nfrac.comportex.protocols :as p]))
 
 (defonce runners (atom {}))

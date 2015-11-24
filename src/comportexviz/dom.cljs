@@ -1,4 +1,4 @@
-(ns comportexviz.dom)
+(ns org.numenta.sanity.dom)
 
 (defn get-bounding-page-rect [el]
   (let [[left top] (loop [el el

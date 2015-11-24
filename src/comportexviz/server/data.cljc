@@ -1,4 +1,4 @@
-(ns comportexviz.server.data
+(ns org.numenta.sanity.comportex.data
   (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
                :cljs [cljs.core.async :as async :refer [put! <!]])
             [org.nfrac.comportex.core :as core]

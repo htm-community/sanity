@@ -1,4 +1,4 @@
-(ns comportexviz.plots-canvas
+(ns org.numenta.sanity.plots-canvas
   (:require [monet.canvas :as c]))
 
 (defn indexed

@@ -1,12 +1,12 @@
-(ns comportexviz.demos.hotgym
+(ns org.numenta.sanity.demos.hotgym
   (:require [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader :as edn]
-            [comportexviz.bridge.browser :as server]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.demos.comportex-common :refer [all-features]]
-            [comportexviz.main :as main]
-            [comportexviz.server.data :as data]
-            [comportexviz.viz-canvas :as viz]
+            [org.numenta.sanity.bridge.browser :as server]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.demos.comportex-common :refer [all-features]]
+            [org.numenta.sanity.main :as main]
+            [org.numenta.sanity.comportex.data :as data]
+            [org.numenta.sanity.viz-canvas :as viz]
             [goog.dom :as dom]
             [goog.net.XhrIo :as XhrIo]
             [org.nfrac.comportex.cells :as cells]
@@ -18,7 +18,7 @@
             [reagent-forms.core :refer [bind-fields]]
             [reagent.core :as reagent :refer [atom]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+                   [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def world-c
   (async/chan))
@@ -584,7 +584,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+  (reagent/render [main/sanity-app "Comportex" [model-tab] [world-pane]
                    all-features into-sim]
-                  (dom/getElement "comportexviz-app"))
+                  (dom/getElement "sanity-app"))
   (set-model!))

@@ -1,4 +1,4 @@
-(ns comportexviz.local-inhibition-2d
+(ns org.numenta.sanity.local-inhibition-2d
   (:require [org.nfrac.comportex.inhibition :as inh]
             [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.protocols :as p]
@@ -6,7 +6,7 @@
             [org.nfrac.comportex.util :as util :refer [abs]]
             [monet.canvas :as c]
             [goog.dom :as dom]
-            [comportexviz.viz-layouts :as lay
+            [org.numenta.sanity.viz-layouts :as lay
              :refer [layout-bounds
                      fill-element-group
                      fill-elements]]

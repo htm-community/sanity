@@ -1,4 +1,4 @@
-(ns comportexviz.macros)
+(ns org.numenta.sanity.macros)
 
 (defmacro with-cache
   "Returns the value of `expr`, storing it also in cache (atom) under
@@ -19,5 +19,5 @@
 
 (defmacro with-ui-loading-message
   [& body]
-  `(comportexviz.helpers/with-ui-loading-message
+  `(org.numenta.sanity.helpers/with-ui-loading-message
      (fn [] ~@body)))

@@ -1,9 +1,9 @@
-(ns comportexviz.server.websocket
+(ns org.numenta.sanity.comportex.websocket
   (:require [clojure.core.async :as async :refer [put! <! go go-loop close!]]
             [cognitect.transit :as transit]
             [compojure.core :refer [routes GET]]
             [compojure.route :as route]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
             [ring.adapter.jetty9 :as jetty :refer [run-jetty]])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
 

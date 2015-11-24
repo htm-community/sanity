@@ -1,5 +1,5 @@
-(ns comportexviz.viz-canvas
-  (:require [comportexviz.viz-layouts :as lay
+(ns org.numenta.sanity.viz-canvas
+  (:require [org.numenta.sanity.viz-layouts :as lay
              :refer [layout-bounds
                      element-xy
                      fill-elements
@@ -7,19 +7,19 @@
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [goog.style :as style]
-            [comportexviz.dom :refer [offset-from-target]]
-            [comportexviz.helpers :as helpers :refer [canvas
-                                                      resizing-canvas
-                                                      window-resize-listener]]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.util :as utilv :refer [tap-c index-of]]
-            [comportexviz.selection :as sel]
+            [org.numenta.sanity.dom :refer [offset-from-target]]
+            [org.numenta.sanity.helpers :as helpers :refer [canvas
+                                                            resizing-canvas
+                                                            window-resize-listener]]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.util :as utilv :refer [tap-c index-of]]
+            [org.numenta.sanity.selection :as sel]
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
-                   [comportexviz.macros :refer [with-cache]]))
+                   [org.numenta.sanity.macros :refer [with-cache]]))
 
 ;;; ## Colours
 

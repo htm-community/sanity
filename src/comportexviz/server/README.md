@@ -1,4 +1,4 @@
-# ComportexViz Server
+# Sanity Server
 
 The server runs a "simulation" and maintains a "journal".
 

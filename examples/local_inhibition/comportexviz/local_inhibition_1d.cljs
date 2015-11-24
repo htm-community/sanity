@@ -1,4 +1,4 @@
-(ns comportexviz.local-inhibition-1d
+(ns org.numenta.sanity.local-inhibition-1d
   (:require [org.nfrac.comportex.inhibition :as inh]
             [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.protocols :as p]

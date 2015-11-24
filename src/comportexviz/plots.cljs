@@ -1,11 +1,11 @@
-(ns comportexviz.plots
+(ns org.numenta.sanity.plots
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
-            [comportexviz.plots-canvas :as plt]
-            [comportexviz.helpers :refer [canvas resizing-canvas
+            [org.numenta.sanity.plots-canvas :as plt]
+            [org.numenta.sanity.helpers :refer [canvas resizing-canvas
                                           window-resize-listener]]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.selection :as sel]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.selection :as sel]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
             [tailrecursion.priority-map :refer [priority-map]]

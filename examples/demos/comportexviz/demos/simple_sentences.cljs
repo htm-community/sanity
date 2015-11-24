@@ -1,20 +1,20 @@
-(ns comportexviz.demos.simple-sentences
+(ns org.numenta.sanity.demos.simple-sentences
   (:require [org.nfrac.comportex.demos.simple-sentences :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
-            [comportexviz.demos.comportex-common :refer [all-features]]
-            [comportexviz.main :as main]
-            [comportexviz.helpers :as helpers]
-            [comportexviz.bridge.browser :as server]
-            [comportexviz.server.data :as data]
-            [comportexviz.util :as utilv]
+            [org.numenta.sanity.demos.comportex-common :refer [all-features]]
+            [org.numenta.sanity.main :as main]
+            [org.numenta.sanity.helpers :as helpers]
+            [org.numenta.sanity.bridge.browser :as server]
+            [org.numenta.sanity.comportex.data :as data]
+            [org.numenta.sanity.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [cljs.core.async :as async :refer [put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+                   [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1
@@ -166,8 +166,8 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+  (reagent/render [main/sanity-app "Comportex" [model-tab] [world-pane]
                    all-features into-sim]
-                  (dom/getElement "comportexviz-app"))
+                  (dom/getElement "sanity-app"))
   (send-text!)
   (set-model!))

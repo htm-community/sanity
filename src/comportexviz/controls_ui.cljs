@@ -1,4 +1,4 @@
-(ns comportexviz.controls-ui
+(ns org.numenta.sanity.controls-ui
   (:require [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
@@ -8,10 +8,10 @@
             [clojure.string :as str]
             [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
-            [comportexviz.helpers :as helpers]
-            [comportexviz.plots :as plots]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.selection :as sel]
+            [org.numenta.sanity.helpers :as helpers]
+            [org.numenta.sanity.plots :as plots]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.selection :as sel]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
@@ -670,7 +670,7 @@
          [:button.navbar-toggle.collapsed {:data-toggle "collapse"
                                            :data-target "#comportex-navbar-collapse"}
           [:span.icon-bar] [:span.icon-bar] [:span.icon-bar]]
-         [:a.navbar-brand {:href "https://github.com/nupic-community/comportexviz"}
+         [:a.navbar-brand {:href "https://github.com/nupic-community/sanity"}
           title]]
         [:div.collapse.navbar-collapse {:id "comportex-navbar-collapse"}
          [:ul.nav.navbar-nav
@@ -913,8 +913,8 @@
      [:div.row
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Overview"]
-       [:p [:a {:href "https://github.com/nupic-community/comportexviz"}
-            "ComportexViz"]
+       [:p [:a {:href "https://github.com/nupic-community/sanity"}
+            "Sanity"]
         " runs HTM models in the browser with interactive
        controls. The model state from recent timesteps is kept, so you can step
        back in time. You can inspect input values, encoded sense bits, and the
@@ -1036,7 +1036,7 @@
              [width-label 185 disc-act-px false "active disconnected synapses"]]]]])]]
      [:hr]]))
 
-(defn comportexviz-app
+(defn sanity-app
   [_ _ _ features _ _ selection steps step-template _ _ _ into-journal
    local-targets]
   (let [show-help (atom false)

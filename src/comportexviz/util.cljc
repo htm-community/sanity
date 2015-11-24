@@ -1,4 +1,4 @@
-(ns comportexviz.util
+(ns org.numenta.sanity.util
   (:require #?(:clj [clojure.core.async :as async]
                :cljs [cljs.core.async :as async])))
 

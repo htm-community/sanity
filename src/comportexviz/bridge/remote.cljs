@@ -1,7 +1,7 @@
-(ns comportexviz.bridge.remote
+(ns org.numenta.sanity.bridge.remote
   (:require [cljs.core.async :as async :refer [put! close!]]
             [cognitect.transit :as transit]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
                                                   map->TwoDTopology
                                                   map->ThreeDTopology]])

@@ -1,4 +1,4 @@
-(ns comportexviz.selection)
+(ns org.numenta.sanity.selection)
 
 (def blank-selection [])
 

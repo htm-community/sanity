@@ -1,4 +1,4 @@
-(ns comportexviz.cortical-io-demo
+(ns org.numenta.sanity.cortical-io-demo
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.encoders :as enc]
@@ -7,18 +7,18 @@
              :refer [cortical-io-encoder
                      cache-fingerprint!]]
             [clojure.string :as str]
-            [comportexviz.main :as main]
-            [comportexviz.helpers :as helpers]
-            [comportexviz.bridge.browser :as server]
-            [comportexviz.server.data :as data]
-            [comportexviz.util :as utilv]
+            [org.numenta.sanity.main :as main]
+            [org.numenta.sanity.helpers :as helpers]
+            [org.numenta.sanity.bridge.browser :as server]
+            [org.numenta.sanity.comportex.data :as data]
+            [org.numenta.sanity.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
             [goog.dom.forms :as forms]
             [cljs.core.async :as async :refer [<! timeout put!]])
   (:require-macros [cljs.core.async.macros :refer [go]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+                   [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def fox-eats-what
   "
@@ -356,7 +356,7 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app [model-tab] [world-pane] into-sim]
-                  (dom/getElement "comportexviz-app"))
+  (reagent/render [main/sanity-app [model-tab] [world-pane] into-sim]
+                  (dom/getElement "sanity-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (put! into-sim [:run]))

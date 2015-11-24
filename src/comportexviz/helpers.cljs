@@ -1,5 +1,5 @@
-(ns comportexviz.helpers
-  (:require [comportexviz.util :refer [tap-c]]
+(ns org.numenta.sanity.helpers
+  (:require [org.numenta.sanity.util :refer [tap-c]]
             [goog.dom]
             [goog.dom.classes]
             [goog.style :as style]

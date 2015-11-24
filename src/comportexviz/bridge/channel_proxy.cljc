@@ -1,4 +1,4 @@
-(ns comportexviz.bridge.channel-proxy
+(ns org.numenta.sanity.bridge.channel-proxy
   (:require #?(:clj [clojure.core.async :as async]
                :cljs [cljs.core.async :as async])
             #?(:clj

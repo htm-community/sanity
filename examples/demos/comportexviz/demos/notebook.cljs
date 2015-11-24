@@ -1,10 +1,10 @@
-(ns comportexviz.demos.notebook
+(ns org.numenta.sanity.demos.notebook
   (:require [cognitect.transit :as transit]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.bridge.remote :as remote]
-            [comportexviz.demos.runner :as runner]
-            [comportexviz.selection :as sel]
-            [comportexviz.viz-canvas :as viz]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.remote :as remote]
+            [org.numenta.sanity.demos.runner :as runner]
+            [org.numenta.sanity.selection :as sel]
+            [org.numenta.sanity.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [reagent.core :as reagent :refer [atom]]

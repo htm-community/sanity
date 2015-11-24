@@ -1,4 +1,4 @@
-(ns comportexviz.viz-layouts
+(ns org.numenta.sanity.viz-layouts
   (:require [monet.canvas :as c]
             [tailrecursion.priority-map :refer [priority-map]]
             [org.nfrac.comportex.protocols :as p]

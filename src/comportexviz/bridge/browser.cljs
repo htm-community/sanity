@@ -1,8 +1,8 @@
-(ns comportexviz.bridge.browser
+(ns org.numenta.sanity.bridge.browser
   (:require [cljs.core.async :as async]
-            [comportexviz.server.simulation :as simulation]
-            [comportexviz.server.journal :as journal]
-            [comportexviz.util :as utilv]
+            [org.numenta.sanity.comportex.simulation :as simulation]
+            [org.numenta.sanity.comportex.journal :as journal]
+            [org.numenta.sanity.util :as utilv]
             [org.nfrac.comportex.protocols :as p]))
 
 (defn init

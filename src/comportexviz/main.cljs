@@ -1,9 +1,9 @@
-(ns comportexviz.main
-  (:require [comportexviz.controls-ui :as cui]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.helpers :as helpers :refer [window-resize-listener]]
-            [comportexviz.selection :as sel]
-            [comportexviz.viz-canvas :as viz]
+(ns org.numenta.sanity.main
+  (:require [org.numenta.sanity.controls-ui :as cui]
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.helpers :as helpers :refer [window-resize-listener]]
+            [org.numenta.sanity.selection :as sel]
+            [org.numenta.sanity.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
@@ -95,9 +95,9 @@
          [viz/viz-canvas nil steps selection step-template viz-options
           into-viz into-sim into-journal local-targets]]]])))
 
-(defn comportexviz-app
+(defn sanity-app
   [title model-tab world-pane features into-sim]
-  [cui/comportexviz-app title model-tab [main-pane world-pane into-sim]
+  [cui/sanity-app title model-tab [main-pane world-pane into-sim]
    features capture-options viz-options selection steps step-template
    viz/state-colors into-viz into-sim into-journal local-targets])
 

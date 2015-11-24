@@ -1,7 +1,7 @@
-(ns comportexviz.demos.runner
-  (:require [comportexviz.main :as main]
-            [comportexviz.bridge.remote :as bridge]
-            [comportexviz.util :refer [tap-c]]
+(ns org.numenta.sanity.demos.runner
+  (:require [org.numenta.sanity.main :as main]
+            [org.numenta.sanity.bridge.remote :as bridge]
+            [org.numenta.sanity.util :refer [tap-c]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
             [cljs.core.async :as async :refer [put! <!]])
@@ -47,7 +47,7 @@
         (put! into-journal [:ping])
         (recur)))
 
-    (reagent/render [main/comportexviz-app title nil
+    (reagent/render [main/sanity-app title nil
                      [world-pane main/steps main/selection] features
                      into-sim-in]
-                    (dom/getElement "comportexviz-app"))))
+                    (dom/getElement "sanity-app"))))

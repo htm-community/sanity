@@ -1,4 +1,4 @@
-(ns comportexviz.server.details
+(ns org.numenta.sanity.comportex.details
   (:require [clojure.string :as str]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]))

@@ -1,14 +1,14 @@
-(ns comportexviz.demos.q-learning-1d
+(ns org.numenta.sanity.demos.q-learning-1d
   (:require [org.nfrac.comportex.demos.q-learning-1d :as demo]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
-            [comportexviz.demos.comportex-common :refer [all-features]]
-            [comportexviz.main :as main]
-            [comportexviz.helpers :as helpers :refer [resizing-canvas]]
-            [comportexviz.plots-canvas :as plt]
-            [comportexviz.bridge.browser :as server]
-            [comportexviz.server.data :as data]
-            [comportexviz.util :as utilv]
+            [org.numenta.sanity.demos.comportex-common :refer [all-features]]
+            [org.numenta.sanity.main :as main]
+            [org.numenta.sanity.helpers :as helpers :refer [resizing-canvas]]
+            [org.numenta.sanity.plots-canvas :as plt]
+            [org.numenta.sanity.bridge.browser :as server]
+            [org.numenta.sanity.comportex.data :as data]
+            [org.numenta.sanity.util :as utilv]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -17,7 +17,7 @@
             [goog.string.format]
             [cljs.core.async :as async :refer [put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]
-                   [comportexviz.macros :refer [with-ui-loading-message]]))
+                   [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
   (atom {:n-regions 1}))
@@ -279,7 +279,7 @@
 
 (defn ^:export init
   []
-  (reagent/render [main/comportexviz-app "Comportex" [model-tab] [world-pane]
+  (reagent/render [main/sanity-app "Comportex" [model-tab] [world-pane]
                    all-features into-sim]
-                  (dom/getElement "comportexviz-app"))
+                  (dom/getElement "sanity-app"))
   (set-model!))

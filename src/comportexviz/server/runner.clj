@@ -1,11 +1,11 @@
-(ns comportexviz.server.runner
+(ns org.numenta.sanity.comportex.runner
   (:require [clojure.core.async :as async :refer [put! <! go go-loop close!]]
             [compojure.route :as route]
-            [comportexviz.bridge.channel-proxy :as channel-proxy]
-            [comportexviz.server.simulation :as simulation]
-            [comportexviz.server.journal :as journal]
-            [comportexviz.server.websocket :as server-ws]
-            [comportexviz.util :as utilv]))
+            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.comportex.simulation :as simulation]
+            [org.numenta.sanity.comportex.journal :as journal]
+            [org.numenta.sanity.comportex.websocket :as server-ws]
+            [org.numenta.sanity.util :as utilv]))
 
 (defprotocol PStoppable
   (stop [_]))
