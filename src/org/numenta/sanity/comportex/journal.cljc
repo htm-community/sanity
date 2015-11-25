@@ -43,15 +43,15 @@
         client-infos (atom {})
         capture-options (atom {:keep-steps n-keep
                                :ff-synapses {:capture? true
-                                             :min-perm 0.0
-                                             :only-active? false}
+                                             :only-active? false
+                                             :only-connected? false}
                                :distal-synapses {:capture? true
-                                                 :min-perm 0.0
                                                  :only-active? false
+                                                 :only-connected? false
                                                  :only-noteworthy-columns? false}
                                :apical-synapses {:capture? true
-                                                 :min-perm 0.0
                                                  :only-active? false
+                                                 :only-connected? false
                                                  :only-noteworthy-columns? false}})
         find-model (fn [id]
                      (when (number? id)

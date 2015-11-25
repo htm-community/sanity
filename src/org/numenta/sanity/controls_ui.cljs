@@ -457,15 +457,6 @@
        [:h4.panel-title "Feed-forward synapses"]]
       [:div.panel-body
        [bind-fields [:div
-                     [:label {:style {:display "block"
-                                      :font-weight "normal"}}
-                      "If permanence "
-                      [:div {:style {:display "inline-block"}}
-                       "≥ "
-                       [:input {:field :numeric
-                                :id :ff-synapses.min-perm
-                                :size 3
-                                :style {:text-align "center"}}]]]
                      (t-chbox :ff-synapses.capture?
                               "Save")
                      [:div {:field :container
@@ -473,7 +464,9 @@
                             :style {:margin-top -5}
                             :visible? #(get-in % [:ff-synapses :capture?])}
                       (t-chbox :ff-synapses.only-active?
-                               "Only if active")]]
+                               "Only if active")
+                      (t-chbox :ff-synapses.only-connected?
+                               "Only if connected")]]
         capture-options]]]]
     [:div.col-lg-6.col-sm-12
      [:div.panel.panel-default
@@ -481,15 +474,6 @@
        [:h4.panel-title "Distal synapses"]]
       [:div.panel-body
        [bind-fields [:div
-                     [:label {:style {:display "block"
-                                      :font-weight "normal"}}
-                      "If permanence "
-                      [:div {:style {:display "inline-block"}}
-                       "≥ "
-                       [:input {:field :numeric
-                                :id :distal-synapses.min-perm
-                                :size 3
-                                :style {:text-align "center"}}]]]
                      (t-chbox :distal-synapses.capture?
                               "Save")
                      [:div {:field :container
@@ -497,24 +481,18 @@
                             :visible? #(get-in % [:distal-synapses :capture?])}
                       (t-chbox :distal-synapses.only-active?
                                "Only if active")
+                      (t-chbox :distal-synapses.only-connected?
+                               "Only if connected")
                       (t-chbox :distal-synapses.only-noteworthy-columns?
                                "Only active / predicted columns")]]
-        capture-options]]]]
+        capture-options]]]]]
+   [:div.row
     [:div.col-lg-6.col-sm-12
      [:div.panel.panel-default
       [:div.panel-heading
        [:h4.panel-title "Apical synapses"]]
       [:div.panel-body
        [bind-fields [:div
-                     [:label {:style {:display "block"
-                                      :font-weight "normal"}}
-                      "If permanence "
-                      [:div {:style {:display "inline-block"}}
-                       "≥ "
-                       [:input {:field :numeric
-                                :id :apical-synapses.min-perm
-                                :size 3
-                                :style {:text-align "center"}}]]]
                      (t-chbox :apical-synapses.capture?
                               "Save")
                      [:div {:field :container
@@ -522,6 +500,8 @@
                             :visible? #(get-in % [:apical-synapses :capture?])}
                       (t-chbox :apical-synapses.only-active?
                                "Only if active")
+                      (t-chbox :apical-synapses.only-connected?
+                               "Only if connected")
                       (t-chbox :apical-synapses.only-noteworthy-columns?
                                "Only active / predicted columns")]]
         capture-options]]]]]])
