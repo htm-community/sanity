@@ -3,15 +3,15 @@
             [cognitect.transit :as transit]
             [compojure.core :refer [routes GET]]
             [compojure.route :as route]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [ring.adapter.jetty9 :as jetty :refer [run-jetty]])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
 (defn transit-str
-  [m]
+  [m extra-handlers]
   (let [out (ByteArrayOutputStream.)
         writer (transit/writer out :json
-                               {:handlers channel-proxy/write-handler})]
+                               {:handlers extra-handlers})]
     (transit/write writer m)
     (.toString out)))
 
@@ -39,7 +39,7 @@
       (jetty/close! ws))))
 
 (defn ws-handler
-  [local-targets connection-changes-c]
+  [target->mchannel connection-changes-c]
   (let [clients (atom {})]
    {:on-connect
     (fn [ws]
@@ -64,30 +64,38 @@
       (let [[client-id to-network-c] (get @clients ws)
             [target op msg] (read-transit-str
                              text
-                             (channel-proxy/read-handler
+                             (marshal/read-handlers
+                              target->mchannel
                               (fn [t v]
                                 (put! to-network-c (transit-str
-                                                    [t :put! v])))
+                                                    [t :put! v]
+                                                    (marshal/write-handlers
+                                                     target->mchannel))))
                               (fn [t]
                                 (put! to-network-c (transit-str
-                                                    [t :close!])))))]
-        (if-let [ch (get (channel-proxy/as-map local-targets) target)]
-          (case op
-            :put! (put! ch [msg client-id])
-            :close! (close! ch))
+                                                    [t :close!]
+                                                    (marshal/write-handlers
+                                                     target->mchannel))))))]
+        (if-let [{:keys [ch single-use?] :as mchannel} (@target->mchannel
+                                                        target)]
+          (do
+            (when single-use?
+              (marshal/release! mchannel))
+            (case op
+              :put! (put! ch [msg client-id])
+              :close! (close! ch)))
           (do
             (println "ERROR: Unrecognized target" target)
-            (println "KNOWN TARGETS:" (keys (channel-proxy/as-map
-                                             local-targets)))))))
+            (println "KNOWN TARGETS:" @target->mchannel)))))
 
     :on-bytes
     (fn [ws bytes offset len])}))
 
 (defn start
-  ([local-targets connection-changes-c {:keys [http-handler port block?]}]
+  ([target->mchannel connection-changes-c {:keys [http-handler port block?]}]
    (run-jetty (or http-handler
                   (routes (GET "/*" [] (str "Use WebSocket on port " port))))
               {:port port
-               :websockets {"/ws" (ws-handler local-targets
+               :websockets {"/ws" (ws-handler target->mchannel
                                               connection-changes-c)}
                :join? block?})))

@@ -31,7 +31,7 @@
      (async/onto-chan input-c inputs)
      (start-runner
       model input-c p/htm-step nil opts)))
-  ([model input-c htm-step models-out-c {:keys [port local-targets]}]
+  ([model input-c htm-step models-out-c {:keys [port]}]
    (let [model-atom (if (instance? clojure.lang.Ref model)
                       model
                       (atom model))
@@ -39,8 +39,7 @@
                   (random-port))
          runner (runner/start model-atom input-c htm-step models-out-c
                               {:port port
-                               :block? false
-                               :local-targets local-targets})]
+                               :block? false})]
      (swap! runners assoc port runner)
      (println (str "Started server on port " port))
      (println (str "Navigate to http://localhost:" port
@@ -50,7 +49,7 @@
 (defn start-notebook
   []
   (let [comportex-port (random-port)]
-    (server-ws/start notebook/local-targets notebook/connection-changes-c
+    (server-ws/start notebook/target->mchannel notebook/connection-changes-c
                      {:port comportex-port
                       :block? false
                       :http-handler (route/files "/")})

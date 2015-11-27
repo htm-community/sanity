@@ -2,7 +2,6 @@
   (:require [clojure.core.async :as async]
             [cognitect.transit :as transit]
             [compojure.route :as route]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
             [org.numenta.sanity.comportex.journal :as journal]
             [org.numenta.sanity.comportex.runner :as runner]
             [gorilla-renderable.core :as renderable]
@@ -12,7 +11,7 @@
 
 ;; If there are multiple notebooks these are used for all of them.
 ;; Currently not an issue. This keeps the `viz` API easier.
-(def local-targets (channel-proxy/registry))
+(def target->mchannel (atom {}))
 (def connection-changes-c (async/chan))
 (def connection-changes-mult (async/mult connection-changes-c))
 
@@ -52,28 +51,25 @@
                      models
                      [models])
             models-c (async/chan)
-            into-j (async/chan)]
-        (async/tap connection-changes-mult into-j)
-        (journal/init models-c into-j (atom (last models)) -1)
+            into-journal (async/chan)
+            journal-target (java.util.UUID/randomUUID)]
+        (swap! target->mchannel assoc journal-target {:ch into-journal})
+        (async/tap connection-changes-mult into-journal)
+        (journal/init models-c into-journal (atom (last models)) -1)
         (async/onto-chan models-c models)
-        (let [ij (channel-proxy/register! local-targets into-j)
-              ;; No need to send a channel-proxy. The client knows exactly what
-              ;; it's receiving -- it's not piping opaque messages to some other
-              ;; corner of its code.
-              target-id (channel-proxy/target-id ij)]
-          {:type :html
-           :content ""
-           :didMount (format
-                      "(function(el) {
+        {:type :html
+         :content ""
+         :didMount (format
+                    "(function(el) {
                          org.numenta.sanity.demos.notebook.add_viz(el, %s);
                        })"
-                      (pr-str (transit-str [target-id viz-options])))
-           :willUnmount (format
-                         "(function(el) {
+                    (pr-str (transit-str [journal-target viz-options])))
+         :willUnmount (format
+                       "(function(el) {
                             org.numenta.sanity.demos.notebook.release_viz(el, %s);
                           })"
-                         (pr-str (transit-str target-id)))
-           :saveHook save-canvases})))))
+                       (pr-str (transit-str journal-target)))
+         :saveHook save-canvases}))))
 
 (defmethod viz p/PEncoder
   [enc & [input d-opts]]

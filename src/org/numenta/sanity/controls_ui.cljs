@@ -10,7 +10,7 @@
             [cljs.reader]
             [org.numenta.sanity.helpers :as helpers]
             [org.numenta.sanity.plots :as plots]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.selection :as sel]
             [org.nfrac.comportex.protocols :as p])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
@@ -98,7 +98,7 @@
                      (put! into-sim [:set-spec path new-spec]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
-    (fn [step-template selection into-sim local-targets]
+    (fn [step-template selection into-sim]
       (let [[sel-region sel-layer] (some sel/layer @selection)]
         [:div
          [:p.text-muted "Read/write model parameters of the selected region layer,
@@ -141,8 +141,8 @@
                                  (<! (async/timeout 100))
                                  (let [finished (async/chan)]
                                    (put! into-sim
-                                         [:restart (channel-proxy/register!
-                                                    local-targets finished)])
+                                         [:restart (marshal/channel finished
+                                                                    true)])
                                    (<! finished))))}
                   "Rebuild model"]
                  [:p.small "This will not reset, or otherwise alter, the input stream."]]
@@ -154,11 +154,11 @@
   )
 
 (defn gather-col-state-history!
-  [col-state-history step into-journal local-targets]
+  [col-state-history step into-journal]
   (let [response-c (async/chan)]
     (put! into-journal [:get-column-state-freqs
                         (:model-id step)
-                        (channel-proxy/register! local-targets response-c)])
+                        (marshal/channel response-c true)])
     (go
       (let [r (<! response-c)]
         (swap! col-state-history
@@ -172,12 +172,12 @@
                  % r))))))
 
 (defn time-plots-tab-builder
-  [steps into-journal local-targets]
+  [steps into-journal]
   (let [col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
                  (gather-col-state-history! col-state-history (first xs)
-                                            into-journal local-targets)))
+                                            into-journal)))
     (fn time-plots-tab [series-colors]
       [:div
        [:p.text-muted "Time series of cortical column activity."]
@@ -190,7 +190,7 @@
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn sources-tab
-  [step-template selection series-colors into-journal local-targets]
+  [step-template selection series-colors into-journal]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
    [:div
@@ -201,7 +201,7 @@
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
          [plots/cell-excitation-plot-cmp step-template selection series-colors
-          region-key layer-id into-journal local-targets]]))]])
+          region-key layer-id into-journal]]))]])
 
 (def default-cell-sdrs-plot-options
   {:group-contexts? false
@@ -286,14 +286,14 @@
    ])
 
 (defn cell-sdrs-tab-builder
-  [steps step-template selection into-journal local-targets]
+  [steps step-template selection into-journal]
   (let [plot-opts (atom default-cell-sdrs-plot-options)
         component (atom nil)
         enable! (fn []
                   (reset!
                    component
                    (plots/cell-sdrs-plot-builder steps step-template selection
-                                                 into-journal local-targets
+                                                 into-journal
                                                  plot-opts)))
         disable! (fn []
                    (let [teardown! (:teardown @component)]
@@ -368,19 +368,18 @@
        ])))
 
 (defn fetch-details-text!
-  [into-journal text-response sel local-targets]
+  [into-journal text-response sel]
   (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
         [rgn-id lyr-id] (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
         (put! into-journal [:get-details-text model-id rgn-id lyr-id bit
-                            (channel-proxy/register! local-targets
-                                                     response-c)])
+                            (marshal/channel response-c true)])
         (go
           (reset! text-response (<! response-c)))))))
 
 (defn details-tab
-  [selection into-journal local-targets]
+  [selection into-journal]
   (let [text-response (atom "")]
     (reagent/create-class
      {:component-will-mount
@@ -388,11 +387,8 @@
         (add-watch selection :fetch-details-text
                    (fn [_ _ _ sel]
                      (reset! text-response "")
-                     (fetch-details-text! into-journal text-response sel
-                                          local-targets)))
-
-        (fetch-details-text! into-journal text-response @selection
-                             local-targets))
+                     (fetch-details-text! into-journal text-response sel)))
+        (fetch-details-text! into-journal text-response @selection))
 
       :component-will-unmount
       (fn [_]
@@ -413,8 +409,7 @@
                                  (let [response-c (async/chan)]
                                    (put! into-journal
                                          [:get-model model-id
-                                          (channel-proxy/register! local-targets
-                                                                   response-c)
+                                          (marshal/channel response-c true)
                                           true])
                                    (go
                                      (println (<! response-c))))
@@ -607,7 +602,7 @@
 
 (defn navbar
   [_ _ steps show-help viz-options viz-expanded step-template into-viz into-sim
-   local-targets]
+  ]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -619,8 +614,7 @@
         going? (atom false)
         subscriber-c (async/chan)]
 
-    (put! into-sim [:subscribe-to-status (channel-proxy/register! local-targets
-                                                                  subscriber-c)])
+    (put! into-sim [:subscribe-to-status (marshal/channel subscriber-c)])
 
     (go-loop []
       (when-let [[g?] (<! subscriber-c)]
@@ -1018,21 +1012,20 @@
 
 (defn sanity-app
   [_ _ _ features _ _ selection steps step-template _ _ _ into-journal
-   local-targets]
+  ]
   (let [show-help (atom false)
         viz-expanded (atom false)
         time-plots-tab (when (features :time-plots)
-                         (time-plots-tab-builder steps into-journal
-                                                 local-targets))
+                         (time-plots-tab-builder steps into-journal))
         cell-sdrs-tab (when (features :cell-SDRs)
                         (cell-sdrs-tab-builder steps step-template selection
-                                               into-journal local-targets))]
+                                               into-journal))]
     (fn [title model-tab main-pane _ capture-options viz-options selection steps
          step-template series-colors into-viz into-sim into-journal
-         local-targets]
+        ]
       [:div
        [navbar title features steps show-help viz-options viz-expanded
-        step-template into-viz into-sim local-targets]
+        step-template into-viz into-sim]
        [help-block show-help]
        [:div.container-fluid
         [:div.row
@@ -1050,15 +1043,15 @@
                                  capture-options]])
                     (when (features :params)
                       [:params [parameters-tab step-template selection into-sim
-                                local-targets]])
+                               ]])
                     (when time-plots-tab
                       [:time-plots [time-plots-tab series-colors]])
                     (when cell-sdrs-tab
                       [:cell-SDRs [cell-sdrs-tab]])
                     (when (features :sources)
                       [:sources [sources-tab step-template selection
-                                 series-colors into-journal local-targets]])
+                                 series-colors into-journal]])
                     (when (features :details)
                       [:details [details-tab selection into-journal
-                                 local-targets]])])]]]
+                                ]])])]]]
         [:div#loading-message "loading"]]])))

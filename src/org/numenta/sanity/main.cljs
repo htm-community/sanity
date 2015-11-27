@@ -1,6 +1,6 @@
 (ns org.numenta.sanity.main
   (:require [org.numenta.sanity.controls-ui :as cui]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.helpers :as helpers :refer [window-resize-listener]]
             [org.numenta.sanity.selection :as sel]
             [org.numenta.sanity.viz-canvas :as viz]
@@ -13,7 +13,6 @@
 ;;; ## Journal data
 
 (def into-journal (async/chan))
-(def local-targets (channel-proxy/registry))
 
 ;;; ## Viz data
 
@@ -26,11 +25,11 @@
 
 ;;; ## Connect journal to viz
 
-(defn subscribe-to-steps! [into-j]
+(defn subscribe-to-steps! []
   (let [steps-c (async/chan)
         response-c (async/chan)]
-    (put! into-j [:subscribe (channel-proxy/register! local-targets steps-c)
-                   (channel-proxy/register! local-targets response-c)])
+    (put! into-journal [:subscribe (marshal/channel steps-c)
+                        (marshal/channel response-c true)])
     (go
       ;; Get the template before getting any steps.
       (let [[st co] (<! response-c)]
@@ -43,7 +42,7 @@
                   :path [:regions region-key layer-id]}]))
       (add-watch capture-options ::push-to-server
                  (fn [_ _ _ opts]
-                   (put! into-j [:set-capture-options opts])))
+                   (put! into-journal [:set-capture-options opts])))
 
       (loop []
         (when-let [step (<! steps-c)]
@@ -55,7 +54,7 @@
     steps-c))
 
 ;; not sure why this would be used, but for completeness...
-(def subscription-data (subscribe-to-steps! into-journal))
+(def subscription-data (subscribe-to-steps!))
 
 (defn unsubscribe! [subscription-data]
   (let [steps-c subscription-data]
@@ -93,13 +92,13 @@
         [:div.col-sm-9.col-lg-10 {:style {:overflow "auto"}}
          [window-resize-listener size-invalidates-c]
          [viz/viz-canvas nil steps selection step-template viz-options
-          into-viz into-sim into-journal local-targets]]]])))
+          into-viz into-sim into-journal]]]])))
 
 (defn sanity-app
   [title model-tab world-pane features into-sim]
   [cui/sanity-app title model-tab [main-pane world-pane into-sim]
    features capture-options viz-options selection steps step-template
-   viz/state-colors into-viz into-sim into-journal local-targets])
+   viz/state-colors into-viz into-sim into-journal])
 
 ;;; ## Exported helpers
 

@@ -1,10 +1,10 @@
 (ns org.numenta.sanity.plots
   (:require [reagent.core :as reagent :refer [atom]]
             [monet.canvas :as c]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.plots-canvas :as plt]
             [org.numenta.sanity.helpers :refer [canvas resizing-canvas
                                           window-resize-listener]]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
             [org.numenta.sanity.selection :as sel]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
@@ -301,21 +301,20 @@
     (c/restore ctx)))
 
 (defn fetch-excitation-data!
-  [excitation-data region-key layer-id sels into-journal local-targets]
+  [excitation-data region-key layer-id sels into-journal]
   (let [sel (first (filter sel/layer sels))
         bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
     (if-let [model-id (:model-id sel)]
       (let [response-c (async/chan)]
         (put! into-journal
               [:get-cell-excitation-data model-id region-key layer-id bit
-               (channel-proxy/register! local-targets
-                                        response-c)])
+               (marshal/channel response-c true)])
         (go
           (reset! excitation-data (<! response-c))))
       (reset! excitation-data {}))))
 
 (defn cell-excitation-plot-cmp
-  [_ selection _ region-key layer-id into-journal local-targets]
+  [_ selection _ region-key layer-id into-journal]
   (let [excitation-data (atom {})]
     (reagent/create-class
      {:component-will-mount
@@ -323,10 +322,10 @@
         (add-watch selection [::fetch-excitation-data region-key layer-id]
                    (fn [_ _ _ sels]
                      (fetch-excitation-data! excitation-data region-key layer-id
-                                             sels into-journal local-targets)))
+                                             sels into-journal)))
 
         (fetch-excitation-data! excitation-data region-key layer-id @selection
-                                into-journal local-targets))
+                                into-journal))
 
       :component-will-unmount
       (fn [_]
@@ -725,14 +724,13 @@
                   [:li (sdr->label a-sdr)]))]]])]))
 
 (defn fetch-transitions-data
-  [sel cell-sdr-counts into-journal local-targets]
+  [sel cell-sdr-counts into-journal]
   (when-let [[region layer] (sel/layer sel)]
     (let [model-id (:model-id sel)
           response-c (async/chan)]
       (put! into-journal [:get-transitions-data
                           model-id region layer cell-sdr-counts
-                          (channel-proxy/register!
-                           local-targets response-c)])
+                          (marshal/channel response-c true)])
       response-c)))
 
 (defn calc-sdr-sizes
@@ -749,7 +747,7 @@
            (vals cell-sdr-fracs))))
 
 (defn update-cell-sdrs-plot-data!
-  [plot-data states sel into-journal local-targets]
+  [plot-data states sel into-journal]
   (when-let [[region layer] (sel/layer sel)]
     (let [model-id (:model-id sel)]
       (when-let [state* (get-in @states [model-id [region layer]])]
@@ -761,7 +759,7 @@
              (reset! plot-data state)
              ;; another update when receive server data
              (let [x (<! (fetch-transitions-data sel (:cell-sdr-counts state)
-                                                 into-journal local-targets))]
+                                                 into-journal))]
                (swap! states assoc-in [model-id [region layer] :sdr-transitions] x)
                (swap! plot-data assoc :sdr-transitions x)))
            ;; otherwise - we have the data
@@ -795,7 +793,7 @@
    :threshold 0})
 
 (defn update-cell-sdrs-states!
-  [states step-template step prev-step into-journal local-targets]
+  [states step-template step prev-step into-journal]
   (for [[region layer-map] (:regions @step-template)
         layer (keys layer-map)
         :let [response-c (async/chan)
@@ -803,8 +801,7 @@
     (go
       (put! into-journal [:get-cells-by-state model-id
                           region layer
-                          (channel-proxy/register! local-targets
-                                                   response-c)])
+                          (marshal/channel response-c true)])
       (let [cells-by-state (<! response-c)
             state (or (get-in @states [(:model-id prev-step) [region layer]])
                       empty-cell-sdrs-state)
@@ -892,7 +889,7 @@
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
 (defn cell-sdrs-plot-builder
-  [steps step-template selection into-journal local-targets plot-opts]
+  [steps step-template selection into-journal plot-opts]
   (let [states (atom {})
         plot-data (atom (assoc empty-cell-sdrs-state :title ""))]
     (add-watch steps ::cell-sdrs-plot
@@ -900,19 +897,18 @@
                  (when (:model-id step)
                    (let [procs (update-cell-sdrs-states! states step-template
                                                          step prev-step
-                                                         into-journal local-targets)]
+                                                         into-journal)]
                      (go
                        ;; await update processes for all layers...
                        (doseq [c procs] (<! c))
                        ;; ...before refreshing plot
                        (let [[sel] @selection]
                          (update-cell-sdrs-plot-data! plot-data states sel
-                                                      into-journal local-targets))
-                       )))))
+                                                      into-journal)))))))
     (add-watch selection ::cell-sdrs-plot
                (fn [_ _ _ [sel]]
                  (update-cell-sdrs-plot-data! plot-data states sel
-                                              into-journal local-targets)))
+                                              into-journal)))
     ;; at build time, pull in existing steps starting from current selection
     (let [[sel] @selection]
       (when-let [model-id (:model-id sel)]
@@ -924,12 +920,11 @@
             (doseq [[prev-step step] (partition 2 1 (cons nil to-ingest))]
               (let [procs (update-cell-sdrs-states! states step-template
                                                     step prev-step
-                                                    into-journal local-targets)]
+                                                    into-journal)]
                 ;; await update processes before going on to next time step
                 (doseq [c procs] (<! c))))
             ;; finally, redraw
-            (update-cell-sdrs-plot-data! plot-data states sel
-                                         into-journal local-targets)))))
+            (update-cell-sdrs-plot-data! plot-data states sel into-journal)))))
     {:content
      (let [size-invalidates-c (async/chan)]
        (fn []
