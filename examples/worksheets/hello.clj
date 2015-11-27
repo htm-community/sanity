@@ -2,7 +2,7 @@
 
 ;; **
 ;;; # Comportex
-;;;
+;;; 
 ;; **
 
 ;; **
@@ -139,11 +139,6 @@
 ;; **
 ;;; ## Debug
 ;; **
-
-;; @@
-;; Display the last exception's stack trace
-(print-stack-trace *e)
-;; @@
 
 ;; @@
 (stop-all-runners)

@@ -15,7 +15,7 @@
                  [info.sunng/ring-jetty9-adapter "0.9.1"]
                  [com.cognitect/transit-clj "0.8.285"]
                  [com.cognitect/transit-cljs "0.8.232"]
-                 [com.mrcslws/gorilla-repl "0.3.5-009"
+                 [com.mrcslws/gorilla-repl "0.3.5-010"
                   :exclusions [javax.servlet/servlet-api
                                org.slf4j/slf4j-api]]]
 
