@@ -1,7 +1,7 @@
 (ns org.numenta.sanity.bridge.remote
   (:require [cljs.core.async :as async :refer [put! close!]]
             [cognitect.transit :as transit]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
                                                   map->TwoDTopology
                                                   map->ThreeDTopology]])
@@ -12,8 +12,8 @@
   (* 64 1024))
 
 (defn transit-str
-  [m]
-  (-> (transit/writer :json {:handlers channel-proxy/write-handler})
+  [m extra-handlers]
+  (-> (transit/writer :json {:handlers extra-handlers})
       (transit/write m)))
 
 (defn read-transit-str
@@ -30,7 +30,7 @@
   [target :close!])
 
 (defn connect!
-  [connection-id to-network-c on-connect-c ws-url connecting? local-targets]
+  [connection-id to-network-c on-connect-c ws-url connecting? target->mchannel]
   (let [ws (js/WebSocket. ws-url)
         teardown-c (async/chan)
         id (random-uuid)]
@@ -51,7 +51,8 @@
                                 to-network-c ([v] v)
                                 :priority true)]
                   (when-not (nil? msg)
-                    (let [out (transit-str msg)
+                    (let [out (transit-str msg (marshal/write-handlers
+                                                target->mchannel))
                           c (count out)]
                       (when (> c max-message-size)
                         ;; No recovery. Either the max is too low or something
@@ -75,28 +76,36 @@
             (fn [evt]
               (let [[target op msg] (read-transit-str
                                      (.-data evt)
-                                     (channel-proxy/read-handler
+                                     (marshal/read-handlers
+                                      target->mchannel
                                       (fn [t v]
                                         (put! to-network-c
                                               (target-put t v)))
                                       (fn [t]
                                         (put! to-network-c
                                               (target-close t)))))
-                    ch (get (channel-proxy/as-map local-targets)
-                            target)]
-                (case op
-                  :put! (do
-                          ;; enumerate lazy tree
-                          ;; (dorun (tree-seq coll? seq msg))
-                          (put! ch msg))
-                  :close! (close! ch))))))))
+                    {:keys [ch single-use?] :as mchannel} (@target->mchannel
+                                                           target)]
+                (if ch
+                  (do (when single-use?
+                        (marshal/release! mchannel))
+                      (case op
+                        :put! (do
+                                ;; enumerate lazy tree
+                                ;; (dorun (tree-seq coll? seq msg))
+                                (put! ch msg))
+                        :close! (close! ch)))
+                  (do
+                    (println "UNRECOGNIZED TARGET" target)
+                    (println "Known targets:" @target->mchannel)))))))))
 
 (defn init
-  [ws-url local-targets]
+  [ws-url]
   (let [to-network-c (async/chan)
         connection-id (atom nil)
         on-connect-c (async/chan)
-        connecting? (atom false)]
+        connecting? (atom false)
+        target->mchannel (atom {})]
     ;; Remote targets are often declared inside of messages, but you have to
     ;; jumpstart the process somehow. One machine needs to know about targets on
     ;; another machine before communication can start.
@@ -114,8 +123,7 @@
             ;; it back on reconnect.
             reconnect-blob (atom nil)
             blob-resets-c (async/chan)
-            blob-resets-cproxy (channel-proxy/register! local-targets
-                                                        blob-resets-c)]
+            blob-resets-cproxy (marshal/channel blob-resets-c)]
         (go-loop []
           (let [v (<! blob-resets-c)]
             (when-not (nil? v)
@@ -144,6 +152,6 @@
                   (when-not @connecting?
                     (reset! connecting? true)
                     (connect! connection-id to-network-c on-connect-c ws-url
-                              connecting? local-targets))))
+                              connecting? target->mchannel))))
               (when-not (nil? v)
                 (recur)))))))))

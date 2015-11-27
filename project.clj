@@ -2,9 +2,9 @@
   :description "Web visualisation of the HTM algorithm"
   :url "https://github.com/nupic-community/sanity"
 
-  :dependencies [[org.clojure/clojure "1.7.0"]
-                 [org.clojure/clojurescript "1.7.107"]
-                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+  :dependencies [[org.clojure/clojure "1.8.0-RC2"]
+                 [org.clojure/clojurescript "1.7.170"]
+                 [org.clojure/core.async "0.2.374"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
                  [org.nfrac/comportex "0.0.12-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
@@ -13,13 +13,13 @@
                  [ring/ring-core "1.4.0"]
                  [compojure "1.4.0"]
                  [info.sunng/ring-jetty9-adapter "0.9.1"]
-                 [com.cognitect/transit-clj "0.8.281"]
-                 [com.cognitect/transit-cljs "0.8.220"]
+                 [com.cognitect/transit-clj "0.8.285"]
+                 [com.cognitect/transit-cljs "0.8.232"]
                  [com.mrcslws/gorilla-repl "0.3.5-009"
                   :exclusions [javax.servlet/servlet-api
                                org.slf4j/slf4j-api]]]
 
-  :plugins [[lein-cljsbuild "1.1.0"]
+  :plugins [[lein-cljsbuild "1.1.1"]
             [com.cemerick/austin "0.1.6"]
             [org.clojure/tools.nrepl "0.2.10"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]

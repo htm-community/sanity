@@ -11,7 +11,7 @@
             [org.numenta.sanity.helpers :as helpers :refer [canvas
                                                             resizing-canvas
                                                             window-resize-listener]]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.util :as utilv :refer [tap-c index-of]]
             [org.numenta.sanity.selection :as sel]
             [monet.canvas :as c]
@@ -1020,7 +1020,7 @@
           (init-layouts step-template @viz-options)))
 
 (defn fetch-ff-synapses!
-  [into-journal ff-synapses-response sel opts viewport-token local-targets]
+  [into-journal ff-synapses-response sel opts viewport-token]
   (let [;; dt may be outdated when this is consumed
         sels (map #(dissoc % :dt) sel)]
     (swap! ff-synapses-response
@@ -1045,8 +1045,7 @@
                        [:in-synapses sel1] (<! response-c)))
               (put! into-journal [:get-ff-in-synapses model-id rgn-id lyr-id
                                   only-ids trace-back? viewport-token
-                                  (channel-proxy/register! local-targets
-                                                           response-c)])
+                                  (marshal/channel response-c true)])
               true))))
       ;; out-synapses
       (when bit
@@ -1057,12 +1056,11 @@
                      [:out-synapses sel1] (<! response-c)))
             (put! into-journal [:get-ff-out-synapses model-id sense-id bit
                                 viewport-token
-                                (channel-proxy/register! local-targets
-                                                         response-c)])
+                                (marshal/channel response-c true)])
             true))))))
 
 (defn fetch-cells-segments!
-  [into-journal cells-segs-response sel viewport-token local-targets]
+  [into-journal cells-segs-response sel viewport-token]
   (when-not (and (= (count sel) 1)
                  (let [sel1 (peek sel)
                        {:keys [path bit model-id cell-seg]} sel1
@@ -1076,24 +1074,22 @@
                        (put! into-journal
                              [:get-cells-segments model-id rgn-id lyr-id bit
                               cell-seg viewport-token
-                              (channel-proxy/register! local-targets
-                                                       response-c)])
+                              (marshal/channel response-c true)])
                        true))))
     (reset! cells-segs-response nil)))
 
 (defn fetch-inbits-cols!
-  [into-journal steps-data steps viewport-token local-targets]
+  [into-journal steps-data steps viewport-token]
   (doseq [step steps
           :let [model-id (:model-id step)
                 response-c (async/chan)]]
     (put! into-journal [:get-inbits-cols model-id viewport-token
-                        (channel-proxy/register! local-targets
-                                                 response-c)])
+                        (marshal/channel response-c true)])
     (go
       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
 
 (defn push-new-viewport!
-  [into-journal viewport-token layouts opts local-targets]
+  [into-journal viewport-token layouts opts]
   (assert (not-empty layouts))
   (let [paths (grid-layout-paths layouts)
         path->ids-onscreen (zipmap paths
@@ -1102,7 +1098,7 @@
         viewport [opts path->ids-onscreen]
         response-c (async/chan)]
     (put! into-journal [:register-viewport viewport
-                        (channel-proxy/register! local-targets response-c)])
+                        (marshal/channel response-c true)])
     (go
       (reset! viewport-token (<! response-c)))))
 
@@ -1116,7 +1112,7 @@
   (map make-viz-step steps (repeat steps-data)))
 
 (defn absorb-new-steps!
-  [steps-v steps-data into-journal viewport-tok local-targets]
+  [steps-v steps-data into-journal viewport-tok]
   (let [new-steps (->> steps-v
                        (remove (partial contains?
                                         @steps-data)))]
@@ -1125,8 +1121,7 @@
                   (for [step new-steps] ;; insert new caches
                     [step {:cache (atom {})}])))
     (when viewport-tok
-      (fetch-inbits-cols! into-journal steps-data new-steps
-                          viewport-tok local-targets))))
+      (fetch-inbits-cols! into-journal steps-data new-steps viewport-tok))))
 
 (defn ids-onscreen-changed?
   [before after]
@@ -1136,8 +1131,7 @@
           (map extractor (grid-layout-vals after)))))
 
 (defn viz-canvas
-  [_ steps selection step-template viz-options into-viz into-sim
-   into-journal local-targets]
+  [_ steps selection step-template viz-options into-viz into-sim into-journal]
   (let [steps-data (atom {})
         ff-synapses-response (atom nil)
         cells-segs-response (atom nil)
@@ -1244,50 +1238,45 @@
         (when @step-template
           (absorb-step-template @step-template viz-options viz-layouts)
           (push-new-viewport! into-journal viewport-token @viz-layouts
-                              @viz-options local-targets))
+                              @viz-options))
 
         (when (not-empty @steps)
           (add-watch viewport-token ::initial-steps-fetch
                      (fn [_ _ _ token]
                        (remove-watch viewport-token ::initial-steps-fetch)
-                       (absorb-new-steps! @steps steps-data into-journal token
-                                          local-targets))))
+                       (absorb-new-steps! @steps steps-data into-journal
+                                          token))))
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
                      (absorb-new-steps! xs steps-data into-journal
-                                        @viewport-token local-targets)))
+                                        @viewport-token)))
         (add-watch viewport-token ::fetch-everything
                    (fn fetch-everything [_ _ old-token token]
-                     (fetch-inbits-cols! into-journal steps-data @steps token
-                                         local-targets)
+                     (fetch-inbits-cols! into-journal steps-data @steps token)
                      (fetch-ff-synapses! into-journal ff-synapses-response
-                                         @selection @viz-options @viewport-token
-                                         local-targets)
+                                         @selection @viz-options
+                                         @viewport-token)
                      (fetch-cells-segments! into-journal cells-segs-response
-                                            @selection @viewport-token
-                                            local-targets)
+                                            @selection @viewport-token)
                      (when old-token
                        (put! into-journal [:unregister-viewport old-token]))))
         (add-watch viz-options ::viewport
                    (fn viewport<-opts [_ _ _ opts]
                      (when @viz-layouts
                        (push-new-viewport! into-journal viewport-token
-                                           @viz-layouts opts
-                                           local-targets))))
+                                           @viz-layouts opts))))
         (add-watch viz-layouts ::viewport
                    (fn viewport<-layouts [_ _ prev layouts]
                      (when (and prev
                                 (ids-onscreen-changed? prev layouts))
                        (push-new-viewport! into-journal viewport-token
-                                           layouts @viz-options
-                                           local-targets))))
+                                           layouts @viz-options))))
         (add-watch step-template ::absorb-step-template
                    (fn step-template-changed [_ _ _ template]
                      (absorb-step-template template viz-options viz-layouts)
                      (push-new-viewport! into-journal viewport-token
-                                         @viz-layouts @viz-options
-                                         local-targets)))
+                                         @viz-layouts @viz-options)))
         (add-watch viz-options ::rebuild-layouts
                    (fn layouts<-viz-options [_ _ old-opts opts]
                      (when (not= (:drawing opts)
@@ -1304,11 +1293,9 @@
         (add-watch selection ::syns-segments
                    (fn fetch-selection-change [_ _ _ sel]
                      (fetch-ff-synapses! into-journal ff-synapses-response sel
-                                         @viz-options @viewport-token
-                                         local-targets)
+                                         @viz-options @viewport-token)
                      (fetch-cells-segments! into-journal cells-segs-response
-                                            sel @viewport-token
-                                            local-targets)))
+                                            sel @viewport-token)))
 
         (add-watch cells-segs-response ::cells-segments-layout
                    (fn [_ _ _ csr]

@@ -1,6 +1,6 @@
 (ns org.numenta.sanity.demos.notebook
   (:require [cognitect.transit :as transit]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.bridge.remote :as remote]
             [org.numenta.sanity.demos.runner :as runner]
             [org.numenta.sanity.selection :as sel]
@@ -13,15 +13,15 @@
 
 (enable-console-print!)
 
-(def local-targets (channel-proxy/registry))
 (def pipe-to-remote-target!
   (atom nil))
-(def target->chan (atom {}))
+
+;; So that we can close the channel via its target-id.
+(def remote-target->chan (atom {}))
 
 (defn ^:export connect
   [url]
-  (reset! pipe-to-remote-target!
-          (remote/init url local-targets)))
+  (reset! pipe-to-remote-target! (remote/init url)))
 
 (defn read-transit-str
   [s]
@@ -43,10 +43,9 @@
         into-journal (async/chan)
         into-viz (async/chan)
         response-c (async/chan)]
-    (swap! target->chan assoc journal-target into-journal)
+    (swap! remote-target->chan assoc journal-target into-journal)
     (@pipe-to-remote-target! journal-target into-journal)
-    (put! into-journal [:get-steps (channel-proxy/register! local-targets
-                                                            response-c)])
+    (put! into-journal [:get-steps (marshal/channel response-c true)])
     (go
       (let [[step-template all-steps :as r] (<! response-c)
             step-template (atom step-template)
@@ -93,14 +92,14 @@
                                          :vertical-align "top"}}
                             [viz/viz-canvas {:tabIndex 0} steps
                              selection step-template viz-options into-viz nil
-                             into-journal local-targets]]]]]
+                             into-journal]]]]]
                         el)))))
 
 (defn ^:export release-viz [el serialized]
   (reagent/unmount-component-at-node el)
   (let [journal-target (read-transit-str serialized)]
-    (async/close! (get @target->chan journal-target))
-    (swap! target->chan dissoc journal-target)))
+    (async/close! (get @remote-target->chan journal-target))
+    (swap! remote-target->chan dissoc journal-target)))
 
 (defn ^:export exported-viz [el]
   (let [cnvs (array-seq (.getElementsByTagName el "canvas"))

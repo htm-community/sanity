@@ -2,7 +2,7 @@
   (:require [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader :as edn]
             [org.numenta.sanity.bridge.browser :as server]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.comportex.data :as data]
@@ -168,9 +168,7 @@
         out-c (async/chan)
         model-id (:model-id step)]
     (put! main/into-journal
-          [:consider-future model-id candidate
-           (channel-proxy/register! main/local-targets
-                                    out-c)])
+          [:consider-future model-id candidate (marshal/channel out-c true)])
     (go
       (let [[[_ col-state-freqs]] (seq (<! out-c))]
         (swap! step->scores assoc-in [step consumption]
@@ -323,8 +321,7 @@
                    (put! main/into-journal
                          [:decode-predictive-columns model-id
                           :power-consumption @n-predictions
-                          (channel-proxy/register! main/local-targets
-                                                   out-c)])
+                          (marshal/channel out-c true)])
                    (when @try-boundaries?
                      (consider-consumption! step->scores step -10)
                      (consider-consumption! step->scores step 110))

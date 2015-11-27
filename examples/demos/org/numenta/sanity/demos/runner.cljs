@@ -1,6 +1,6 @@
 (ns org.numenta.sanity.demos.runner
   (:require [org.numenta.sanity.main :as main]
-            [org.numenta.sanity.bridge.remote :as bridge]
+            [org.numenta.sanity.bridge.remote :as remote]
             [org.numenta.sanity.util :refer [tap-c]]
             [reagent.core :as reagent :refer [atom]]
             [goog.dom :as dom]
@@ -36,7 +36,7 @@
         into-sim-mult (async/mult into-sim-in)
         into-sim-eavesdrop (tap-c into-sim-mult)
         into-journal main/into-journal
-        pipe-to-remote-target! (bridge/init ws-url main/local-targets)
+        pipe-to-remote-target! (remote/init ws-url)
         features (into #{} (map keyword) feature-list)]
     (pipe-to-remote-target! :into-journal into-journal)
     (pipe-to-remote-target! :into-sim (tap-c into-sim-mult))

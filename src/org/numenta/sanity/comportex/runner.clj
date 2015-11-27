@@ -1,7 +1,7 @@
 (ns org.numenta.sanity.comportex.runner
   (:require [clojure.core.async :as async :refer [put! <! go go-loop close!]]
             [compojure.route :as route]
-            [org.numenta.sanity.bridge.channel-proxy :as channel-proxy]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.simulation :as simulation]
             [org.numenta.sanity.comportex.journal :as journal]
             [org.numenta.sanity.comportex.websocket :as server-ws]
@@ -18,10 +18,9 @@
          models-mult (async/mult models-in)
          connection-changes-c (async/chan)
          connection-changes-mult (async/mult connection-changes-c)
-         local-targets (channel-proxy/registry
-                        {:into-sim into-sim
-                         :into-journal into-journal})
-         server (server-ws/start local-targets connection-changes-c
+         ch->mchannel (atom {:into-sim (marshal/channel into-sim)
+                             :into-journal (marshal/channel into-journal)})
+         server (server-ws/start ch->mchannel connection-changes-c
                                  (assoc opts
                                         :http-handler (route/files "/")))]
      (when models-out-c
