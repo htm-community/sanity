@@ -33,12 +33,14 @@
   [connection-id to-network-c on-connect-c ws-url connecting? target->mchannel]
   (let [ws (js/WebSocket. ws-url)
         teardown-c (async/chan)
-        id (random-uuid)]
+        connection-id* (random-uuid)
+        local-resources (atom {})
+        remote-resources (atom {})]
     (doto ws
       (aset "onopen"
             (fn [evt]
               (println "WebSocket connected.")
-              (reset! connection-id id)
+              (reset! connection-id connection-id*)
               (reset! connecting? false)
               (go-loop []
                 (alt! teardown-c nil
@@ -52,7 +54,7 @@
                                 :priority true)]
                   (when-not (nil? msg)
                     (let [out (transit-str msg (marshal/write-handlers
-                                                target->mchannel))
+                                                target->mchannel local-resources))
                           c (count out)]
                       (when (> c max-message-size)
                         ;; No recovery. Either the max is too low or something
@@ -83,7 +85,8 @@
                                               (target-put t v)))
                                       (fn [t]
                                         (put! to-network-c
-                                              (target-close t)))))
+                                              (target-close t)))
+                                      remote-resources))
                     {:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                            target)]
                 (if ch

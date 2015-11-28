@@ -46,7 +46,9 @@
       (swap! all-websockets-for-testing conj ws)
       (swap! clients assoc ws
              [(java.util.UUID/randomUUID)
-              (ws-output-chan ws)]))
+              (ws-output-chan ws)
+              (atom {})
+              (atom {})]))
 
     :on-error
     (fn [ws e] (println e))
@@ -61,7 +63,8 @@
 
     :on-text
     (fn [ws text]
-      (let [[client-id to-network-c] (get @clients ws)
+      (let [[client-id to-network-c
+             local-resources remote-resources] (get @clients ws)
             [target op msg] (read-transit-str
                              text
                              (marshal/read-handlers
@@ -70,12 +73,14 @@
                                 (put! to-network-c (transit-str
                                                     [t :put! v]
                                                     (marshal/write-handlers
-                                                     target->mchannel))))
+                                                     target->mchannel
+                                                     local-resources))))
                               (fn [t]
                                 (put! to-network-c (transit-str
                                                     [t :close!]
                                                     (marshal/write-handlers
-                                                     target->mchannel))))))]
+                                                     target->mchannel))))
+                              remote-resources))]
         (if-let [{:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                         target)]
           (do

@@ -1,12 +1,16 @@
 (ns org.numenta.sanity.bridge.marshalling
-  (:require #?(:clj [clojure.core.async :as async]
-                    :cljs [cljs.core.async :as async])
+  (:require #?(:clj [clojure.core.async :as async :refer [<! put! go go-loop]]
+                    :cljs [cljs.core.async :as async :refer [<! put!]])
             #?(:clj
                [clojure.core.async.impl.protocols :as p]
                :cljs
                [cljs.core.async.impl.protocols :as p])
             [cognitect.transit :as transit])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
+
+#?(:clj
+   (defn random-uuid []
+     (java.util.UUID/randomUUID)))
 
 ;;; ## For message senders / receivers
 
@@ -55,16 +59,35 @@
   [target-id]
   (ChannelWeakMarshal. target-id))
 
+(defrecord BigValueMarshal [resource-id value pushed? released?]
+  PMarshalled
+  (release! [_]
+    (reset! released? true)))
+
+(defn big-value
+  "Put a value in a box labelled 'recipients should cache this so that I don't
+  have to send it every time.'
+
+  When Client B decodes a message containing a BigValueMarshal, it will save the
+  value and tell Client A that it has saved the value. Later, when Client A
+  serializes the same BigValueMarshal to send it to Client B, it will only
+  include the resource-id, and Client B will reinsert the value when it decodes
+  the message.
+
+  Call `release!` on a BigValueMarshal to tell other machines that they can
+  release it.
+
+  All of this assumes that the network code on both clients is using
+  write-handlers and read-handlers that follow this protocol."
+  [value]
+  (BigValueMarshal. (random-uuid) value false (atom false)))
+
 ;;; ## For networking
 
 #?(:cljs
    (defn future [val]
      (reify cljs.core/IDeref
        (-deref [_] val))))
-
-#?(:clj
-   (defn random-uuid []
-     (java.util.UUID/randomUUID)))
 
 (deftype ImpersonateChannel [fput fclose ftake]
   p/ReadPort
@@ -95,7 +118,8 @@
   (close! [_]
     (p/close! ch)))
 
-(defn write-handlers [target->mchannel]
+(defn write-handlers
+  [target->mchannel local-resources]
   {ChannelMarshal (transit/write-handler
                    (fn [_]
                      "ChannelMarshal")
@@ -118,10 +142,43 @@
                        (fn [_]
                          "ChannelWeakMarshal")
                        (fn [wmchannel]
-                         (:target-id wmchannel)))})
+                         (:target-id wmchannel)))
+
+   BigValueMarshal
+   (transit/write-handler
+    (fn [_]
+      "BigValueMarshal")
+    (fn [marshal]
+      (let [{:keys [released? resource-id]} marshal]
+        (when-not @released?
+          (when-not (contains? @local-resources resource-id)
+            (swap! local-resources assoc resource-id marshal)
+            (add-watch released? local-resources
+                       (fn [_ _ _ r?]
+                         (when r?
+                           (remove-watch released? local-resources)
+                           (when-let [ch (get-in @local-resources
+                                                 [resource-id :on-released-c])]
+                             (put! ch [:release]))
+                           (swap! local-resources dissoc resource-id))))))
+        (if (get-in @local-resources [resource-id :pushed?])
+          {:resource-id resource-id}
+          (let [saved-c (async/chan)]
+            (go
+              (when-let [[_ on-released-c-marshal] (<! saved-c)]
+                (swap! local-resources update resource-id
+                       (fn [marshal]
+                         (cond-> (assoc marshal
+                                        :pushed? true)
+                           on-released-c-marshal
+                           (assoc :on-released-c
+                                  (:ch on-released-c-marshal)))))))
+            {:resource-id resource-id
+             :value (:value marshal)
+             :on-saved-c-marshal (channel saved-c true)})))))})
 
 (defn read-handlers
-  [target->mchannel fput fclose]
+  [target->mchannel fput fclose remote-resources]
   {"ChannelMarshal" (transit/read-handler
                      (fn [target-id]
                        (channel
@@ -136,4 +193,27 @@
                          (fn [target-id]
                            (if-let [mchannel (get @target->mchannel target-id)]
                              mchannel
-                             (channel-weak target-id))))})
+                             (channel-weak target-id))))
+
+   "BigValueMarshal"
+   (transit/read-handler
+    (fn [m]
+      (let [{:keys [resource-id on-saved-c-marshal]} m
+            new? (not (contains? @remote-resources resource-id))]
+        (when new?
+          (swap! remote-resources assoc resource-id
+                 (BigValueMarshal. resource-id (:value m) nil nil)))
+        (when on-saved-c-marshal
+          ;; Depending on timing, this may happen multiple
+          ;; times for a single resource. The other machine
+          ;; wants to free up this channel, so always respond.
+          ;; But only give it an on-released channel once.
+          (let [on-released-c-marshal (when new?
+                                        (let [ch (async/chan)]
+                                          (go
+                                            (when-not (nil? (<! ch))
+                                              (swap! remote-resources
+                                                     dissoc resource-id)))
+                                          (channel ch)))]
+            (put! (:ch on-saved-c-marshal) [:saved on-released-c-marshal])))
+        (get @remote-resources resource-id))))})
