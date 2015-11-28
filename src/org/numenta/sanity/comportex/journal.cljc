@@ -80,16 +80,14 @@
                                          (marshal/channel-weak
                                           (get-in steps-mchannel
                                                   [:ch :target-id])))))))
-            (when-let [{viewports ::viewports
-                        steps-mchannel ::steps-mchannel} old-client-info]
+            (when-let [{steps-mchannel ::steps-mchannel} old-client-info]
               (println "JOURNAL: Client reconnected.")
               (when steps-mchannel
                 (println "JOURNAL: Client resubscribed to steps.")
                 (async/tap steps-mult (:ch steps-mchannel)))
               (swap! client-info
                      #(cond-> %
-                        steps-mchannel (assoc ::steps-mchannel steps-mchannel)
-                        viewports (assoc ::viewports viewports)))))
+                        steps-mchannel (assoc ::steps-mchannel steps-mchannel)))))
 
           :consider-future
           (let [[id input {response-c :ch}] xs]
@@ -126,32 +124,22 @@
             (put! response-c
                   [(data/step-template-data @current-model) @capture-options]))
 
-          :register-viewport
-          (let [[viewport {response-c :ch}] xs
-                token (random-uuid)]
-            (swap! client-info update ::viewports assoc token viewport)
-            (put! response-c token))
-
-          :unregister-viewport
-          (let [[token] xs]
-            (swap! client-info update ::viewports dissoc token))
-
           :set-capture-options
           (let [[co] xs]
             (reset! capture-options co))
 
           :get-inbits-cols
-          (let [[id token {response-c :ch}] xs
-                [opts path->ids] (get-in @client-info [::viewports token])]
+          (let [[id viewport {response-c :ch}] xs
+                [opts path->ids] (:value viewport)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/inbits-cols-data htm prev-htm path->ids opts)
                     (id-missing-response id steps-offset))))
 
           :get-ff-in-synapses
-          (let [[id rgn-id lyr-id only-ids trace-back? token
+          (let [[id rgn-id lyr-id only-ids trace-back? viewport
                  {response-c :ch}] xs
-                 [opts] (get-in @client-info [::viewports token])]
+                 [opts] (:value viewport)]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (data/ff-in-synapses-data htm rgn-id lyr-id only-ids
@@ -159,16 +147,16 @@
                     (id-missing-response id steps-offset))))
 
           :get-ff-out-synapses
-          (let [[id sense-id bit token {response-c :ch}] xs
-                [opts] (get-in @client-info [::viewports token])]
+          (let [[id sense-id bit viewport {response-c :ch}] xs
+                [opts] (:value viewport)]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (data/ff-out-synapses-data htm sense-id bit opts)
                     (id-missing-response id steps-offset))))
 
           :get-cells-segments
-          (let [[id rgn-id lyr-id col ci-si token {response-c :ch}] xs
-                [opts] (get-in @client-info [::viewports token])]
+          (let [[id rgn-id lyr-id col ci-si viewport {response-c :ch}] xs
+                [opts] (:value viewport)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (let [types [:distal :apical]]
