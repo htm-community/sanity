@@ -1,5 +1,6 @@
 (ns org.numenta.sanity.bridge.remote
   (:require [cljs.core.async :as async :refer [put! close!]]
+            [cljs.pprint :refer [pprint]]
             [cognitect.transit :as transit]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
@@ -29,6 +30,18 @@
   [target]
   [target :close!])
 
+(def log-messages? (atom false))
+(def log-raw-messages? (atom false))
+(def log-pretty? (atom true))
+
+(defn log
+  [v prefix]
+  (pr prefix)
+  ((if @log-pretty?
+     pprint
+     println) v)
+  v)
+
 (defn connect!
   [connection-id to-network-c on-connect-c ws-url connecting? target->mchannel]
   (let [ws (js/WebSocket. ws-url)
@@ -53,8 +66,11 @@
                                 to-network-c ([v] v)
                                 :priority true)]
                   (when-not (nil? msg)
-                    (let [out (transit-str msg (marshal/write-handlers
-                                                target->mchannel local-resources))
+                    (let [out (cond-> msg
+                                @log-messages? (log "SENDING:")
+                                true (transit-str (marshal/write-handlers
+                                                   target->mchannel local-resources))
+                                @log-raw-messages? (log "SENDING TEXT:"))
                           c (count out)]
                       (when (> c max-message-size)
                         ;; No recovery. Either the max is too low or something
@@ -76,17 +92,19 @@
               (println "WebSocket closed.")))
       (aset "onmessage"
             (fn [evt]
-              (let [[target op msg] (read-transit-str
-                                     (.-data evt)
-                                     (marshal/read-handlers
-                                      target->mchannel
-                                      (fn [t v]
-                                        (put! to-network-c
-                                              (target-put t v)))
-                                      (fn [t]
-                                        (put! to-network-c
-                                              (target-close t)))
-                                      remote-resources))
+              (let [[target op msg] (cond-> (.-data evt)
+                                      @log-raw-messages? (log "RECEIVED TEXT:")
+                                      true (read-transit-str
+                                            (marshal/read-handlers
+                                             target->mchannel
+                                             (fn [t v]
+                                               (put! to-network-c
+                                                     (target-put t v)))
+                                             (fn [t]
+                                               (put! to-network-c
+                                                     (target-close t)))
+                                             remote-resources))
+                                      @log-messages? (log "RECEIVED:"))
                     {:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                            target)]
                 (if ch
@@ -158,3 +176,11 @@
                               connecting? target->mchannel))))
               (when-not (nil? v)
                 (recur)))))))))
+
+(aset js/window "sanityLogMessages" #(swap! log-messages? not))
+(aset js/window "sanityLogRawMessages" #(swap! log-raw-messages? not))
+(aset js/window "sanityLogUgly" #(swap! log-pretty? not))
+
+(js/console.log
+ (str "Call sanityLogMessages() or sanityLogRawMessages() to display websocket "
+      "traffic. Call sanityLogUgly() to condense the output."))
