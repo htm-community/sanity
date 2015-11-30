@@ -577,14 +577,15 @@
                                          (= ci a-sel-ci)
                                          (some :learn-seg? (vals segs)))
                       winner-cell? (contains? (:winner-cells cells-in-col) ci)
-                      cell-state (cond
-                                   (contains? (:active-cells cells-in-col) ci)
-                                   :active
-                                   (contains? (:prior-predicted-cells
-                                               cells-in-col) ci)
-                                   :predicted
-                                   :else
-                                   :inactive)]]
+                      active-cell? (contains? (:active-cells cells-in-col) ci)
+                      predicted-cell? (contains? (:prior-predicted-cells
+                                                  cells-in-col) ci)
+                      cell-state (cond (and active-cell? predicted-cell?)
+                                       :active-predicted
+
+                                       active-cell? :active
+                                       predicted-cell? :predicted
+                                       :else :inactive)]]
           ;; draw the cell itself
           ;; don't duplicate (in apical case)
           (c/text-align ctx :start)
