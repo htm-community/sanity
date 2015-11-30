@@ -10,6 +10,7 @@
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.helpers :as helpers]
             [org.numenta.sanity.bridge.browser :as server]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.data :as data]
             [org.numenta.sanity.util :as utilv]
             [reagent.core :as reagent :refer [atom]]
@@ -160,7 +161,8 @@ fox eat something.
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! main/into-journal [:get-model model-id out-c])
+                     (put! main/into-journal [:get-model model-id
+                                              (marshal/channel out-c)])
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
