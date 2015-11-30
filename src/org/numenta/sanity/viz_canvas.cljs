@@ -466,8 +466,9 @@
                    [ci si])))))))
 
 (defn cells-segments-insertions
-  [sel1 d-segs a-segs opts]
+  [sel1 c-states d-segs a-segs opts]
   (let [{:keys [model-id path bit]} sel1
+        cells-per-column (get-in c-states [model-id path bit :cells-per-column])
         d-segs-by-cell (get-in d-segs [model-id path bit])
         a-segs-by-cell (get-in a-segs [model-id path bit])]
     (when d-segs-by-cell
@@ -475,7 +476,9 @@
               (let [n-segs-by-cell (merge-with
                                     max
                                     (util/remap count d-segs-by-cell)
-                                    (util/remap count a-segs-by-cell))
+                                    (util/remap count a-segs-by-cell)
+                                    (zipmap (range cells-per-column)
+                                            (repeat 0)))
                     space-px (get-in opts
                                      [:drawing
                                       :seg-h-space-px])
@@ -1373,8 +1376,8 @@
                        (when-let [st @step-template]
                          (swap! viz-layouts rebuild-layouts st opts
                                 (cells-segments-insertions
-                                 (peek @selection) @distal-segs @apical-segs
-                                 opts))))))
+                                 (peek @selection) @cell-states @distal-segs
+                                 @apical-segs opts))))))
         (add-watch selection ::update-dt-offsets
                    (fn dt-offsets<-selection [_ _ old-sel sel]
                      (let [dt-sel (:dt (peek sel))]
@@ -1433,14 +1436,16 @@
                      (let [opts @viz-options]
                        (swap! viz-layouts rebuild-layouts @step-template opts
                               (cells-segments-insertions
-                               (peek @selection) d-s @apical-segs opts)))))
+                               (peek @selection) @cell-states d-s @apical-segs
+                               opts)))))
 
         (add-watch apical-segs ::cells-segments-layout
                    (fn [_ _ _ ap-s]
                      (let [opts @viz-options]
                        (swap! viz-layouts rebuild-layouts @step-template opts
                               (cells-segments-insertions
-                               (peek @selection) @distal-segs ap-s opts))))))
+                               (peek @selection) @cell-states @distal-segs ap-s
+                               opts))))))
 
       :component-will-unmount
       (fn [_]
