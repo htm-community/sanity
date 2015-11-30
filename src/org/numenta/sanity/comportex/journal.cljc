@@ -159,11 +159,19 @@
           (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                    (let [lyr (get-in htm [:regions rgn-id lyr-id])
+                          extract-cells #(->> %
+                                              (keep (fn [[column ci]]
+                                                      (when (= col column)
+                                                        ci)))
+                                              (into #{}))]
                       {:cells-per-column (p/layer-depth lyr)
-                       :active-cells (p/active-cells lyr)
-                       :prior-predicted-cells (p/prior-predictive-cells lyr)
-                       :winner-cells (p/winner-cells lyr)})
+                       :active-cells (extract-cells
+                                      (p/active-cells lyr))
+                       :prior-predicted-cells (extract-cells
+                                               (p/prior-predictive-cells lyr))
+                       :winner-cells (extract-cells
+                                      (p/winner-cells lyr))})
                     (id-missing-response id steps-offset))))
 
           :get-column-apical-segments
