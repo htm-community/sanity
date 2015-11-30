@@ -577,7 +577,8 @@
                       cell-state (cond
                                    (contains? (:active-cells cells-in-col) ci)
                                    :active
-                                   (contains? (:predicted-cells cells-in-col) ci)
+                                   (contains? (:prior-predicted-cells
+                                               cells-in-col) ci)
                                    :predicted
                                    :else
                                    :inactive)]]
@@ -1397,7 +1398,8 @@
                                            opts @viewport)
                        (when-not (get-in @cell-states [model-id path bit])
                          (swap! cell-states empty)
-                         (when (= (first path) :regions)
+                         (when (and (= (first path) :regions)
+                                    bit)
                            (let [response-c (async/chan)
                                  [_ rgn-id lyr-id] path]
                              (put! into-journal
@@ -1406,10 +1408,11 @@
                              (go
                                (let [{:keys [cells-per-column winner-cells
                                              active-cells
-                                             predicted-cells]} (<! response-c)]
+                                             prior-predicted-cells]}
+                                     (<! response-c)]
                                  (swap! cell-states assoc-in [model-id path bit]
                                         {:active-cells active-cells
-                                         :predicted-cells predicted-cells
+                                         :prior-predicted-cells prior-predicted-cells
                                          :winner-cells winner-cells
                                          :cells-per-column cells-per-column}))))))
                        (when-not (get-in @distal-segs [model-id path bit])
