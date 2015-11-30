@@ -509,13 +509,36 @@
                  (cond-> (lay/right-px distal-lay)
                    apical-lay (max (lay/right-px apical-lay)))]))})))
 
+(defn choose-selected-seg
+  [segs-by-model sel1 distal?]
+  (let [{:keys [model-id path bit]} sel1
+        [sel-ci sel-si] (get sel1 (if distal?
+                                    :distal-seg
+                                    :apical-seg))]
+    (if (and sel-ci sel-si)
+      [sel-ci sel-si]
+      (let [cands (for [[ci segs] (get-in segs-by-model [model-id path bit])
+                        [si seg] segs]
+                    [[ci si] seg])]
+        (if-let [learning (first (keep (fn [[ci-si seg]]
+                                         (when (:learning? seg)
+                                           ci-si))
+                                       cands))]
+          learning
+          (when-let [[most-active _] (when (not-empty cands)
+                                       (apply max-key
+                                              (fn [[_ seg]]
+                                                (:n-conn-act seg))
+                                              cands))]
+            most-active))))))
+
 (defn draw-cells-segments
   [ctx c-states d-segs d-syns a-segs a-syns steps sel1 layouts opts]
   (c/save ctx)
-  (let [{path :path col :bit model-id :model-id
-         [d-sel-ci d-sel-si] :distal-seg
-         [a-sel-ci a-sel-si] :apical-seg} sel1
-        dt (utilv/index-of steps #(= model-id (:model-id %)))]
+  (let [{path :path col :bit model-id :model-id} sel1
+        dt (utilv/index-of steps #(= model-id (:model-id %)))
+        [d-sel-ci d-sel-si] (choose-selected-seg d-segs sel1 true)
+        [a-sel-ci a-sel-si] (choose-selected-seg a-segs sel1 false)]
     (when dt
       (let [d-segs-by-cell (get-in d-segs [model-id path col])
             a-segs-by-cell (get-in a-segs [model-id path col])
@@ -574,8 +597,7 @@
                 :let [segs (get segs-by-cell ci)
                       [cell-x cell-y] (cell-xy cslay ci)
                       selected-cell? (or (= ci d-sel-ci)
-                                         (= ci a-sel-ci)
-                                         (some :learn-seg? (vals segs)))
+                                         (= ci a-sel-ci))
                       winner-cell? (contains? (:winner-cells cells-in-col) ci)
                       active-cell? (contains? (:active-cells cells-in-col) ci)
                       predicted-cell? (contains? (:prior-predicted-cells
@@ -623,9 +645,8 @@
                         [sel-ci sel-si] (if (= data-key :distal)
                                           [d-sel-ci d-sel-si]
                                           [a-sel-ci a-sel-si])
-                        selected-seg? (or (and (= ci sel-ci)
-                                               (= si sel-si))
-                                          learn-seg?)
+                        selected-seg? (and (= ci sel-ci)
+                                           (= si sel-si))
                         scale-factor (/ seg-w-px stimulus-th)
                         scale #(-> % (* scale-factor) int)
 
@@ -1127,30 +1148,9 @@
   [into-journal syns-atom segs sel1 opts distal?]
   (let [{:keys [model-id path bit]} sel1
         from-segs (case (get-in opts [:distal-synapses :from])
-                    :selected (let [[sel-ci sel-si] (get sel1 (if distal?
-                                                                :distal-seg
-                                                                :apical-seg))]
-                                (if (and sel-ci sel-si)
-                                  [[sel-ci sel-si]]
-                                  (let [cands (for [[ci segs] (get-in segs
-                                                                      [model-id
-                                                                       path bit])
-                                                    [si seg] segs]
-                                                [[ci si] seg])]
-                                    (if-let [learning
-                                             (first
-                                              (keep (fn [[ci-si seg]]
-                                                      (when (:learning? seg)
-                                                        ci-si))
-                                                    cands))]
-                                      [learning]
-                                      (when-let [[most-active _]
-                                                 (when (not-empty cands)
-                                                   (apply max-key
-                                                          (fn [[_ seg]]
-                                                            (:n-conn-act seg))
-                                                          cands))]
-                                        [most-active])))))
+                    :selected (when-let [seg (choose-selected-seg segs sel1
+                                                                  distal?)]
+                                [seg])
                     :all (for [[ci segs] (get-in segs [model-id path bit])
                                [si _] segs]
                            [ci si])
