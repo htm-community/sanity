@@ -174,143 +174,153 @@
           (recur (first more) (next more) path->synapses)
           path->synapses)))))
 
-(defn cells-segments-data
-  "type is :distal or :apical"
-  [htm prev-htm sel-rgn sel-lyr col sel-ci-si type opts]
-  (let [regions (:regions htm)
-        lyr (get-in regions [sel-rgn sel-lyr])
+(defn column-segs
+  "seg-type is :distal or :apical"
+  [htm prev-htm rgn-id lyr-id col seg-type]
+  (let [lyr (get-in htm [:regions rgn-id lyr-id])
         spec (p/params lyr)
-        dspec (get spec type)
+        dspec (get spec seg-type)
         stimulus-th (:stimulus-threshold dspec)
         learning-th (:learn-threshold dspec)
         pcon (:perm-connected dspec)
-        pinit (:perm-init dspec)
-        ac (p/active-cells lyr)
-        prev-pc (p/prior-predictive-cells lyr)
-        on-bits (:on-bits (case type
+        on-bits (:on-bits (case seg-type
                             :distal (:prior-distal-state lyr)
                             :apical (:prior-apical-state lyr)))
         depth (p/layer-depth lyr)
-        learning (case type
+        learning (case seg-type
                    :distal (:distal-learning (:state lyr))
                    :apical (:apical-learning (:state lyr)))
-        seg-up (first (vals (select-keys learning (for [ci (range depth)] [col ci]))))
-        {[_ learn-ci learn-si] :target-id, grow-sources :grow-sources} seg-up
-        winner-cell? (p/winner-cells lyr)
-        sg-key (case type :distal :distal-sg :apical :apical-sg)
+        seg-up (first
+                (vals (select-keys learning
+                                   (for [ci (range depth)]
+                                     [col ci]))))
+        {[_ learn-ci learn-si] :target-id} seg-up
+        sg-key (case seg-type
+                 :distal :distal-sg
+                 :apical :apical-sg)
         segs-by-cell (->> (get lyr sg-key)
                           (all-cell-segments col depth))
         ;; get synapse info from before learning -- so from prev step:
         p-segs-by-cell (when prev-htm
-                         (->> (get-in prev-htm [:regions sel-rgn sel-lyr sg-key])
-                              (all-cell-segments col depth)))
-        source-of-bit (case type
-                        :distal core/source-of-distal-bit
-                        :apical core/source-of-apical-bit)]
+                         (->> (get-in prev-htm [:regions rgn-id lyr-id sg-key])
+                              (all-cell-segments col depth)))]
     (into
      {}
-     (for [[ci segs] (map-indexed vector segs-by-cell)
-           :let [p-segs (nth p-segs-by-cell ci)
-                 cell-id [col ci]
-                 cell-active? (boolean (ac cell-id))
-                 cell-predictive? (boolean (get prev-pc cell-id))
-                 cell-learning? (= ci learn-ci)
+     (for [[ci _] (map-indexed vector segs-by-cell)
+           :let [cell-learning? (= ci learn-ci)
                  ;; need to add an entry for a new segment if just grown
+                 p-segs (nth p-segs-by-cell ci)
                  use-segs (if (and cell-learning? (>= learn-si (count p-segs)))
                             (take (inc learn-si) (concat p-segs (repeat {})))
                             p-segs)]]
+       [ci
+        (into
+         {}
+         (for [[si seg] (map-indexed vector use-segs)
+               :let [grouped-syns (group-synapses seg on-bits pcon)
+                     conn-act (count (grouped-syns [:connected :active]))
+                     conn-tot (+ (count (grouped-syns [:connected :inactive]))
+                                 conn-act)
+                     disc-act (count (grouped-syns [:disconnected :active]))
+                     disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
+                                 disc-act)]]
+           [si
+            {:learn-seg? (and (= ci learn-ci)
+                              (= si learn-si))
+             :n-conn-act conn-act
+             :n-conn-tot conn-tot
+             :n-disc-act disc-act
+             :n-disc-tot disc-tot
+             :stimulus-th stimulus-th
+             :learning-th learning-th}]))]))))
 
-       [ci {:cell-active? cell-active?
-            :cell-predictive? cell-predictive?
-            :cell-state (cond
-                          (and cell-active? cell-predictive?) :active-predicted
-                          cell-predictive? :predicted
-                          cell-active? :active
-                          :else :inactive)
-            :winner-cell? (winner-cell? cell-id)
-            :selected-cell? (if sel-ci-si
-                              (== ci (first sel-ci-si))
-                              cell-learning?)
-            :segments (into
-                       {}
-                       (for [[si seg] (map-indexed vector use-segs)
-                             :let [grouped-syns (group-synapses seg on-bits pcon)
-                                   conn-act (count (grouped-syns [:connected :active]))
-                                   conn-tot (+ (count (grouped-syns [:connected :inactive]))
-                                               conn-act)
-                                   disc-act (count (grouped-syns [:disconnected :active]))
-                                   disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
-                                               disc-act)
-                                   learn-seg? (and cell-learning? (= si learn-si))
-                                   selected-seg? (if sel-ci-si
-                                                   (= [ci si] sel-ci-si)
-                                                   learn-seg?)
+(defn segment-syns
+  [htm prev-htm rgn-id lyr-id col ci si syn-states seg-type]
+  (let [regions (:regions htm)
+        lyr (get-in regions [rgn-id lyr-id])
+        spec (p/params lyr)
+        dspec (get spec seg-type)
+        pcon (:perm-connected dspec)
+        pinit (:perm-init dspec)
+        on-bits (:on-bits (case seg-type
+                            :distal (:prior-distal-state lyr)
+                            :apical (:prior-apical-state lyr)))
+        depth (p/layer-depth lyr)
+        learning (case seg-type
+                   :distal (:distal-learning (:state lyr))
+                   :apical (:apical-learning (:state lyr)))
+        seg-up (first
+                (vals (select-keys learning
+                                   (for [ci (range depth)]
+                                     [col ci]))))
+        {[_ learn-ci learn-si] :target-id
+         grow-sources :grow-sources} seg-up
+        learn-seg? (and (= ci learn-ci)
+                        (= si learn-si))
+        p-segs (-> prev-htm
+                   (get-in [:regions rgn-id lyr-id])
+                   (get (case seg-type
+                          :distal :distal-sg
+                          :apical :apical-sg))
+                   (p/cell-segments [col ci]))
+        seg (if (< si (count p-segs))
+              (nth p-segs si)
+              ;; need to add an entry for a new segment if just grown
+              {})
+        grouped-syns (group-synapses seg on-bits pcon)
+        source-of-bit (case seg-type
+                        :distal core/source-of-distal-bit
+                        :apical core/source-of-apical-bit)
+        grouped-sourced-syns (util/remap
+                              (fn [syns]
+                                (map (fn [[i p]]
+                                       [i
+                                        (source-of-bit
+                                         htm rgn-id lyr-id i)
+                                        p])
+                                     syns))
+                              (assoc grouped-syns
+                                     :growing (when learn-seg?
+                                                (map vector grow-sources
+                                                     (repeat pinit)))))
+        syn-sources (cond-> {}
+                      (:active syn-states)
+                      (assoc :active
+                             (grouped-sourced-syns
+                              [:connected :active]))
 
-                                   do-from (get-in opts [:distal-synapses :from])
-                                   do-disconn? (get-in opts [:distal-synapses :disconnected])
-                                   grouped-sourced-syns
-                                   (util/remap (fn [syns]
-                                                 (map (fn [[i p]]
-                                                        [i
-                                                         (source-of-bit
-                                                          htm sel-rgn sel-lyr i)
-                                                         p])
-                                                      syns))
-                                               (assoc grouped-syns
-                                                      :growing (when learn-seg?
-                                                                 (map vector grow-sources
-                                                                      (repeat pinit)))))]]
-                         [si (cond-> {:learn-seg? learn-seg?
-                                      :selected-seg? selected-seg?
-                                      :n-conn-act conn-act
-                                      :n-conn-tot conn-tot
-                                      :n-disc-act disc-act
-                                      :n-disc-tot disc-tot
-                                      :stimulus-th stimulus-th
-                                      :learning-th learning-th}
-                               (or (= do-from :all)
-                                   (and (= do-from :selected) selected-seg?))
-                               (assoc :syns-by-state
-                                      (->> (cond-> {}
-                                             true
-                                             (assoc :active
-                                                    (grouped-sourced-syns
-                                                     [:connected :active]))
+                      (:inactive-syn syn-states)
+                      (assoc :inactive-syn
+                             (concat (grouped-sourced-syns
+                                      [:connected :inactive])
+                                     (if (:disconnected syn-states)
+                                       (grouped-sourced-syns
+                                        [:disconnected
+                                         :inactive]))))
 
-                                             (get-in opts [:distal-synapses :inactive])
-                                             (assoc :inactive-syn
-                                                    (concat (grouped-sourced-syns
-                                                             [:connected :inactive])
-                                                            (if do-disconn?
-                                                              (grouped-sourced-syns
-                                                               [:disconnected
-                                                                :inactive]))))
+                      (:disconnected syn-states)
+                      (assoc :disconnected
+                             (grouped-sourced-syns
+                              [:disconnected :active]))
 
-                                             do-disconn?
-                                             (assoc :disconnected
-                                                    (grouped-sourced-syns
-                                                     [:disconnected :active]))
+                      (:growing syn-states)
+                      (assoc :growing
+                             (grouped-sourced-syns :growing)))]
+    (->> syn-sources
+         (util/remap (fn [source-info]
+                       (for [[i [src-id src-lyr src-i] p] source-info]
+                         {:src-col
+                          (if src-lyr
+                            (first (p/source-of-bit
+                                    (get-in regions
+                                            [src-id src-lyr])
+                                    src-i))
+                            src-i)
 
-                                             (get-in opts [:distal-synapses :growing])
-                                             (assoc :growing
-                                                    (grouped-sourced-syns :growing)))
-                                           (util/remap (fn [source-info]
-                                                         (for [[i [src-id src-lyr
-                                                                   src-i] p] source-info]
-                                                           (cond-> {:src-col
-                                                                    (if src-lyr
-                                                                      (first (p/source-of-bit
-                                                                              (get-in regions
-                                                                                      [src-id src-lyr])
-                                                                              src-i))
-                                                                      src-i)
-
-                                                                    :src-id src-id
-                                                                    :src-lyr src-lyr
-                                                                    :src-dt 1}
-
-                                                             (get-in opts [:distal-synapses :permanences])
-                                                             (assoc :perm p))))))))]))}]))))
+                          :src-id src-id
+                          :src-lyr src-lyr
+                          :src-dt 1
+                          :perm p}))))))
 
 (defn inbits-cols-data
   [htm prev-htm path->ids opts]

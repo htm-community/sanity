@@ -109,4 +109,24 @@ But the real reason we use Transit is its customizable read-handlers and
 write-handlers. They're how this whole "drawing boxes" / "marshal" approach
 works.
 
+## The messages
+
+For these messages, there's something important to remember: they're not just
+remotely inspecting a data structure. They're inspecting:
+
+- the active cells and columns from the end of the timestep
+- the predicted cells from the beginning of the timestep
+- the segments and synapses that caused these activations
+- the learning that occurred during this timestep
+
+When the client asks you for the synapses at a particular timestep, they're
+looking to you to choose the best data. For example, you'll probably want to
+send the synapse permanences as they were at the beginning of the timestep, not
+at the end. But you might also send the synapse-learning that happened during
+this timestep, so that the client can draw these in a different color
+designating learning.
+
+If you're experimenting with the HTM algorithms, you might go further. Nothing's
+stopping you from showing a synapse reaching back 5 timesteps.
+
 _(This page is currently a draft / dumping ground.)_

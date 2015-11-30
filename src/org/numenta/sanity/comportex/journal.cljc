@@ -154,17 +154,46 @@
                     (data/ff-out-synapses-data htm sense-id bit opts)
                     (id-missing-response id steps-offset))))
 
-          :get-cells-segments
-          (let [[id rgn-id lyr-id col ci-si viewport {response-c :ch}] xs
-                [opts] (:value viewport)]
+
+          :get-column-cells
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [htm (find-model id)]
+                    (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                      {:cells-per-column (p/layer-depth lyr)
+                       :active-cells (p/active-cells lyr)
+                       :prior-predicted-cells (p/prior-predictive-cells lyr)
+                       :winner-cells (p/winner-cells lyr)})
+                    (id-missing-response id steps-offset))))
+
+          :get-column-apical-segments
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (let [types [:distal :apical]]
-                      (zipmap
-                       types
-                       (for [type types]
-                         (data/cells-segments-data htm prev-htm rgn-id lyr-id
-                                                   col ci-si type opts))))
+                    (data/column-segs htm prev-htm rgn-id lyr-id col :apical)
+                    (id-missing-response id steps-offset))))
+
+          :get-column-distal-segments
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [[prev-htm htm] (find-model-pair id)]
+                    (data/column-segs htm prev-htm rgn-id lyr-id col :distal)
+                    (id-missing-response id steps-offset))))
+
+          :get-apical-segment-synapses
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [[prev-htm htm] (find-model-pair id)]
+                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
+                                       syn-states :apical)
+                    (id-missing-response id steps-offset))))
+
+          :get-distal-segment-synapses
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [[prev-htm htm] (find-model-pair id)]
+                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
+                                       syn-states :distal)
                     (id-missing-response id steps-offset))))
 
           :get-details-text

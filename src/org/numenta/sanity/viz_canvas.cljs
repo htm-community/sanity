@@ -391,7 +391,7 @@
   (clicked-seg [this x y]))
 
 (defn cells-segments-layout
-  [cell-segs nsegbycell cells-left h-offset-px v-offset-px opts]
+  [segs-by-cell nsegbycell cells-left h-offset-px v-offset-px opts]
   (let [nsegbycell-pad (map (partial max 1) (vals (sort nsegbycell)))
         nseg-pad (apply + nsegbycell-pad)
         d-opts (:drawing opts)
@@ -403,8 +403,8 @@
         seg-w-px (:seg-w-px d-opts)
         longest-seg-w-px (apply max
                                 0
-                                (for [[_ cell-data] cell-segs
-                                      [_ seg] (:segments cell-data)
+                                (for [[_ segs] segs-by-cell
+                                      [_ seg] segs
                                       :let [{:keys [n-conn-act n-conn-tot
                                                     n-disc-act n-disc-tot
                                                     stimulus-th]} seg
@@ -466,73 +466,79 @@
                    [ci si])))))))
 
 (defn cells-segments-insertions
-  [cells-segs-response opts]
-  (let [[sel1 {d-cell-segs :distal
-               a-cell-segs :apical}] cells-segs-response]
-    (when d-cell-segs
-      (let [{:keys [path]} sel1]
-        {path (fn [left-px]
-                (let [n-segs-by-cell (merge-with
-                                      max
-                                      (util/remap (comp count :segments)
-                                                  d-cell-segs)
-                                      (util/remap (comp count :segments)
-                                                  a-cell-segs))
-                      space-px (get-in opts
-                                       [:drawing
-                                        :seg-h-space-px])
-                      seg-w-px (get-in opts
-                                       [:drawing
-                                        :seg-w-px])
-                      cells-left (+ left-px space-px)
-                      distal-lay (cells-segments-layout d-cell-segs
+  [sel1 d-segs a-segs opts]
+  (let [{:keys [model-id path bit]} sel1
+        d-segs-by-cell (get-in d-segs [model-id path bit])
+        a-segs-by-cell (get-in a-segs [model-id path bit])]
+    (when d-segs-by-cell
+      {path (fn [left-px]
+              (let [n-segs-by-cell (merge-with
+                                    max
+                                    (util/remap count d-segs-by-cell)
+                                    (util/remap count a-segs-by-cell))
+                    space-px (get-in opts
+                                     [:drawing
+                                      :seg-h-space-px])
+                    seg-w-px (get-in opts
+                                     [:drawing
+                                      :seg-w-px])
+                    cells-left (+ left-px space-px)
+                    distal-lay (cells-segments-layout d-segs-by-cell
+                                                      n-segs-by-cell
+                                                      cells-left
+                                                      space-px
+                                                      0
+                                                      opts)
+                    apical-lay (when (first
+                                      (for [[_ segs] a-segs-by-cell
+                                            [_ seg] segs]
+                                        seg))
+                                 (cells-segments-layout a-segs-by-cell
                                                         n-segs-by-cell
                                                         cells-left
-                                                        space-px
-                                                        0
-                                                        opts)
-                      apical-lay (when (first
-                                        (for [[_ cell-data] a-cell-segs
-                                              [_ seg] (:segments cell-data)]
-                                          seg))
-                                   (cells-segments-layout a-cell-segs
-                                                          n-segs-by-cell
-                                                          cells-left
-                                                          (+ space-px
-                                                             seg-w-px
-                                                             space-px)
-                                                          -16
-                                                          opts))]
-                  [(cond-> {[:cells-segments] distal-lay}
-                     apical-lay (assoc [:apical-segments] apical-lay))
-                   (cond-> (lay/right-px distal-lay)
-                     apical-lay (max (lay/right-px apical-lay)))]))}))))
+                                                        (+ space-px
+                                                           seg-w-px
+                                                           space-px)
+                                                        -16
+                                                        opts))]
+                [(cond-> {[:cells-segments] distal-lay}
+                   apical-lay (assoc [:apical-segments] apical-lay))
+                 (cond-> (lay/right-px distal-lay)
+                   apical-lay (max (lay/right-px apical-lay)))]))})))
 
 (defn draw-cells-segments
-  [ctx cells-segs-response steps layouts opts]
+  [ctx c-states d-segs d-syns a-segs a-syns steps sel1 layouts opts]
   (c/save ctx)
-  (let [[sel1 cells-segs] cells-segs-response
-        {col :bit model-id :model-id sel-ci-si :cell-seg} sel1
+  (let [{path :path col :bit model-id :model-id
+         [d-sel-ci d-sel-si] :distal-seg
+         [a-sel-ci a-sel-si] :apical-seg} sel1
         dt (utilv/index-of steps #(= model-id (:model-id %)))]
     (when dt
-      (let [sel-lay (get-in layouts (:path sel1))
+      (let [d-segs-by-cell (get-in d-segs [model-id path col])
+            a-segs-by-cell (get-in a-segs [model-id path col])
+            cells-in-col (get-in c-states [model-id path col])
+            sel-lay (get-in layouts (:path sel1))
             col-d-px (get-in opts [:drawing :col-d-px])
             cell-r-px (get-in opts [:drawing :cell-r-px])
             seg-h-px (get-in opts [:drawing :seg-h-px])
             seg-w-px (get-in opts [:drawing :seg-w-px])
             draw-from (get-in opts [:distal-synapses :from])
+            draw-perm? (get-in opts [:distal-synapses :permanences])
             seg-r-px (* seg-w-px 0.5)]
         ;; background pass
         (doseq [layout-key [:cells-segments :apical-segments]
                 :let [cslay (get layouts layout-key)]
                 :when cslay
-                :let [data-key (case layout-key
-                                 :cells-segments :distal
-                                 :apical-segments :apical)]
-                [ci cell-data] (get cells-segs data-key)
-                :let [{:keys [cell-active?]} cell-data]]
+                :let [[data-key segs-by-cell]
+                      (case layout-key
+                        :cells-segments [:distal d-segs-by-cell]
+                        :apical-segments [:apical a-segs-by-cell])]
+                ci (range (:cells-per-column cells-in-col))
+                :let [segs (get segs-by-cell ci)
+                      cell-active? (contains? (:active-cells cells-in-col)
+                                              ci)]]
           ;; draw background lines to cell from column and from segments
-          (doseq [[si seg] (:segments cell-data)
+          (doseq [[si seg] segs
                   :let [{:keys [n-conn-act stimulus-th]} seg]]
             (c/stroke-style ctx (:background state-colors))
             (c/stroke-width ctx col-d-px)
@@ -557,12 +563,24 @@
         (doseq [layout-key [:cells-segments :apical-segments]
                 :let [cslay (get layouts layout-key)]
                 :when cslay
-                :let [data-key (case layout-key
-                                 :cells-segments :distal
-                                 :apical-segments :apical)]
-                [ci cell-data] (get cells-segs data-key)
-                :let [[cell-x cell-y] (cell-xy cslay ci)
-                      {:keys [selected-cell? winner-cell? cell-state]} cell-data]]
+                :let [[data-key segs-by-cell syns-by-model]
+                      (case layout-key
+                        :cells-segments [:distal d-segs-by-cell d-syns]
+                        :apical-segments [:apical a-segs-by-cell a-syns])]
+                ci (range (:cells-per-column cells-in-col))
+                :let [segs (get segs-by-cell ci)
+                      [cell-x cell-y] (cell-xy cslay ci)
+                      selected-cell? (or (= ci d-sel-ci)
+                                         (= ci a-sel-ci)
+                                         (some :learn-seg? (vals segs)))
+                      winner-cell? (contains? (:winner-cells cells-in-col) ci)
+                      cell-state (cond
+                                   (contains? (:active-cells cells-in-col) ci)
+                                   :active
+                                   (contains? (:predicted-cells cells-in-col) ci)
+                                   :predicted
+                                   :else
+                                   :inactive)]]
           ;; draw the cell itself
           ;; don't duplicate (in apical case)
           (c/text-align ctx :start)
@@ -584,7 +602,7 @@
                                     (if winner-cell? " - winner" ""))
                          :x (+ cell-x 10) :y (- cell-y cell-r-px)}))
           (when (and (= data-key :apical)
-                     (pos? (count (:segments cell-data))))
+                     (pos? (count segs)))
             (let [[sx sy] (seg-xy cslay ci 0)
                   h2 (int (/ seg-h-px 2))]
               (c/fill-style ctx "black")
@@ -592,23 +610,29 @@
                            :x sx :y (- sy h2 5)})))
           ;; draw segments
           (c/text-align ctx :right)
-          (doseq [[si seg] (:segments cell-data)
+          (doseq [[si seg] segs
                   :let [[sx sy] (seg-xy cslay ci si)
-                        {:keys [learn-seg? selected-seg? n-conn-act n-conn-tot
-                                n-disc-act n-disc-tot stimulus-th learning-th
-                                syns-by-state]} seg
-                                scale-factor (/ seg-w-px stimulus-th)
-                                scale #(-> % (* scale-factor) int)
+                        {:keys [learn-seg? n-conn-act n-conn-tot
+                                n-disc-act n-disc-tot
+                                stimulus-th learning-th]} seg
+                        [sel-ci sel-si] (if (= data-key :distal)
+                                          [d-sel-ci d-sel-si]
+                                          [a-sel-ci a-sel-si])
+                        selected-seg? (or (and (= ci sel-ci)
+                                               (= si sel-si))
+                                          learn-seg?)
+                        scale-factor (/ seg-w-px stimulus-th)
+                        scale #(-> % (* scale-factor) int)
 
-                                h2 (int (/ seg-h-px 2))
-                                conn-th-r {:x sx :y (- sy h2)
-                                           :w seg-w-px :h seg-h-px}
-                                conn-tot-r (assoc conn-th-r :w (scale n-conn-tot))
-                                conn-act-r (assoc conn-th-r :w (scale n-conn-act))
-                                disc-th-r {:x sx :y (+ sy h2)
-                                           :w (scale learning-th) :h seg-h-px}
-                                disc-tot-r (assoc disc-th-r :w (scale n-disc-tot))
-                                disc-act-r (assoc disc-th-r :w (scale n-disc-act))]]
+                        h2 (int (/ seg-h-px 2))
+                        conn-th-r {:x sx :y (- sy h2)
+                                   :w seg-w-px :h seg-h-px}
+                        conn-tot-r (assoc conn-th-r :w (scale n-conn-tot))
+                        conn-act-r (assoc conn-th-r :w (scale n-conn-act))
+                        disc-th-r {:x sx :y (+ sy h2)
+                                   :w (scale learning-th) :h seg-h-px}
+                        disc-tot-r (assoc disc-th-r :w (scale n-disc-tot))
+                        disc-act-r (assoc disc-th-r :w (scale n-disc-act))]]
             ;; draw segment as a rectangle
             (when selected-seg?
               (doto ctx
@@ -640,7 +664,8 @@
             (when (or (and (= draw-from :selected)
                            selected-seg?)
                       (= draw-from :all))
-              (doseq [[syn-state syns] syns-by-state]
+              (doseq [[syn-state syns] (get-in syns-by-model [model-id path col
+                                                              ci si])]
                 (c/stroke-style ctx (state-colors syn-state))
                 (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts (if src-lyr
@@ -648,7 +673,8 @@
                                                         [:senses src-id]))
                               [src-x src-y] (element-xy src-lay src-col
                                                         (+ dt src-dt))]]
-                  (when perm (c/alpha ctx perm))
+                  (when draw-perm?
+                    (c/alpha ctx perm))
                   (doto ctx
                     (c/begin-path)
                     (c/move-to sx sy)
@@ -807,7 +833,8 @@
                        (str (:timestep (nth steps dt)))])]))]))})))
 
 (defn draw-viz!
-  [ctx viz-steps ff-synapses-response cells-segs-response layouts sel opts]
+  [ctx viz-steps ff-synapses-response c-states d-segs d-syns a-segs a-syns layouts sel
+   opts]
   (let [s-lays (:senses layouts)
         r-lays (:regions layouts)
 
@@ -932,7 +959,8 @@
 
     (when-let [cslay (:cells-segments layouts)]
       ;; draw selected cells and segments
-      (draw-cells-segments ctx cells-segs-response viz-steps layouts opts))))
+      (draw-cells-segments ctx c-states d-segs d-syns a-segs a-syns viz-steps
+                           (peek sel) layouts opts))))
 
 (def code-key
   {32 :space
@@ -1003,14 +1031,15 @@
         (swap! selection #(conj (empty %) sel1))))
     ;; check cells
     (when ((every-pred sel/layer #(pos? (:bit %))) (peek @selection))
-      (doseq [cslay [(:cells-segments layouts)
-                     (:apical-segments layouts)]
+      (doseq [[layout-key sel-key] [[:cells-segments :distal-seg]
+                                    [:apical-segments :apical-seg]]
+              :let [cslay (get layouts layout-key)]
               :when cslay]
         (when-let [[ci si] (clicked-seg cslay x y)]
           (reset! hit? true)
           (swap! selection #(conj (pop %)
                                   (assoc (peek %)
-                                         :cell-seg [ci si]))))))
+                                         sel-key [ci si]))))))
     (when-not (or append? @hit?)
       ;; checked all, nothing clicked
       (swap! selection sel/clear))))
@@ -1019,6 +1048,8 @@
   (reset! viz-layouts
           (init-layouts step-template @viz-options)))
 
+;; TODO passing the viewport everywhere is goofy now that it's not a token.
+;; e.g. it contains a copy of the viz-options.
 (defn fetch-ff-synapses!
   [into-journal ff-synapses-response sel opts viewport]
   (let [;; dt may be outdated when this is consumed
@@ -1058,25 +1089,6 @@
                                 viewport (marshal/channel response-c true)])
             true))))))
 
-(defn fetch-cells-segments!
-  [into-journal cells-segs-response sel viewport]
-  (when-not (and (= (count sel) 1)
-                 (let [sel1 (peek sel)
-                       {:keys [path bit model-id cell-seg]} sel1
-                       [rgn-id lyr-id] (sel/layer sel1)]
-                   (when (and rgn-id bit)
-                     (let [response-c (async/chan)]
-                       (go
-                         ;; dt may be outdated at this point
-                         (reset! cells-segs-response [(dissoc sel1 :dt)
-                                                      (<! response-c)]))
-                       (put! into-journal
-                             [:get-cells-segments model-id rgn-id lyr-id bit
-                              cell-seg viewport
-                              (marshal/channel response-c true)])
-                       true))))
-    (reset! cells-segs-response nil)))
-
 (defn fetch-inbits-cols!
   [into-journal steps-data steps viewport]
   (doseq [step steps
@@ -1086,6 +1098,80 @@
                         (marshal/channel response-c true)])
     (go
       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
+
+(defn fetch-segs!
+  [into-journal segs-atom sel1 distal?]
+  (let [{:keys [model-id bit path]} sel1]
+    (when (and (= (first path) :regions)
+               bit)
+      (let [response-c (async/chan)
+            [_ rgn-id lyr-id] path]
+        (put! into-journal
+              [(if distal?
+                 :get-column-distal-segments
+                 :get-column-apical-segments)
+               model-id rgn-id lyr-id bit
+               (marshal/channel response-c true)])
+        (go
+          (let [segs-by-cell (<! response-c)]
+            (swap! segs-atom assoc-in
+                   [model-id path bit]
+                   segs-by-cell)))))))
+
+(defn fetch-missing-syns!
+  [into-journal syns-atom segs sel1 opts distal?]
+  (let [{:keys [model-id path bit]} sel1
+        from-segs (case (get-in opts [:distal-synapses :from])
+                    :selected (let [[sel-ci sel-si] (get sel1 (if distal?
+                                                                :distal-seg
+                                                                :apical-seg))]
+                                (if (and sel-ci sel-si)
+                                  [[sel-ci sel-si]]
+                                  (let [cands (for [[ci segs] (get-in segs
+                                                                      [model-id
+                                                                       path bit])
+                                                    [si seg] segs]
+                                                [[ci si] seg])]
+                                    (if-let [learning
+                                             (first
+                                              (keep (fn [[ci-si seg]]
+                                                      (when (:learning? seg)
+                                                        ci-si))
+                                                    cands))]
+                                      [learning]
+                                      (when-let [[most-active _]
+                                                 (when (not-empty cands)
+                                                   (apply max-key
+                                                          (fn [[_ seg]]
+                                                            (:n-conn-act seg))
+                                                          cands))]
+                                        [most-active])))))
+                    :all (for [[ci segs] (get-in segs [model-id path bit])
+                               [si _] segs]
+                           [ci si])
+                    :none [])
+        get-inactive? (get-in opts [:distal-synapses :inactive])
+        get-disconnected? (get-in opts [:distal-synapses :disconnected])
+        syn-states (cond-> #{:active}
+                     get-inactive? (conj :inactive-syn)
+                     get-disconnected? (conj :disconnected))
+        [_ rgn-id lyr-id] path]
+    (doseq [[ci si] from-segs
+            :let [saved-syns (get-in @syns-atom [model-id path bit ci si])]
+            :when (or (not saved-syns)
+                      (and get-inactive? (not (:inactive-syn saved-syns)))
+                      (and get-disconnected? (not (:disconnected saved-syns))))
+            :let [response-c (async/chan)]]
+      (put! into-journal
+            [(if distal?
+               :get-distal-segment-synapses
+               :get-apical-segment-synapses)
+             model-id rgn-id lyr-id bit ci si syn-states
+             (marshal/channel response-c true)])
+      (go
+        (let [syns-by-state (<! response-c)]
+          (swap! syns-atom assoc-in [model-id path bit ci si]
+                 syns-by-state))))))
 
 (defn set-viewport!
   [viewport layouts opts]
@@ -1131,7 +1217,16 @@
   [_ steps selection step-template viz-options into-viz into-sim into-journal]
   (let [steps-data (atom {})
         ff-synapses-response (atom nil)
-        cells-segs-response (atom nil)
+
+        ;; model-id -> path -> col -> data
+        cell-states (atom {})
+        ;; model-id -> path -> col -> cell-index -> segs
+        distal-segs (atom {})
+        apical-segs (atom {})
+        ;; model-id -> path -> col -> cell-index -> seg-index -> syns-by-state
+        distal-syns (atom {})
+        apical-syns (atom {})
+
         viz-layouts (atom nil)
         viewport (atom nil)
         into-viz (or into-viz (async/chan))
@@ -1199,7 +1294,9 @@
                                                              <= next-idx)))))]
                         (swap! selection #(conj (pop %)
                                                 (assoc (peek %)
-                                                       :bit next-bit))))))
+                                                       :bit next-bit
+                                                       :distal-seg nil
+                                                       :apical-seg nil))))))
           :bit-down (let [{:keys [path bit]} (peek @selection)
                           lay (get-in @viz-layouts path)
                           order (:order lay)
@@ -1212,7 +1309,9 @@
                                      nil)]
                       (swap! selection #(conj (pop %)
                                               (assoc (peek %)
-                                                     :bit next-bit))))
+                                                     :bit next-bit
+                                                     :distal-seg nil
+                                                     :apical-seg nil))))
           :scroll-down (let [[apply-to-all?] xs]
                          (scroll! viz-layouts viz-options
                                   (if apply-to-all?
@@ -1234,11 +1333,16 @@
       (fn [_]
         (add-watch viewport ::fetch-everything
                    (fn fetch-everything [_ _ _ v]
-                     (fetch-inbits-cols! into-journal steps-data @steps v)
-                     (fetch-ff-synapses! into-journal ff-synapses-response
-                                         @selection @viz-options v)
-                     (fetch-cells-segments! into-journal cells-segs-response
-                                            @selection v)))
+                     (let [sel @selection
+                           sel1 (peek sel)
+                           opts @viz-options]
+                       (fetch-inbits-cols! into-journal steps-data @steps v)
+                       (fetch-ff-synapses! into-journal ff-synapses-response
+                                           sel opts v)
+                       (fetch-missing-syns! into-journal distal-syns
+                                            @distal-segs sel1 opts true)
+                       (fetch-missing-syns! into-journal apical-syns
+                                            @apical-segs sel1 opts false))))
         (when @step-template
           (absorb-step-template @step-template viz-options viz-layouts)
           (set-viewport! viewport @viz-layouts @viz-options)
@@ -1267,37 +1371,83 @@
                                  (:drawing old-opts))
                        (when-let [st @step-template]
                          (swap! viz-layouts rebuild-layouts st opts
-                                (cells-segments-insertions @cells-segs-response
-                                                           opts))))))
+                                (cells-segments-insertions
+                                 (peek @selection) @distal-segs @apical-segs
+                                 opts))))))
         (add-watch selection ::update-dt-offsets
                    (fn dt-offsets<-selection [_ _ old-sel sel]
                      (let [dt-sel (:dt (peek sel))]
                        (when (not= dt-sel (:dt (peek old-sel)))
                          (update-dt-offsets! viz-layouts dt-sel @viz-options)))))
-        (add-watch selection ::syns-segments
+        (add-watch distal-segs ::missing-syns
+                   (fn [_ _ _ d-s]
+                     (fetch-missing-syns! into-journal distal-syns d-s
+                                          (peek @selection) @viz-options true)))
+        (add-watch apical-segs ::missing-syns
+                   (fn [_ _ _ a-s]
+                     (fetch-missing-syns! into-journal apical-syns a-s
+                                          (peek @selection) @viz-options false)))
+        (add-watch selection ::fetch-selection-change
                    (fn fetch-selection-change [_ _ _ sel]
-                     (fetch-ff-synapses! into-journal ff-synapses-response sel
-                                         @viz-options @viewport)
-                     (fetch-cells-segments! into-journal cells-segs-response
-                                            sel @viewport)))
+                     (let [opts @viz-options
+                           {:keys [bit model-id path cell
+                                   distal-seg apical-seg]
+                            :as sel1} (peek sel)]
+                       (fetch-ff-synapses! into-journal ff-synapses-response sel
+                                           opts @viewport)
+                       (when-not (get-in @cell-states [model-id path bit])
+                         (swap! cell-states empty)
+                         (when (= (first path) :regions)
+                           (let [response-c (async/chan)
+                                 [_ rgn-id lyr-id] path]
+                             (put! into-journal
+                                   [:get-column-cells model-id rgn-id lyr-id bit
+                                    (marshal/channel response-c true)])
+                             (go
+                               (let [{:keys [cells-per-column winner-cells
+                                             active-cells
+                                             predicted-cells]} (<! response-c)]
+                                 (swap! cell-states assoc-in [model-id path bit]
+                                        {:active-cells active-cells
+                                         :predicted-cells predicted-cells
+                                         :winner-cells winner-cells
+                                         :cells-per-column cells-per-column}))))))
+                       (when-not (get-in @distal-segs [model-id path bit])
+                         (swap! distal-segs empty)
+                         (swap! distal-syns empty)
+                         (fetch-segs! into-journal distal-segs sel1 true))
+                       (when-not (get-in @apical-segs [model-id path bit])
+                         (swap! apical-segs empty)
+                         (swap! distal-syns empty)
+                         (fetch-segs! into-journal apical-segs sel1 false))
+                       (fetch-missing-syns! into-journal distal-syns
+                                            @distal-segs sel1 opts true)
+                       (fetch-missing-syns! into-journal apical-syns
+                                            @apical-segs sel1 opts false))))
 
-        (add-watch cells-segs-response ::cells-segments-layout
-                   (fn [_ _ _ csr]
+        (add-watch distal-segs ::cells-segments-layout
+                   (fn [_ _ _ d-s]
                      (let [opts @viz-options]
                        (swap! viz-layouts rebuild-layouts @step-template opts
-                              (cells-segments-insertions csr opts))))))
+                              (cells-segments-insertions
+                               (peek @selection) d-s @apical-segs opts)))))
+
+        (add-watch apical-segs ::cells-segments-layout
+                   (fn [_ _ _ ap-s]
+                     (let [opts @viz-options]
+                       (swap! viz-layouts rebuild-layouts @step-template opts
+                              (cells-segments-insertions
+                               (peek @selection) @distal-segs ap-s opts))))))
 
       :component-will-unmount
       (fn [_]
         (remove-watch steps ::init-caches-and-request-data)
-        (remove-watch viewport ::fetch-everything)
         (remove-watch viz-options ::viewport)
         (remove-watch viz-layouts ::viewport)
         (remove-watch step-template ::absorb-step-template)
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)
-        (remove-watch selection ::syns-segments)
-        (remove-watch cells-segs-response ::cells-segments-layout)
+        (remove-watch selection ::fetch-selection-change)
         (async/close! teardown-c))
 
       :display-name "viz-canvas"
@@ -1356,15 +1506,16 @@
                    :on-click #(viz-click % @steps selection
                                          @viz-layouts))
             width height
-            [selection steps steps-data ff-synapses-response
-             cells-segs-response viz-layouts viz-options]
+            [selection steps steps-data ff-synapses-response cell-states
+             distal-segs distal-syns apical-segs apical-syns viz-layouts
+             viz-options]
             (fn [ctx]
               (let [viz-steps (make-viz-steps @steps @steps-data)
                     opts @viz-options]
                 (when (should-draw? viz-steps opts)
-                  (draw-viz! ctx viz-steps @ff-synapses-response
-                             @cells-segs-response @viz-layouts
-                             @selection opts))))]]))})))
+                  (draw-viz! ctx viz-steps @ff-synapses-response @cell-states
+                             @distal-segs @distal-syns @apical-segs
+                             @apical-syns @viz-layouts @selection opts))))]]))})))
 
 (defn inbits-display [dims state->bits d-opts]
   (let [d-opts (assoc d-opts :draw-steps 1)
