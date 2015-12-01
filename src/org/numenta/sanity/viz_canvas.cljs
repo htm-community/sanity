@@ -521,7 +521,7 @@
                         [si seg] segs]
                     [[ci si] seg])]
         (if-let [learning (first (keep (fn [[ci-si seg]]
-                                         (when (:learning? seg)
+                                         (when (:learn-seg? seg)
                                            ci-si))
                                        cands))]
           learning
