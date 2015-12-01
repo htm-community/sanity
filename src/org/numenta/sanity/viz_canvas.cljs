@@ -1157,9 +1157,11 @@
                     :none [])
         get-inactive? (get-in opts [:distal-synapses :inactive])
         get-disconnected? (get-in opts [:distal-synapses :disconnected])
+        get-growing? (get-in opts [:distal-synapses :growing])
         syn-states (cond-> #{:active}
                      get-inactive? (conj :inactive-syn)
-                     get-disconnected? (conj :disconnected))
+                     get-disconnected? (conj :disconnected)
+                     get-growing? (conj :growing))
         [_ rgn-id lyr-id] path]
     (doseq [[ci si] from-segs
             :let [saved-syns (get-in @syns-atom [model-id path bit ci si])]
