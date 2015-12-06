@@ -12,7 +12,7 @@
 
 ;;; ## Journal data
 
-(def into-journal (async/chan))
+(def into-journal (async/chan 65536))
 
 ;;; ## Viz data
 

@@ -568,7 +568,7 @@
              [:div.panel-body
               [:div "(selected column) "
                [:select {:field :list
-                         :id :distal-synapses.from}
+                         :id :distal-synapses.to}
                 [:option {:key :all} "all cell segments"]
                 [:option {:key :selected} "selected segment"]
                 [:option {:key :none} "none"]
