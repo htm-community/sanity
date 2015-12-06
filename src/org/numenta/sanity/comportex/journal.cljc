@@ -24,7 +24,25 @@
                                 :let [[selector _] (get-in htm [:sensors
                                                                 sense-id])
                                       v (p/extract selector input-value)]]
-                            [sense-id v]))}))
+                            [sense-id v]))
+     :senses (into
+              {}
+              (for [sense-id (core/sense-keys htm)
+                    :let [sense (get-in htm [:senses sense-id])]]
+                [sense-id {:active-bits (set (data/active-bits sense))}]))
+     :regions (into
+               {}
+               (for [rgn-id (core/region-keys htm)
+                     :let [rgn (get-in htm [:regions rgn-id])]]
+                 [rgn-id
+                  (into
+                   {}
+                   (for [lyr-id (core/layers rgn)
+                         :let [lyr (get rgn lyr-id)]]
+                     [lyr-id {:active-columns (p/active-columns lyr)
+                              :pred-columns (->> (p/prior-predictive-cells lyr)
+                                                 (map first)
+                                                 (distinct))}]))]))}))
 
 (defn id-missing-response
   [id steps-offset]
@@ -136,24 +154,12 @@
                     (data/inbits-cols-data htm prev-htm path->ids opts)
                     (id-missing-response id steps-offset))))
 
-          :get-ff-in-synapses
-          (let [[id rgn-id lyr-id only-ids trace-back? viewport
-                 {response-c :ch}] xs
-                 [opts] (:value viewport)]
+          :get-proximal-synapses-by-source-bit
+          (let [[id sense-id bit syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (data/ff-in-synapses-data htm rgn-id lyr-id only-ids
-                                              trace-back? opts)
+                    (data/syns-from-source-bit htm sense-id bit syn-states)
                     (id-missing-response id steps-offset))))
-
-          :get-ff-out-synapses
-          (let [[id sense-id bit viewport {response-c :ch}] xs
-                [opts] (:value viewport)]
-            (put! response-c
-                  (if-let [htm (find-model id)]
-                    (data/ff-out-synapses-data htm sense-id bit opts)
-                    (id-missing-response id steps-offset))))
-
 
           :get-column-cells
           (let [[id rgn-id lyr-id col {response-c :ch}] xs]
@@ -188,6 +194,13 @@
                     (data/column-segs htm prev-htm rgn-id lyr-id col :distal)
                     (id-missing-response id steps-offset))))
 
+          :get-column-proximal-segments
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [[prev-htm htm] (find-model-pair id)]
+                    (data/column-segs htm prev-htm rgn-id lyr-id col :proximal)
+                    (id-missing-response id steps-offset))))
+
           :get-apical-segment-synapses
           (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
             (put! response-c
@@ -202,6 +215,14 @@
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
                                        syn-states :distal)
+                    (id-missing-response id steps-offset))))
+
+          :get-proximal-segment-synapses
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [[prev-htm htm] (find-model-pair id)]
+                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
+                                       syn-states :proximal)
                     (id-missing-response id steps-offset))))
 
           :get-details-text

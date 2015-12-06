@@ -38,144 +38,43 @@
           0
           (range depth)))
 
-(defn ff-out-synapses-data
-  [htm sense-id bit opts]
-  (let [do-inactive? (get-in opts [:ff-synapses :inactive])
-        do-predictive? (get-in opts [:ff-synapses :predicted])
-        do-perm? (get-in opts [:ff-synapses :permanences])
-        active-bit? (->> (active-bits (get-in htm [:senses sense-id]))
+(defn syns-from-source-bit
+  [htm sense-id bit syn-states]
+  (let [active-bit? (->> (active-bits (get-in htm [:senses sense-id]))
                          (some (partial = bit))
                          boolean)]
-    (into
-     {}
-     (for [rgn-id (get-in htm [:fb-deps sense-id])
-           :let [rgn (get-in htm [:regions rgn-id])
-                 [lyr-id] (core/layers rgn)
-                 lyr (get rgn lyr-id)
-                 sg (:proximal-sg lyr)
-                 adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
-                                 bit)
-                 to-segs (p/targets-connected-from sg adjusted-bit)
-                 predictive-columns (->> (p/prior-predictive-cells lyr)
-                                         (map first)
-                                         (into #{}))]
-           [col _ _ :as seg-path] to-segs
-           :let [predictive-col? (contains? predictive-columns col)]
-           :when (or do-inactive?
-                     (and do-predictive? predictive-col?)
-                     active-bit?)
-           :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
-       [[rgn-id lyr-id col] [(cond-> {:src-id sense-id
-                                      :src-col bit
-                                      :syn-state (if active-bit?
-                                                   (if predictive-col?
-                                                     :active-predicted
-                                                     :active)
-                                                   (if predictive-col?
-                                                     :predicted
-                                                     :inactive-syn))}
-                               do-perm? (assoc :perm
-                                               (get (p/in-synapses sg seg-path)
-                                                    adjusted-bit)))]]))))
-
-(defn ff-in-synapses-data
-  [htm rgn-id lyr-id only-ids trace-back? opts]
-  (let [do-growing? (get-in opts [:ff-synapses :growing])
-        do-inactive? (get-in opts [:ff-synapses :inactive])
-        do-disconn? (get-in opts [:ff-synapses :disconnected])
-        do-perm? (get-in opts [:ff-synapses :permanences])
-        syn-states (concat (when do-disconn? [:disconnected])
-                           (when do-inactive? [:inactive-syn])
-                           [:active :active-predicted]
-                           (when do-growing? [:growing]))
-        regions (:regions htm)
-        ;; need to know which layers have input across regions
-        input-layer? (into #{} (map (fn [[rgn-id rgn]]
-                                      [rgn-id (first (core/layers rgn))])
-                                    regions))
-        ;; need to know the output layer of each region
-        output-layer (into {} (map (fn [[rgn-id rgn]]
-                                     [rgn-id (last (core/layers rgn))])
-                                   regions))
-        this-rgn (get regions rgn-id)
-        this-lyr (get this-rgn lyr-id)
-        to-cols (if (coll? only-ids)
-                  only-ids
-                  (p/active-columns this-lyr))
-        this-paths (map #(vector rgn-id lyr-id %) to-cols)]
-
-    ;; trace ff connections downwards
-    (loop [path (first this-paths)
-           more (rest this-paths)
-           path->synapses {}]
-      (if (and path (not (contains? path->synapses path)))
-        (let [[rgn-id lyr-id col] path
-              lyr (get-in regions [rgn-id lyr-id])
-              in-bits (:in-ff-bits (:state lyr))
-              in-sbits (:in-stable-ff-bits (:state lyr))
-              sg (:proximal-sg lyr)
-              prox-learning (:proximal-learning (:state lyr))
-              seg-up (get prox-learning [col 0])
-              {learn-seg-path :target-id, grow-sources :grow-sources} seg-up
-              this-seg-path (or learn-seg-path [col 0 0])
-              all-syns (p/in-synapses sg this-seg-path)
-              conn-syns (select-keys all-syns
-                                     (p/sources-connected-to sg this-seg-path))
-
-              syns-to-draw
-              (for [syn-state syn-states
-                    :let [sub-syns
-                          (case syn-state
-                            :active (select-keys conn-syns in-bits)
-                            :active-predicted (select-keys conn-syns in-sbits)
-                            :inactive-syn (if do-disconn?
-                                            (apply dissoc all-syns in-bits)
-                                            (apply dissoc conn-syns in-bits))
-                            :disconnected (-> (apply dissoc all-syns
-                                                     (keys conn-syns))
-                                              (select-keys in-bits))
-                            :growing (select-keys conn-syns grow-sources))]
-                    [i perm] sub-syns
-                    :let [[src-id src-lyr src-i]
-                          (if (input-layer? [rgn-id lyr-id])
-                            ;; input from another region
-                            (let [[src-id src-i]
-                                  (core/source-of-incoming-bit htm rgn-id i :ff-deps)]
-                              [src-id (output-layer src-id) src-i])
-                            ;; input from another layer in same region (hardcoded)
-                            [rgn-id :layer-4 i])
-
-                          src-col (if src-lyr
-                                    (first (p/source-of-bit
-                                            (get-in regions [src-id src-lyr])
-                                            src-i))
-                                    src-i)]]
-                (cond-> {:src-id src-id
-                         :src-col src-col
-                         :src-dt 0
-                         :syn-state syn-state}
-                  do-perm? (assoc :perm perm)
-                  src-lyr (assoc :src-lyr src-lyr)))]
-          (recur (first more)
-                 (if trace-back?
-                   (->> syns-to-draw
-                        (map (fn [{:keys [src-id src-lyr src-col]}]
-                               (when src-lyr
-                                 ;; source is a cell not an input bit, so continue
-                                 ;; tracing
-                                 [src-id src-lyr src-col])))
-                        (remove nil?)
-                        (into (next more)))
-                   (next more))
-                 (assoc path->synapses
-                        path syns-to-draw)))
-        ;; go on to next
-        (if (not-empty more)
-          (recur (first more) (next more) path->synapses)
-          path->synapses)))))
+    (for [rgn-id (get-in htm [:fb-deps sense-id])
+          :let [rgn (get-in htm [:regions rgn-id])
+                [lyr-id] (core/layers rgn)
+                lyr (get rgn lyr-id)
+                sg (:proximal-sg lyr)
+                adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
+                                bit)
+                to-segs (p/targets-connected-from sg adjusted-bit)
+                predictive-columns (->> (p/prior-predictive-cells lyr)
+                                        (map first)
+                                        (into #{}))]
+          [col _ _ :as seg-path] to-segs
+          :let [predictive-col? (contains? predictive-columns col)]
+          :when (or (contains? syn-states :inactive)
+                    (and (contains? syn-states :predicted)
+                         predictive-col?)
+                    active-bit?)
+          :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
+      {:target-id rgn-id
+       :target-lyr lyr-id
+       :target-col col
+       :target-dt 0
+       :syn-state (if active-bit?
+                    (if predictive-col?
+                      :active-predicted
+                      :active)
+                    (if predictive-col?
+                      :predicted
+                      :inactive-syn))
+       :perm perm})))
 
 (defn column-segs
-  "seg-type is :distal or :apical"
   [htm prev-htm rgn-id lyr-id col seg-type]
   (let [lyr (get-in htm [:regions rgn-id lyr-id])
         spec (p/params lyr)
@@ -183,21 +82,24 @@
         stimulus-th (:stimulus-threshold dspec)
         learning-th (:learn-threshold dspec)
         pcon (:perm-connected dspec)
-        on-bits (:on-bits (case seg-type
-                            :distal (:prior-distal-state lyr)
-                            :apical (:prior-apical-state lyr)))
+        on-bits (case seg-type
+                  :apical (get-in lyr [:prior-apical-state :on-bits])
+                  :distal (get-in lyr [:prior-distal-state :on-bits])
+                  :proximal (get-in lyr [:state :in-ff-bits]))
         depth (p/layer-depth lyr)
         learning (case seg-type
-                   :distal (:distal-learning (:state lyr))
-                   :apical (:apical-learning (:state lyr)))
+                   :apical (get-in lyr [:state :apical-learning])
+                   :distal (get-in lyr [:state :distal-learning])
+                   :proximal (get-in lyr [:state :proximal-learning]))
         seg-up (first
                 (vals (select-keys learning
                                    (for [ci (range depth)]
                                      [col ci]))))
         {[_ learn-ci learn-si] :target-id} seg-up
         sg-key (case seg-type
+                 :apical :apical-sg
                  :distal :distal-sg
-                 :apical :apical-sg)
+                 :proximal :proximal-sg)
         segs-by-cell (->> (get lyr sg-key)
                           (all-cell-segments col depth))
         ;; get synapse info from before learning -- so from prev step:
@@ -242,13 +144,15 @@
         dspec (get spec seg-type)
         pcon (:perm-connected dspec)
         pinit (:perm-init dspec)
-        on-bits (:on-bits (case seg-type
-                            :distal (:prior-distal-state lyr)
-                            :apical (:prior-apical-state lyr)))
+        on-bits (case seg-type
+                  :apical (get-in lyr [:prior-apical-state :on-bits])
+                  :distal (get-in lyr [:prior-distal-state :on-bits])
+                  :proximal (get-in lyr [:state :in-ff-bits]))
         depth (p/layer-depth lyr)
         learning (case seg-type
-                   :distal (:distal-learning (:state lyr))
-                   :apical (:apical-learning (:state lyr)))
+                   :apical (get-in lyr [:state :apical-learning])
+                   :distal (get-in lyr [:state :distal-learning])
+                   :proximal (get-in lyr [:state :proximal-learning]))
         seg-up (first
                 (vals (select-keys learning
                                    (for [ci (range depth)]
@@ -260,17 +164,37 @@
         p-segs (-> prev-htm
                    (get-in [:regions rgn-id lyr-id])
                    (get (case seg-type
+                          :apical :apical-sg
                           :distal :distal-sg
-                          :apical :apical-sg))
+                          :proximal :proximal-sg))
                    (p/cell-segments [col ci]))
         seg (if (< si (count p-segs))
               (nth p-segs si)
               ;; need to add an entry for a new segment if just grown
               {})
+        ;; need to know which layers have input across regions
+        input-layer? (into #{} (map (fn [[rgn-id rgn]]
+                                      [rgn-id (first (core/layers rgn))])
+                                    regions))
+        ;; need to know the output layer of each region
+        output-layer (into {} (map (fn [[rgn-id rgn]]
+                                     [rgn-id (last (core/layers rgn))])
+                                   regions))
         grouped-syns (group-synapses seg on-bits pcon)
         source-of-bit (case seg-type
+                        :apical core/source-of-apical-bit
                         :distal core/source-of-distal-bit
-                        :apical core/source-of-apical-bit)
+                        :proximal
+                        (fn [htm rgn-id lyr-id i]
+                          (if (input-layer? [rgn-id lyr-id])
+                            ;; input from another region
+                            (let [[src-id src-i]
+                                  (core/source-of-incoming-bit htm rgn-id i
+                                                               :ff-deps)]
+                              [src-id (output-layer src-id) src-i])
+                            ;; input from another layer in same region
+                            ;; (hardcoded)
+                            [rgn-id :layer-4 i])))
         grouped-sourced-syns (util/remap
                               (fn [syns]
                                 (map (fn [[i p]]
@@ -305,7 +229,11 @@
 
                       (:growing syn-states)
                       (assoc :growing
-                             (grouped-sourced-syns :growing)))]
+                             (grouped-sourced-syns :growing)))
+        dt (case seg-type
+             :apical 1
+             :distal 1
+             :proximal 0)]
     (->> syn-sources
          (util/remap (fn [source-info]
                        (for [[i [src-id src-lyr src-i] p] source-info]
@@ -319,7 +247,7 @@
 
                           :src-id src-id
                           :src-lyr src-lyr
-                          :src-dt 1
+                          :src-dt dt
                           :perm p}))))))
 
 (defn inbits-cols-data
@@ -334,9 +262,6 @@
                         prev-ff-rgn (when (pos? (p/size (p/ff-topology sense)))
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
               [sense-id (cond-> {}
-                          (get-in opts [:inbits :active])
-                          (assoc :active-bits (set (active-bits sense)))
-
                           (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
                           (assoc :pred-bits-alpha
                                  (let [start (core/ff-base htm ff-rgn-id
@@ -400,18 +325,6 @@
                                                 (map #(min 1.0
                                                            (float (/ % 16.0))))
                                                 (zipmap cols-subset)))
-
-                                    ;; Always include, needed for sorting.
-                                    ;; Check [:columns :active] before drawing.
-                                    true
-                                    (assoc :active-columns
-                                           (p/active-columns lyr))
-
-                                    (get-in opts [:columns :predictive])
-                                    (assoc :pred-columns
-                                           (->> (p/prior-predictive-cells lyr)
-                                                (map first)
-                                                (distinct)))
 
                                     (get-in opts [:columns :temporal-pooling])
                                     (assoc :tp-columns
