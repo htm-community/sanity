@@ -1139,9 +1139,24 @@
       ;; checked all, nothing clicked
       (swap! selection sel/clear))))
 
-(defn absorb-step-template [step-template viz-options viz-layouts]
+(defn on-onscreen-bits-changed!
+  [cached-onscreen-bits layouts]
+  (assert (not-empty layouts))
+  (let [paths (grid-layout-paths layouts)
+        path->ids-onscreen (zipmap paths
+                                   (->> (map (partial get-in layouts) paths)
+                                        (map lay/ids-onscreen)))]
+    (swap! cached-onscreen-bits
+           (fn [ob]
+             (when ob
+               (marshal/release! ob))
+             (marshal/big-value path->ids-onscreen)))))
+
+(defn absorb-step-template
+  [step-template viz-options viz-layouts cached-onscreen-bits]
   (reset! viz-layouts
-          (init-layouts step-template @viz-options)))
+          (init-layouts step-template @viz-options))
+  (on-onscreen-bits-changed! cached-onscreen-bits @viz-layouts))
 
 (defn fetch-ff-syns-by-source!
   [into-journal proximal-syns-by-source steps sel opts]
@@ -1172,14 +1187,27 @@
         (swap! proximal-syns-by-source assoc-in [model-id path src-bit] syns)))))
 
 (defn fetch-inbits-cols!
-  [into-journal steps-data steps viewport]
-  (doseq [step steps
-          :let [model-id (:model-id step)
-                response-c (async/chan)]]
-    (put! into-journal [:get-inbits-cols model-id viewport
-                        (marshal/channel response-c true)])
-    (go
-      (swap! steps-data assoc-in [step :inbits-cols] (<! response-c)))))
+  [into-journal steps-data steps opts c-onscreen-bits]
+  (let [fetches (into #{} (remove nil?)
+                      [(when (get-in opts [:inbits :predicted])
+                         :pred-bits-alpha)
+                       (when (get-in opts [:columns :overlaps])
+                         :overlaps-columns-alpha)
+                       (when (get-in opts [:columns :boosts])
+                         :boost-columns-alpha)
+                       (when (get-in opts [:columns :active-freq])
+                         :active-freq-columns-alpha)
+                       (when (get-in opts [:columns :n-segments])
+                         :n-segments-columns-alpha)
+                       (when (get-in opts [:columns :temporal-pooling])
+                         :tp-columns)])]
+   (doseq [step steps
+           :let [model-id (:model-id step)
+                 response-c (async/chan)]]
+     (put! into-journal [:get-inbits-cols model-id fetches c-onscreen-bits
+                         (marshal/channel response-c true)])
+     (go
+       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c))))))
 
 ;; `seen-col-paths` is an atom shared between the parallel recursive go blocks
 (defn fetch-segs-traceback!
@@ -1281,20 +1309,6 @@
     (fetch-segs-traceback! into-journal segs-atom syns-atom (atom #{}) col-paths
                            seg-type syn-states segs-decider trace-back?)))
 
-;; TODO passing the viewport everywhere is goofy now that it's not a token.
-;; e.g. it contains a copy of the viz-options.
-(defn set-viewport!
-  [viewport layouts opts]
-  (assert (not-empty layouts))
-  (let [paths (grid-layout-paths layouts)
-        path->ids-onscreen (zipmap paths
-                                   (->> (map (partial get-in layouts) paths)
-                                        (map lay/ids-onscreen)))]
-    (swap! viewport (fn [vp]
-                      (when vp
-                        (marshal/release! vp))
-                      (marshal/big-value [opts path->ids-onscreen])))))
-
 ;; A "viz-step" is a step with viz-canvas-specific data added.
 (defn make-viz-step
   [step steps-data]
@@ -1305,7 +1319,7 @@
   (map make-viz-step steps (repeat steps-data)))
 
 (defn absorb-new-steps!
-  [steps-v steps-data into-journal viewport]
+  [steps-v steps-data into-journal opts c-onscreen-bits]
   (let [new-steps (->> steps-v
                        (remove (partial contains?
                                         @steps-data)))]
@@ -1313,8 +1327,8 @@
            #(into (select-keys % steps-v) ;; remove old steps
                   (for [step new-steps] ;; insert new caches
                     [step {:cache (atom {})}])))
-    (when viewport
-      (fetch-inbits-cols! into-journal steps-data new-steps viewport))))
+    (fetch-inbits-cols! into-journal steps-data new-steps opts
+                        c-onscreen-bits)))
 
 (defn ids-onscreen-changed?
   [before after]
@@ -1341,7 +1355,7 @@
         proximal-syns-by-source (atom {})
 
         viz-layouts (atom nil)
-        viewport (atom nil)
+        cached-onscreen-bits (atom nil)
         into-viz (or into-viz (async/chan))
         teardown-c (async/chan)]
     (go-loop []
@@ -1443,34 +1457,31 @@
     (reagent/create-class
      {:component-will-mount
       (fn [_]
-        (add-watch viewport ::fetch-everything
-                   (fn fetch-everything [_ _ _ v]
-                     (let [sel @selection
-                           sel1 (peek sel)
-                           opts @viz-options]
-                       (fetch-inbits-cols! into-journal steps-data @steps v))))
         (when @step-template
-          (absorb-step-template @step-template viz-options viz-layouts)
-          (set-viewport! viewport @viz-layouts @viz-options)
+          (absorb-step-template @step-template viz-options viz-layouts
+                                cached-onscreen-bits)
           (when (not-empty @steps)
-            (absorb-new-steps! @steps steps-data into-journal @viewport)))
+            (absorb-new-steps! @steps steps-data into-journal @viz-options
+                               @cached-onscreen-bits)))
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
-                     (absorb-new-steps! xs steps-data into-journal @viewport)))
-        (add-watch viz-options ::viewport
-                   (fn viewport<-opts [_ _ _ opts]
-                     (when @viz-layouts
-                       (set-viewport! viewport @viz-layouts opts))))
-        (add-watch viz-layouts ::viewport
-                   (fn viewport<-layouts [_ _ prev layouts]
+                     (absorb-new-steps! xs steps-data into-journal @viz-options
+                                        @cached-onscreen-bits)))
+        (add-watch viz-layouts ::onscreen-bits
+                   (fn onscreen-bits<-layouts [_ _ prev layouts]
                      (when (and prev
                                 (ids-onscreen-changed? prev layouts))
-                       (set-viewport! viewport layouts @viz-options))))
+                       (on-onscreen-bits-changed! cached-onscreen-bits
+                                                  layouts))))
+        (add-watch cached-onscreen-bits ::fetch-bits
+                   (fn on-onscreen-bits-change [_ _ _ cob]
+                     (fetch-inbits-cols! into-journal steps-data @steps
+                                         @viz-options cob)))
         (add-watch step-template ::absorb-step-template
                    (fn step-template-changed [_ _ _ template]
-                     (absorb-step-template template viz-options viz-layouts)
-                     (set-viewport! viewport @viz-layouts @viz-options)))
+                     (absorb-step-template template viz-options viz-layouts
+                                           cached-onscreen-bits)))
         (add-watch viz-options ::rebuild-layouts
                    (fn layouts<-viz-options [_ _ old-opts opts]
                      (when (not= (:drawing opts)
@@ -1547,6 +1558,12 @@
                                       @steps [sel1] opts :apical)))))
         (add-watch viz-options ::fetches
                    (fn [_ _ old-opts opts]
+                     (when (or (not= (:inbits old-opts)
+                                     (:inbits opts))
+                               (not= (:columns old-opts)
+                                     (:columns opts)))
+                       (fetch-inbits-cols! into-journal steps-data @steps opts
+                                           @cached-onscreen-bits))
                      (when (not= (:ff-synapses old-opts)
                                  (:ff-synapses opts))
                        (swap! proximal-segs empty)
@@ -1584,8 +1601,6 @@
       :component-will-unmount
       (fn [_]
         (remove-watch steps ::init-caches-and-request-data)
-        (remove-watch viz-options ::viewport)
-        (remove-watch viz-layouts ::viewport)
         (remove-watch step-template ::absorb-step-template)
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)

@@ -147,11 +147,11 @@
             (reset! capture-options co))
 
           :get-inbits-cols
-          (let [[id viewport {response-c :ch}] xs
-                [opts path->ids] (:value viewport)]
+          (let [[id fetches onscreen-bits-marshal {response-c :ch}] xs
+                path->ids (:value onscreen-bits-marshal)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/inbits-cols-data htm prev-htm path->ids opts)
+                    (data/inbits-cols-data htm prev-htm path->ids fetches)
                     (id-missing-response id steps-offset))))
 
           :get-proximal-synapses-by-source-bit

@@ -251,7 +251,7 @@
                           :perm p}))))))
 
 (defn inbits-cols-data
-  [htm prev-htm path->ids opts]
+  [htm prev-htm path->ids fetches]
   {:senses (into
             {}
             (for [sense-id (core/sense-keys htm)
@@ -262,7 +262,7 @@
                         prev-ff-rgn (when (pos? (p/size (p/ff-topology sense)))
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
               [sense-id (cond-> {}
-                          (and (get-in opts [:inbits :predicted]) prev-ff-rgn)
+                          (and (contains? fetches :pred-bits-alpha) prev-ff-rgn)
                           (assoc :pred-bits-alpha
                                  (let [start (core/ff-base htm ff-rgn-id
                                                            sense-id)
@@ -288,7 +288,7 @@
                                     lyr (get rgn lyr-id)
                                     spec (p/params lyr)]]
                           [lyr-id (cond-> {}
-                                    (get-in opts [:columns :overlaps])
+                                    (contains? fetches :overlaps-columns-alpha)
                                     (assoc :overlaps-columns-alpha
                                            (->> (:col-overlaps (:state lyr))
                                                 (reduce-kv (fn [m [col _ _] v]
@@ -301,7 +301,7 @@
                                                 (util/remap #(min 1.0
                                                                   (float (/ % 16))))))
 
-                                    (get-in opts [:columns :boosts])
+                                    (contains? fetches :boost-columns-alpha)
                                     (assoc :boost-columns-alpha
                                            (->> (:boosts lyr)
                                                 (map
@@ -310,13 +310,13 @@
                                                 (map float)
                                                 (zipmap (range))))
 
-                                    (get-in opts [:columns :active-freq])
+                                    (contains? fetches :active-freq-columns-alpha)
                                     (assoc :active-freq-columns-alpha
                                            (->> (:active-duty-cycles lyr)
                                                 (map #(min 1.0 (* 2 %)))
                                                 (zipmap (range))))
 
-                                    (get-in opts [:columns :n-segments])
+                                    (contains? fetches :n-segments-columns-alpha)
                                     (assoc :n-segments-columns-alpha
                                            (->> cols-subset
                                                 (map #(count-segs-in-column
@@ -326,7 +326,7 @@
                                                            (float (/ % 16.0))))
                                                 (zipmap cols-subset)))
 
-                                    (get-in opts [:columns :temporal-pooling])
+                                    (contains? fetches :tp-columns)
                                     (assoc :tp-columns
                                            (->> (p/temporal-pooling-cells lyr)
                                                 (map first)))
