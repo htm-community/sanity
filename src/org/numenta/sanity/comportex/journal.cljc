@@ -80,34 +80,34 @@
                               (swap! client-infos assoc client-id v)
                               v))]
         (case command
-          :ping
+          "ping"
           nil
 
-          :client-disconnect
+          "client-disconnect"
           (do
             (println "JOURNAL: Client disconnected.")
-            (async/untap steps-mult (:ch (::steps-mchannel @client-info))))
+            (async/untap steps-mult (:ch (:steps-mchannel @client-info))))
 
-          :connect
+          "connect"
           (let [[old-client-info {subscriber-c :ch}] xs]
             (add-watch client-info ::push-to-client
                        (fn [_ _ _ v]
                          (put! subscriber-c
-                               (update v ::steps-mchannel
+                               (update v :steps-mchannel
                                        (fn [steps-mchannel]
                                          (marshal/channel-weak
                                           (get-in steps-mchannel
                                                   [:ch :target-id])))))))
-            (when-let [{steps-mchannel ::steps-mchannel} old-client-info]
+            (when-let [{steps-mchannel :steps-mchannel} old-client-info]
               (println "JOURNAL: Client reconnected.")
               (when steps-mchannel
                 (println "JOURNAL: Client resubscribed to steps.")
                 (async/tap steps-mult (:ch steps-mchannel)))
               (swap! client-info
                      #(cond-> %
-                        steps-mchannel (assoc ::steps-mchannel steps-mchannel)))))
+                        steps-mchannel (assoc :steps-mchannel steps-mchannel)))))
 
-          :consider-future
+          "consider-future"
           (let [[id input {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
@@ -119,14 +119,14 @@
                                  (map core/column-state-freqs)))
                     (id-missing-response id steps-offset))))
 
-          :decode-predictive-columns
+          "decode-predictive-columns"
           (let [[id sense-id n {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (core/predictions htm sense-id n)
                     (id-missing-response id steps-offset))))
 
-          :get-steps
+          "get-steps"
           (let [[{response-c :ch}] xs]
             (put! response-c
                   [(data/step-template-data @current-model)
@@ -134,19 +134,19 @@
                                                           (range)))
                         vec)]))
 
-          :subscribe
+          "subscribe"
           (let [[steps-mchannel {response-c :ch}] xs]
             (async/tap steps-mult (:ch steps-mchannel))
-            (swap! client-info assoc ::steps-mchannel steps-mchannel)
+            (swap! client-info assoc :steps-mchannel steps-mchannel)
             (println "JOURNAL: Client subscribed to steps.")
             (put! response-c
                   [(data/step-template-data @current-model) @capture-options]))
 
-          :set-capture-options
+          "set-capture-options"
           (let [[co] xs]
             (reset! capture-options co))
 
-          :get-inbits-cols
+          "get-inbits-cols"
           (let [[id fetches onscreen-bits-marshal {response-c :ch}] xs
                 path->ids (:value onscreen-bits-marshal)]
             (put! response-c
@@ -154,15 +154,18 @@
                     (data/inbits-cols-data htm prev-htm path->ids fetches)
                     (id-missing-response id steps-offset))))
 
-          :get-proximal-synapses-by-source-bit
-          (let [[id sense-id bit syn-states {response-c :ch}] xs]
+          "get-proximal-synapses-by-source-bit"
+          (let [[id sense-id bit syn-states {response-c :ch}] xs
+                sense-id (keyword sense-id)]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (data/syns-from-source-bit htm sense-id bit syn-states)
                     (id-missing-response id steps-offset))))
 
-          :get-column-cells
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-column-cells"
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])
@@ -180,60 +183,74 @@
                                       (p/winner-cells lyr))})
                     (id-missing-response id steps-offset))))
 
-          :get-column-apical-segments
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-column-apical-segments"
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :apical)
                     (id-missing-response id steps-offset))))
 
-          :get-column-distal-segments
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-column-distal-segments"
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :distal)
                     (id-missing-response id steps-offset))))
 
-          :get-column-proximal-segments
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-column-proximal-segments"
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :proximal)
                     (id-missing-response id steps-offset))))
 
-          :get-apical-segment-synapses
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-apical-segment-synapses"
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
                                        syn-states :apical)
                     (id-missing-response id steps-offset))))
 
-          :get-distal-segment-synapses
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-distal-segment-synapses"
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
                                        syn-states :distal)
                     (id-missing-response id steps-offset))))
 
-          :get-proximal-segment-synapses
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-proximal-segment-synapses"
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
                                        syn-states :proximal)
                     (id-missing-response id steps-offset))))
 
-          :get-details-text
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-details-text"
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (org.numenta.sanity.comportex.details/detail-text
                      htm prev-htm rgn-id lyr-id col)
                     (id-missing-response id steps-offset))))
 
-          :get-model
+          "get-model"
           (let [[id {response-c :ch} as-str?] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
@@ -241,7 +258,7 @@
                       as-str? pr-str)
                     (id-missing-response id steps-offset))))
 
-          :get-column-state-freqs
+          "get-column-state-freqs"
           (let [[id {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
@@ -253,33 +270,38 @@
                                  (core/column-state-freqs layer-id))]))
                     (id-missing-response id steps-offset))))
 
-          :get-cell-excitation-data
-          (let [[id region-key layer-id sel-col {response-c :ch}] xs]
+          "get-cell-excitation-data"
+          (let [[id rgn-id lyr-id sel-col {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (let [[prev-htm htm] (find-model-pair id)]
                     (if prev-htm
-                      (data/cell-excitation-data htm prev-htm region-key
-                                                 layer-id sel-col)
+                      (data/cell-excitation-data htm prev-htm rgn-id lyr-id
+                                                 sel-col)
                       (id-missing-response id steps-offset)))))
 
-          :get-cells-by-state
-          (let [[id region-key layer-id {response-c :ch}] xs]
+          "get-cells-by-state"
+          (let [[id rgn-id lyr-id {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (let [layer (get-in htm [:regions region-key layer-id])]
+                    (let [layer (get-in htm [:regions rgn-id lyr-id])]
                       {:winner-cells (p/winner-cells layer)
                        :active-cells (p/active-cells layer)
                        :pred-cells (p/predictive-cells layer)
                        :engaged? (get-in layer [:state :engaged?])})
                     (id-missing-response id steps-offset))))
 
-          :get-transitions-data
-          (let [[id region-key layer-id cell-sdr-fracs
-                 {response-c :ch}] xs]
+          "get-transitions-data"
+          (let [[id rgn-id lyr-id cell-sdr-fracs
+                 {response-c :ch}] xs
+                rgn-id (keyword rgn-id)
+                lyr-id (keyword lyr-id)]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (data/transitions-data htm region-key layer-id
-                                           cell-sdr-fracs)
+                    (data/transitions-data htm rgn-id lyr-id cell-sdr-fracs)
                     (id-missing-response id steps-offset)))))))))
 
 (defn init

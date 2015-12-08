@@ -168,7 +168,7 @@
         out-c (async/chan)
         model-id (:model-id step)]
     (put! main/into-journal
-          [:consider-future model-id candidate (marshal/channel out-c true)])
+          ["consider-future" model-id candidate (marshal/channel out-c true)])
     (go
       (let [[[_ col-state-freqs]] (seq (<! out-c))]
         (swap! step->scores assoc-in [step consumption]
@@ -319,7 +319,7 @@
                          :let [out-c (async/chan)
                                model-id (:model-id step)]]
                    (put! main/into-journal
-                         [:decode-predictive-columns model-id
+                         ["decode-predictive-columns" model-id
                           :power-consumption @n-predictions
                           (marshal/channel out-c true)])
                    (when @try-boundaries?

@@ -32,7 +32,7 @@ websocket. Every message arriving on the websocket is a string that contains a
 vector. The vector generally looks like:
 
 ~~~clojure
-`[target-id :put! msg]`
+`["put!" target-id msg]`
 ~~~
 
 Clients and servers send messages to each others' targets, usually by wrapping a
@@ -40,11 +40,10 @@ Clients and servers send messages to each others' targets, usually by wrapping a
 from. Clients and servers tell each other about their own target-ids, but the
 process needs to be jumpstarted somehow. The client needs to know about at least
 one server target a priori. This is sometimes hardcoded (the Sanity runner knows
-to expect an `:into-journal` and an `:into-sim` target) and other times is
-injected into a webpage (the Sanity notebook hosts an arbitrary number of
-journals in one webpage, so it generates a uniquely named equivelent to
-`:into-journal` on every `viz`). New targets are generated all the time and are
-sent inside of `msg`s.
+to expect a `journal` and a `simulation` target) and other times is injected
+into a webpage (the Sanity notebook hosts an arbitrary number of journals in one
+webpage, so it generates a uniquely named equivelent to `journal` on every
+`viz`). New targets are generated all the time and are sent inside of `msg`s.
 
 The `msg` is arbitrary large. It is often a vector containing a command and
 arguments, and other times it's a response to a specific request or

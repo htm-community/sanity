@@ -3,6 +3,7 @@
             [cljs.pprint :refer [pprint]]
             [cognitect.transit :as transit]
             [org.numenta.sanity.bridge.marshalling :as marshal]
+            [org.numenta.sanity.util :refer [keywordize-keys* stringify-keys*]]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
                                                   map->TwoDTopology
                                                   map->ThreeDTopology]])
@@ -14,21 +15,21 @@
 
 (defn transit-str
   [m extra-handlers]
-  (-> (transit/writer :json {:handlers extra-handlers})
+  (-> (transit/writer marshal/encoding {:handlers extra-handlers})
       (transit/write m)))
 
 (defn read-transit-str
   [s extra-handlers]
-  (-> (transit/reader :json {:handlers extra-handlers})
+  (-> (transit/reader marshal/encoding {:handlers extra-handlers})
       (transit/read s)))
 
 (defn target-put
   [target v]
-  [target :put! v])
+  ["put!" target (stringify-keys* v)])
 
 (defn target-close
   [target]
-  [target :close!])
+  ["close!" target])
 
 (def log-messages? (atom false))
 (def log-raw-messages? (atom false))
@@ -92,7 +93,7 @@
               (println "WebSocket closed.")))
       (aset "onmessage"
             (fn [evt]
-              (let [[target op msg] (cond-> (.-data evt)
+              (let [[op target msg] (cond-> (.-data evt)
                                       @log-raw-messages? (log "RECEIVED TEXT:")
                                       true (read-transit-str
                                             (marshal/read-handlers
@@ -104,6 +105,7 @@
                                                (put! to-network-c
                                                      (target-close t)))
                                              remote-resources))
+                                      true keywordize-keys*
                                       @log-messages? (log "RECEIVED:"))
                     {:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                            target)]
@@ -111,11 +113,11 @@
                   (do (when single-use?
                         (marshal/release! mchannel))
                       (case op
-                        :put! (do
+                        "put!" (do
                                 ;; enumerate lazy tree
                                 ;; (dorun (tree-seq coll? seq msg))
                                 (put! ch msg))
-                        :close! (close! ch)))
+                        "close!" (close! ch)))
                   (do
                     (println "UNRECOGNIZED TARGET" target)
                     (println "Known targets:" @target->mchannel)))))))))
@@ -160,7 +162,7 @@
                                      (not= @connection-id
                                            @last-seen-connection-id))
                              (put! to-network-c
-                                   (target-put t [:connect @reconnect-blob
+                                   (target-put t ["connect" @reconnect-blob
                                                   blob-resets-cproxy]))
                              (reset! last-seen-connection-id @connection-id))
                            (if-not (nil? v)

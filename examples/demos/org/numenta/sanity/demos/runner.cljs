@@ -38,13 +38,13 @@
         into-journal main/into-journal
         pipe-to-remote-target! (remote/init ws-url)
         features (into #{} (map keyword) feature-list)]
-    (pipe-to-remote-target! :into-journal into-journal)
-    (pipe-to-remote-target! :into-sim (tap-c into-sim-mult))
+    (pipe-to-remote-target! "journal" into-journal)
+    (pipe-to-remote-target! "simulation" (tap-c into-sim-mult))
 
     (go-loop []
       (when-not (nil? (<! into-sim-eavesdrop))
         ;; Ensure the journal is still connected, resubscribing if needed.
-        (put! into-journal [:ping])
+        (put! into-journal ["ping"])
         (recur)))
 
     (reagent/render [main/sanity-app title nil

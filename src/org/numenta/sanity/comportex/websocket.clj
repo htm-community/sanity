@@ -3,6 +3,7 @@
             [cognitect.transit :as transit]
             [compojure.core :refer [routes GET]]
             [compojure.route :as route]
+            [org.numenta.sanity.util :refer [keywordize-keys* stringify-keys*]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [ring.adapter.jetty9 :as jetty :refer [run-jetty]])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
@@ -10,7 +11,7 @@
 (defn transit-str
   [m extra-handlers]
   (let [out (ByteArrayOutputStream.)
-        writer (transit/writer out :json
+        writer (transit/writer out marshal/encoding
                                {:handlers extra-handlers})]
     (transit/write writer m)
     (.toString out)))
@@ -18,7 +19,7 @@
 (defn read-transit-str
   [text extra-handlers]
   (let [in (-> text (.getBytes "UTF-8") ByteArrayInputStream.)
-        reader (transit/reader in :json {:handlers extra-handlers})]
+        reader (transit/reader in marshal/encoding {:handlers extra-handlers})]
     (transit/read reader)))
 
 (defn ws-output-chan
@@ -58,37 +59,39 @@
       (swap! all-websockets-for-testing disj ws)
       (let [[client-id to-network-c] (get @clients ws)]
         (close! to-network-c)
-        (put! connection-changes-c [[:client-disconnect] client-id]))
+        (put! connection-changes-c [["client-disconnect"] client-id]))
       (swap! clients dissoc ws))
 
     :on-text
     (fn [ws text]
       (let [[client-id to-network-c
              local-resources remote-resources] (get @clients ws)
-            [target op msg] (read-transit-str
+            [op target msg] (read-transit-str
                              text
                              (marshal/read-handlers
                               target->mchannel
                               (fn [t v]
                                 (put! to-network-c (transit-str
-                                                    [t :put! v]
+                                                    ["put!" t
+                                                     (stringify-keys* v)]
                                                     (marshal/write-handlers
                                                      target->mchannel
                                                      local-resources))))
                               (fn [t]
                                 (put! to-network-c (transit-str
-                                                    [t :close!]
+                                                    ["close!" t]
                                                     (marshal/write-handlers
                                                      target->mchannel))))
-                              remote-resources))]
+                              remote-resources))
+            msg (keywordize-keys* msg)]
         (if-let [{:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                         target)]
           (do
             (when single-use?
               (marshal/release! mchannel))
             (case op
-              :put! (put! ch [msg client-id])
-              :close! (close! ch)))
+              "put!" (put! ch [msg client-id])
+              "close!" (close! ch)))
           (do
             (println "ERROR: Unrecognized target" target)
             (println "KNOWN TARGETS:" @target->mchannel)))))

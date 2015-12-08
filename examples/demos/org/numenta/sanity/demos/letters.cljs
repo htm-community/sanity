@@ -62,7 +62,7 @@ Chifung has a friend."))
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! main/into-journal [:get-model model-id
+                     (put! main/into-journal ["get-model" model-id
                                               (marshal/channel out-c true)])
                      (go
                        (reset! selected-htm (<! out-c)))))))

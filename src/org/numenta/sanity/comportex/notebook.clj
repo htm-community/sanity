@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as async]
             [cognitect.transit :as transit]
             [compojure.route :as route]
+            [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.journal :as journal]
             [org.numenta.sanity.comportex.runner :as runner]
             [gorilla-renderable.core :as renderable]
@@ -18,7 +19,7 @@
 (defn transit-str
   [m]
   (let [out (ByteArrayOutputStream.)
-        writer (transit/writer out :json)]
+        writer (transit/writer out marshal/encoding)]
     (transit/write writer m)
     (.toString out)))
 

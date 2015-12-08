@@ -382,21 +382,24 @@
                                    :let [active-syns (:active syns-by-state)]
                                    {:keys [src-id src-lyr src-col]} active-syns
                                    :when src-lyr
-                                   :let [new-path [:regions src-id src-lyr]
+                                   :let [new-path [:regions (keyword src-id)
+                                                   (keyword src-lyr)]
                                          new-col-path [target-model-id new-path
                                                        src-col]]
                                    :when (not (contains? seen-col-paths
                                                          new-col-path))]
                                new-col-path))
-              target-lay (get-in r-lays [target-rgn-id target-lyr-id])
+              target-lay (get-in r-lays [(keyword target-rgn-id)
+                                         (keyword target-lyr-id)])
               dt (utilv/index-of steps #(= target-model-id (:model-id %)))
               [target-x target-y] (element-xy target-lay target-col dt)]
           (doseq [[_ syns-by-seg] syns-by-cell
                   [_ syns-by-state] syns-by-seg
                   [syn-state syns] syns-by-state
                   {:keys [src-id src-col src-lyr src-dt perm]} syns
-                  :let [src-lay (or (get s-lays src-id)
-                                    (get-in r-lays [src-id src-lyr]))
+                  :let [src-lay (or (get s-lays (keyword src-id))
+                                    (get-in r-lays [(keyword src-id)
+                                                    (keyword src-lyr)]))
                         [src-x src-y] (element-xy src-lay src-col
                                                   (+ dt src-dt))]]
             (doto ctx
@@ -422,14 +425,15 @@
             :let [[src-x src-y] (element-xy lay src-bit dt)]
             {:keys [target-id target-col target-lyr target-dt perm
                     syn-state]} syns
-                    :let [target-lay (or (get s-lays target-id)
+                    :let [target-lay (or (get s-lays (keyword target-id))
                                          (get-in r-lays
-                                                 [target-id target-lyr]))
+                                                 [(keyword target-id)
+                                                  (keyword target-lyr)]))
                           [target-x target-y] (element-xy
                                                target-lay target-col
                                                (+ dt target-dt))]]
       (doto ctx
-        (c/stroke-style (state-colors syn-state))
+        (c/stroke-style (state-colors (keyword syn-state)))
         (c/alpha (if do-perm? perm 1))
         (c/begin-path)
         (c/move-to (- target-x 1) target-y) ;; -1 avoid obscuring colour
@@ -762,9 +766,11 @@
                                                               ci si])]
                 (c/stroke-style ctx (state-colors syn-state))
                 (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
-                        :let [src-lay (get-in layouts (if src-lyr
-                                                        [:regions src-id src-lyr]
-                                                        [:senses src-id]))
+                        :let [src-lay (get-in layouts
+                                              (if src-lyr
+                                                [:regions (keyword src-id)
+                                                 (keyword src-lyr)]
+                                                [:senses (keyword src-id)]))
                               [src-x src-y] (element-xy src-lay src-col
                                                         (+ dt src-dt))]]
                   (when draw-perm?
@@ -1142,10 +1148,17 @@
 (defn on-onscreen-bits-changed!
   [cached-onscreen-bits layouts]
   (assert (not-empty layouts))
-  (let [paths (grid-layout-paths layouts)
-        path->ids-onscreen (zipmap paths
-                                   (->> (map (partial get-in layouts) paths)
-                                        (map lay/ids-onscreen)))]
+  (let [path->ids-onscreen (into
+                            {}
+                            (concat
+                             (for [[_ rgn-id lyr-id
+                                    :as path] (layer-layout-paths layouts)]
+                               [[rgn-id lyr-id]
+                                (lay/ids-onscreen (get-in layouts path))])
+                             (for [[_ sense-id
+                                    :as path] (sense-layout-paths layouts)]
+                               [sense-id
+                                (lay/ids-onscreen (get-in layouts path))])))]
     (swap! cached-onscreen-bits
            (fn [ob]
              (when ob
@@ -1175,12 +1188,12 @@
           :let [response-c (async/chan)
                 {do-disconn? :disconnected do-inactive? :inactive
                  do-growing? :growing} (:ff-synapses opts)
-                syn-states (into #{:active :active-predicted :predicted}
-                                 (concat (when do-disconn? [:disconnected])
-                                         (when do-inactive? [:inactive-syn])
-                                         (when do-growing? [:growing])))]]
-    (put! into-journal [:get-proximal-synapses-by-source-bit model-id
-                        sense-id src-bit syn-states
+                syn-states (into #{"active" "active-predicted" "predicted"}
+                                 (concat (when do-disconn? ["disconnected"])
+                                         (when do-inactive? ["inactive-syn"])
+                                         (when do-growing? ["growing"])))]]
+    (put! into-journal ["get-proximal-synapses-by-source-bit" model-id
+                        (name sense-id) src-bit syn-states
                         (marshal/channel response-c true)])
     (go
       (let [syns (<! response-c)]
@@ -1190,21 +1203,21 @@
   [into-journal steps-data steps opts c-onscreen-bits]
   (let [fetches (into #{} (remove nil?)
                       [(when (get-in opts [:inbits :predicted])
-                         :pred-bits-alpha)
+                         "pred-bits-alpha")
                        (when (get-in opts [:columns :overlaps])
-                         :overlaps-columns-alpha)
+                         "overlaps-columns-alpha")
                        (when (get-in opts [:columns :boosts])
-                         :boost-columns-alpha)
+                         "boost-columns-alpha")
                        (when (get-in opts [:columns :active-freq])
-                         :active-freq-columns-alpha)
+                         "active-freq-columns-alpha")
                        (when (get-in opts [:columns :n-segments])
-                         :n-segments-columns-alpha)
+                         "n-segments-columns-alpha")
                        (when (get-in opts [:columns :temporal-pooling])
-                         :tp-columns)])]
+                         "tp-columns")])]
    (doseq [step steps
            :let [model-id (:model-id step)
                  response-c (async/chan)]]
-     (put! into-journal [:get-inbits-cols model-id fetches c-onscreen-bits
+     (put! into-journal ["get-inbits-cols" model-id fetches c-onscreen-bits
                          (marshal/channel response-c true)])
      (go
        (swap! steps-data assoc-in [step :inbits-cols] (<! response-c))))))
@@ -1220,10 +1233,11 @@
     (swap! seen-col-paths conj col-path)
     (put! into-journal
           [(case seg-type
-             :apical :get-column-apical-segments
-             :distal :get-column-distal-segments
-             :proximal :get-column-proximal-segments)
-           model-id rgn-id lyr-id col (marshal/channel response-c true)])
+             :apical "get-column-apical-segments"
+             :distal "get-column-distal-segments"
+             :proximal "get-column-proximal-segments")
+           model-id (name rgn-id) (name lyr-id) col
+           (marshal/channel response-c true)])
     (go
       (let [segs-by-cell (<! response-c)]
         (swap! segs-atom assoc-in col-path segs-by-cell)
@@ -1232,10 +1246,10 @@
                 :let [response2-c (async/chan)]]
           (put! into-journal
                 [(case seg-type
-                   :apical :get-apical-segment-synapses
-                   :distal :get-distal-segment-synapses
-                   :proximal :get-proximal-segment-synapses)
-                 model-id rgn-id lyr-id col ci si syn-states
+                   :apical "get-apical-segment-synapses"
+                   :distal "get-distal-segment-synapses"
+                   :proximal "get-proximal-segment-synapses")
+                 model-id (name rgn-id) (name lyr-id) col ci si syn-states
                  (marshal/channel response-c true)])
           (go
             (let [syns-by-state (<! response-c)]
@@ -1246,7 +1260,8 @@
                       new-cps (for [{:keys [src-id src-lyr src-col]} syns
                                     ;; continue tracing till we reach a sense
                                     :when src-lyr]
-                                [model-id [:regions src-id src-lyr] src-col])]
+                                [model-id [:regions (keyword src-id)
+                                           (keyword src-lyr)] src-col])]
                   (fetch-segs-traceback! into-journal segs-atom syns-atom
                                          seen-col-paths new-cps seg-type
                                          syn-states segs-decider
@@ -1262,10 +1277,10 @@
                                                :apical :distal-synapses
                                                :distal :distal-synapses
                                                :proximal :ff-synapses))
-        syn-states (cond-> #{:active}
-                     get-inactive? (conj :inactive-syn)
-                     get-disconnected? (conj :disconnected)
-                     get-growing? (conj :growing))
+        syn-states (cond-> #{"active"}
+                     get-inactive? (conj "inactive-syn")
+                     get-disconnected? (conj "disconnected")
+                     get-growing? (conj "growing"))
         col-paths (for [{:keys [model-id bit path dt]} sel
                         :when (= (first path) :regions)
                         :let [[_ rgn-id lyr-id] path
@@ -1399,7 +1414,7 @@
                                                              (nth @steps dt)))))))
           :step-forward (if (some #(zero? (:dt %)) @selection)
                           (when (and @step-template into-sim)
-                            (put! into-sim [:step]))
+                            (put! into-sim ["step"]))
                           (swap! selection
                                  #(conj (pop %)
                                         (let [sel1 (peek %)
@@ -1451,7 +1466,7 @@
                                   (map :path @selection))
                                 false))
           :toggle-run (when (and @step-template into-sim)
-                        (put! into-sim [:toggle])))
+                        (put! into-sim ["toggle"])))
         (recur)))
 
     (reagent/create-class
@@ -1532,7 +1547,8 @@
                            (let [response-c (async/chan)
                                  [_ rgn-id lyr-id] path]
                              (put! into-journal
-                                   [:get-column-cells model-id rgn-id lyr-id bit
+                                   ["get-column-cells" model-id (name rgn-id)
+                                    (name lyr-id) bit
                                     (marshal/channel response-c true)])
                              (go
                                (let [{:keys [cells-per-column winner-cells

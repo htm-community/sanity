@@ -161,7 +161,7 @@ fox eat something.
                (fn [_ _ _ [sel]]
                  (when-let [model-id (:model-id sel)]
                    (let [out-c (async/chan)]
-                     (put! main/into-journal [:get-model model-id
+                     (put! main/into-journal ["get-model" model-id
                                               (marshal/channel out-c)])
                      (go
                        (reset! selected-htm (<! out-c)))))))
@@ -361,4 +361,4 @@ fox eat something.
   (reagent/render [main/sanity-app [model-tab] [world-pane] into-sim]
                   (dom/getElement "sanity-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
-  (put! into-sim [:run]))
+  (put! into-sim ["run"]))
