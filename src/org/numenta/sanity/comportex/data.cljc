@@ -83,14 +83,11 @@
         learning-th (:learn-threshold dspec)
         pcon (:perm-connected dspec)
         on-bits (case seg-type
-                  :apical (get-in lyr [:prior-apical-state :on-bits])
-                  :distal (get-in lyr [:prior-distal-state :on-bits])
+                  :apical (get-in lyr [:prior-apical-state :active-bits])
+                  :distal (get-in lyr [:prior-distal-state :active-bits])
                   :proximal (get-in lyr [:state :in-ff-bits]))
         depth (p/layer-depth lyr)
-        learning (case seg-type
-                   :apical (get-in lyr [:state :apical-learning])
-                   :distal (get-in lyr [:state :distal-learning])
-                   :proximal (get-in lyr [:state :proximal-learning]))
+        learning (get-in lyr [:learn-state :learning seg-type])
         seg-up (first
                 (vals (select-keys learning
                                    (for [ci (range depth)]
@@ -145,14 +142,11 @@
         pcon (:perm-connected dspec)
         pinit (:perm-init dspec)
         on-bits (case seg-type
-                  :apical (get-in lyr [:prior-apical-state :on-bits])
-                  :distal (get-in lyr [:prior-distal-state :on-bits])
+                  :apical (get-in lyr [:prior-apical-state :active-bits])
+                  :distal (get-in lyr [:prior-distal-state :active-bits])
                   :proximal (get-in lyr [:state :in-ff-bits]))
         depth (p/layer-depth lyr)
-        learning (case seg-type
-                   :apical (get-in lyr [:state :apical-learning])
-                   :distal (get-in lyr [:state :distal-learning])
-                   :proximal (get-in lyr [:state :proximal-learning]))
+        learning (get-in lyr [:learn-state :learning seg-type])
         seg-up (first
                 (vals (select-keys learning
                                    (for [ci (range depth)]
@@ -335,7 +329,7 @@
                                     (assoc :break?
                                            (-> lyr
                                                (get-in [:prior-distal-state
-                                                        :on-bits])
+                                                        :active-bits])
                                                empty?)))]))]))})
 
 (defn cell-excitation-data

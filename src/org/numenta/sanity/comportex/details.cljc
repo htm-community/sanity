@@ -42,15 +42,15 @@
       (str (sort (p/winner-cells lyr)))
       ""
       "__Proximal learning__"
-      (for [seg-up (sort-by :target-id (vals (:proximal-learning (:state lyr))))]
+      (for [seg-up (->> lyr :learn-state :learning :proximal vals (sort-by :target-id))]
         (str (:target-id seg-up) " " (dissoc seg-up :target-id :operation)))
       ""
       "__Distal learning__"
-      (for [seg-up (sort-by :target-id (vals (:distal-learning (:state lyr))))]
+      (for [seg-up (->> lyr :learn-state :learning :distal vals (sort-by :target-id))]
         (str (:target-id seg-up) " " (dissoc seg-up :target-id :operation)))
       ""
       "__Distal punishments__"
-      (for [seg-up (sort-by :target-id (:distal-punishments (:state lyr)))]
+      (for [seg-up (->> lyr :learn-state :punishments :distal (sort-by :target-id))]
         (str (:target-id seg-up)))
       ""
       "__TP excitation__"
@@ -64,8 +64,8 @@
               ff-pcon (:perm-connected (:proximal (p/params p-lyr)))
               bits (:in-ff-bits (:state lyr))
               sig-bits (:in-stable-ff-bits (:state lyr))
-              d-bits (:on-bits (:prior-distal-state lyr))
-              d-lc-bits (:on-lc-bits (:prior-distal-state lyr))
+              d-bits (:active-bits (:prior-distal-state lyr))
+              d-lbits (:learnable-bits (:prior-distal-state lyr))
               ]
           ["__Column overlap__"
            (str (get (:col-overlaps (:state lyr)) [col 0]))
@@ -99,7 +99,7 @@
                    (str "    " src-k " " src-id
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (to-fixed p 2)
-                        (if (contains? d-lc-bits id) " L"
+                        (if (contains? d-lbits id) " L"
                             (if (contains? d-bits id) " A"))))])
               ])
            ]))
