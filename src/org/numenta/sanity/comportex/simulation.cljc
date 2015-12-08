@@ -42,52 +42,65 @@
                             (swap! client-infos assoc client-id v)
                             v))]
       (case command
-        :client-disconnect (do
-                             (println "SIMULATION: Client disconnected.")
-                             (swap! status-subscribers disj
-                                    (::status-subscriber @client-info)))
-        :connect (let [[old-client-info {subscriber-c :ch}] xs]
-                   (add-watch client-info ::push-to-client
-                              (fn [_ _ _ v]
-                                (put! subscriber-c
-                                      (update v ::status-subscriber
-                                              (fn [subscriber-mchannel]
-                                                (marshal/channel-weak
-                                                 (get-in subscriber-mchannel
-                                                         [:ch :target-id])))))))
-                   (when-let [{subscriber-c :ch} (::status-subscriber
-                                                  old-client-info)]
-                     (println "SIMULATION: Client resubscribed to status.")
-                     (swap! status-subscribers conj subscriber-c)
-                     (swap! client-info assoc ::status-subscriber
-                            subscriber-c)))
-        :step (swap! options update :force-n-steps inc)
-        :set-spec (let [[path v] xs]
-                    (swap! model assoc-in path v))
-        :restart (let [[{response-c :ch}] xs]
-                   (swap! model p/restart)
-                   (put! response-c :done))
-        :toggle (->> (swap! options update :go? not)
-                     (println "SIMULATION TOGGLE. Current timestep:"
-                              (p/timestep @model)))
-        :pause (do
-                 (println "SIMULATION PAUSE. Current timestep:"
-                          (p/timestep @model))
-                 (swap! options assoc :go? false))
-        :run (do
-               (println "SIMULATION RUN. Current timestep:"
-                        (p/timestep @model))
-               (swap! options assoc :go? true))
-        :set-step-ms (let [[t] xs]
-                       (swap! options assoc :step-ms t))
-        :subscribe-to-status (let [[subscriber-mchannel] xs
-                                   subscriber-c (:ch subscriber-mchannel)]
-                               (println
-                                "SIMULATION: Client subscribed to status.")
-                               (swap! status-subscribers conj subscriber-c)
-                               (swap! client-info assoc
-                                      ::status-subscriber subscriber-mchannel)
-                               (put! subscriber-c [@status]))))))
+        "client-disconnect"
+        (do
+          (println "SIMULATION: Client disconnected.")
+          (swap! status-subscribers disj (:sim-status-subscriber @client-info)))
+
+        "connect"
+        (let [[old-client-info {subscriber-c :ch}] xs]
+          (add-watch client-info ::push-to-client
+                     (fn [_ _ _ v]
+                       (put! subscriber-c
+                             (update v :sim-status-subscriber
+                                     (fn [subscriber-mchannel]
+                                       (marshal/channel-weak
+                                        (get-in subscriber-mchannel
+                                                [:ch :target-id])))))))
+          (when-let [{subscriber-c :ch} (:sim-status-subscriber
+                                         old-client-info)]
+            (println "SIMULATION: Client resubscribed to status.")
+            (swap! status-subscribers conj subscriber-c)
+            (swap! client-info assoc :sim-status-subscriber subscriber-c)))
+
+        "step"
+        (swap! options update :force-n-steps inc)
+
+        "set-spec"
+        (let [[path v] xs]
+          (swap! model assoc-in path v))
+
+        "restart"
+        (let [[{response-c :ch}] xs]
+          (swap! model p/restart)
+          (put! response-c :done))
+
+        "toggle"
+        (->> (swap! options update :go? not)
+             (println "SIMULATION TOGGLE. Current timestep:"
+                      (p/timestep @model)))
+
+        "pause"
+        (do
+          (println "SIMULATION PAUSE. Current timestep:" (p/timestep @model))
+          (swap! options assoc :go? false))
+
+        "run"
+        (do
+          (println "SIMULATION RUN. Current timestep:" (p/timestep @model))
+          (swap! options assoc :go? true))
+
+        "set-step-ms"
+        (let [[t] xs]
+          (swap! options assoc :step-ms t))
+
+        "subscribe-to-status"
+        (let [[subscriber-mchannel] xs
+              subscriber-c (:ch subscriber-mchannel)]
+          (println "SIMULATION: Client subscribed to status.")
+          (swap! status-subscribers conj subscriber-c)
+          (swap! client-info assoc :sim-status-subscriber subscriber-mchannel)
+          (put! subscriber-c [@status]))))))
 
 (defn handle-commands [commands model options sim-closed?]
   (let [status (atom (:go? @options))

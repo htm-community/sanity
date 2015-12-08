@@ -56,22 +56,22 @@
                                         (into #{}))]
           [col _ _ :as seg-path] to-segs
           :let [predictive-col? (contains? predictive-columns col)]
-          :when (or (contains? syn-states :inactive)
-                    (and (contains? syn-states :predicted)
+          :when (or (contains? syn-states "inactive")
+                    (and (contains? syn-states "predicted")
                          predictive-col?)
                     active-bit?)
           :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
-      {:target-id rgn-id
-       :target-lyr lyr-id
+      {:target-id (name rgn-id)
+       :target-lyr (name lyr-id)
        :target-col col
        :target-dt 0
        :syn-state (if active-bit?
                     (if predictive-col?
-                      :active-predicted
-                      :active)
+                      "active-predicted"
+                      "active")
                     (if predictive-col?
-                      :predicted
-                      :inactive-syn))
+                      "predicted"
+                      "inactive-syn"))
        :perm perm})))
 
 (defn column-segs
@@ -208,12 +208,12 @@
                                                 (map vector grow-sources
                                                      (repeat pinit)))))
         syn-sources (cond-> {}
-                      (:active syn-states)
+                      (contains? syn-states "active")
                       (assoc :active
                              (grouped-sourced-syns
                               [:connected :active]))
 
-                      (:inactive-syn syn-states)
+                      (contains? syn-states "inactive-syn")
                       (assoc :inactive-syn
                              (concat (grouped-sourced-syns
                                       [:connected :inactive])
@@ -222,12 +222,12 @@
                                         [:disconnected
                                          :inactive]))))
 
-                      (:disconnected syn-states)
+                      (contains? syn-states "disconnected")
                       (assoc :disconnected
                              (grouped-sourced-syns
                               [:disconnected :active]))
 
-                      (:growing syn-states)
+                      (contains? syn-states "growing")
                       (assoc :growing
                              (grouped-sourced-syns :growing)))
         dt (case seg-type
@@ -245,8 +245,8 @@
                                     src-i))
                             src-i)
 
-                          :src-id src-id
-                          :src-lyr src-lyr
+                          :src-id (name src-id)
+                          :src-lyr (when src-lyr (name src-lyr))
                           :src-dt dt
                           :perm p}))))))
 
@@ -255,14 +255,15 @@
   {:senses (into
             {}
             (for [sense-id (core/sense-keys htm)
-                  :let [bits-subset (path->ids [:senses sense-id])
+                  :let [bits-subset (path->ids sense-id)
                         sense (get-in htm [:senses sense-id])
                         ;; region this sense feeds to, for predictions
                         ff-rgn-id (first (get-in htm [:fb-deps sense-id]))
                         prev-ff-rgn (when (pos? (p/size (p/ff-topology sense)))
                                       (get-in prev-htm [:regions ff-rgn-id]))]]
               [sense-id (cond-> {}
-                          (and (contains? fetches :pred-bits-alpha) prev-ff-rgn)
+                          (and (contains? fetches "pred-bits-alpha")
+                               prev-ff-rgn)
                           (assoc :pred-bits-alpha
                                  (let [start (core/ff-base htm ff-rgn-id
                                                            sense-id)
@@ -283,12 +284,11 @@
                [rgn-id (into
                         {}
                         (for [lyr-id (core/layers rgn)
-                              :let [cols-subset (path->ids [:regions rgn-id
-                                                            lyr-id])
+                              :let [cols-subset (path->ids [rgn-id lyr-id])
                                     lyr (get rgn lyr-id)
                                     spec (p/params lyr)]]
                           [lyr-id (cond-> {}
-                                    (contains? fetches :overlaps-columns-alpha)
+                                    (contains? fetches "overlaps-columns-alpha")
                                     (assoc :overlaps-columns-alpha
                                            (->> (:col-overlaps (:state lyr))
                                                 (reduce-kv (fn [m [col _ _] v]
@@ -301,7 +301,7 @@
                                                 (util/remap #(min 1.0
                                                                   (float (/ % 16))))))
 
-                                    (contains? fetches :boost-columns-alpha)
+                                    (contains? fetches "boost-columns-alpha")
                                     (assoc :boost-columns-alpha
                                            (->> (:boosts lyr)
                                                 (map
@@ -310,13 +310,13 @@
                                                 (map float)
                                                 (zipmap (range))))
 
-                                    (contains? fetches :active-freq-columns-alpha)
+                                    (contains? fetches "active-freq-columns-alpha")
                                     (assoc :active-freq-columns-alpha
                                            (->> (:active-duty-cycles lyr)
                                                 (map #(min 1.0 (* 2 %)))
                                                 (zipmap (range))))
 
-                                    (contains? fetches :n-segments-columns-alpha)
+                                    (contains? fetches "n-segments-columns-alpha")
                                     (assoc :n-segments-columns-alpha
                                            (->> cols-subset
                                                 (map #(count-segs-in-column
@@ -326,7 +326,7 @@
                                                            (float (/ % 16.0))))
                                                 (zipmap cols-subset)))
 
-                                    (contains? fetches :tp-columns)
+                                    (contains? fetches "tp-columns")
                                     (assoc :tp-columns
                                            (->> (p/temporal-pooling-cells lyr)
                                                 (map first)))

@@ -118,6 +118,14 @@
   (close! [_]
     (p/close! ch)))
 
+;; Use `:json-verbose` to avoid Transit's caching, which has bugs. For custom
+;; tags, it only writes the first instance of the tag, then uses tags like "^<"
+;; to refer to it later. But with our handlers, with certain combinations of
+;; parameters in a message, e.g. a BigValueMarshal followed by a ChannelMarshal,
+;; this retrieval fails and it will create the wrong type. It might be because
+;; our BigValueMarshal's serialized output contains a ChannelMarshal.
+(def encoding :json-verbose)
+
 (defn write-handlers
   [target->mchannel local-resources]
   {ChannelMarshal (transit/write-handler
@@ -162,7 +170,7 @@
                              (put! ch [:release]))
                            (swap! local-resources dissoc resource-id))))))
         (if (get-in @local-resources [resource-id :pushed?])
-          {:resource-id resource-id}
+          {"resource-id" resource-id}
           (let [saved-c (async/chan)]
             (go
               (when-let [[_ on-released-c-marshal] (<! saved-c)]
@@ -173,9 +181,9 @@
                            on-released-c-marshal
                            (assoc :on-released-c
                                   (:ch on-released-c-marshal)))))))
-            {:resource-id resource-id
-             :value (:value marshal)
-             :on-saved-c-marshal (channel saved-c true)})))))})
+            {"resource-id" resource-id
+             "value" (:value marshal)
+             "on-saved-c-marshal" (channel saved-c true)})))))})
 
 (defn read-handlers
   [target->mchannel fput fclose remote-resources]
@@ -198,11 +206,12 @@
    "BigValueMarshal"
    (transit/read-handler
     (fn [m]
-      (let [{:keys [resource-id on-saved-c-marshal]} m
+      (let [{resource-id "resource-id"
+             on-saved-c-marshal "on-saved-c-marshal"} m
             new? (not (contains? @remote-resources resource-id))]
         (when new?
           (swap! remote-resources assoc resource-id
-                 (BigValueMarshal. resource-id (:value m) nil nil)))
+                 (BigValueMarshal. resource-id (get m "value") nil nil)))
         (when on-saved-c-marshal
           ;; Depending on timing, this may happen multiple
           ;; times for a single resource. The other machine

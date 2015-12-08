@@ -28,7 +28,7 @@
 (defn subscribe-to-steps! []
   (let [steps-c (async/chan)
         response-c (async/chan)]
-    (put! into-journal [:subscribe (marshal/channel steps-c)
+    (put! into-journal ["subscribe" (marshal/channel steps-c)
                         (marshal/channel response-c true)])
     (go
       ;; Get the template before getting any steps.
@@ -42,7 +42,7 @@
                   :path [:regions region-key layer-id]}]))
       (add-watch capture-options ::push-to-server
                  (fn [_ _ _ opts]
-                   (put! into-journal [:set-capture-options opts])))
+                   (put! into-journal ["set-capture-options" opts])))
 
       (loop []
         (when-let [step (<! steps-c)]

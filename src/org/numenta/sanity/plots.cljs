@@ -307,8 +307,8 @@
     (if-let [model-id (:model-id sel)]
       (let [response-c (async/chan)]
         (put! into-journal
-              [:get-cell-excitation-data model-id region-key layer-id bit
-               (marshal/channel response-c true)])
+              ["get-cell-excitation-data" model-id (name region-key)
+               (name layer-id) bit (marshal/channel response-c true)])
         (go
           (reset! excitation-data (<! response-c))))
       (reset! excitation-data {}))))
@@ -728,7 +728,7 @@
   (when-let [[region layer] (sel/layer sel)]
     (let [model-id (:model-id sel)
           response-c (async/chan)]
-      (put! into-journal [:get-transitions-data
+      (put! into-journal ["get-transitions-data"
                           model-id region layer cell-sdr-counts
                           (marshal/channel response-c true)])
       response-c)))
@@ -799,7 +799,7 @@
         :let [response-c (async/chan)
               model-id (:model-id step)]]
     (go
-      (put! into-journal [:get-cells-by-state model-id
+      (put! into-journal ["get-cells-by-state" model-id
                           region layer
                           (marshal/channel response-c true)])
       (let [cells-by-state (<! response-c)

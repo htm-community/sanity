@@ -18,8 +18,8 @@
          models-mult (async/mult models-in)
          connection-changes-c (async/chan)
          connection-changes-mult (async/mult connection-changes-c)
-         ch->mchannel (atom {:into-sim (marshal/channel into-sim)
-                             :into-journal (marshal/channel into-journal)})
+         ch->mchannel (atom {"simulation" (marshal/channel into-sim)
+                             "journal" (marshal/channel into-journal)})
          server (server-ws/start ch->mchannel connection-changes-c
                                  (assoc opts
                                         :http-handler (route/files "/")))]

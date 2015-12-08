@@ -45,7 +45,7 @@
         response-c (async/chan)]
     (swap! remote-target->chan assoc journal-target into-journal)
     (@pipe-to-remote-target! journal-target into-journal)
-    (put! into-journal [:get-steps (marshal/channel response-c true)])
+    (put! into-journal ["get-steps" (marshal/channel response-c true)])
     (go
       (let [[step-template all-steps :as r] (<! response-c)
             step-template (atom step-template)

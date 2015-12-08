@@ -95,7 +95,7 @@
                          :let [old-spec (get-in prev-st path)
                                new-spec (get-in st path)]]
                    (when (not= old-spec new-spec)
-                     (put! into-sim [:set-spec path new-spec]))))))
+                     (put! into-sim ["set-spec" path new-spec]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [step-template selection into-sim]
@@ -141,8 +141,8 @@
                                  (<! (async/timeout 100))
                                  (let [finished (async/chan)]
                                    (put! into-sim
-                                         [:restart (marshal/channel finished
-                                                                    true)])
+                                         ["restart" (marshal/channel finished
+                                                                     true)])
                                    (<! finished))))}
                   "Rebuild model"]
                  [:p.small "This will not reset, or otherwise alter, the input stream."]]
@@ -156,7 +156,7 @@
 (defn gather-col-state-history!
   [col-state-history step into-journal]
   (let [response-c (async/chan)]
-    (put! into-journal [:get-column-state-freqs
+    (put! into-journal ["get-column-state-freqs"
                         (:model-id step)
                         (marshal/channel response-c true)])
     (go
@@ -373,7 +373,8 @@
         [rgn-id lyr-id] (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
-        (put! into-journal [:get-details-text model-id rgn-id lyr-id bit
+        (put! into-journal ["get-details-text" model-id (name rgn-id)
+                            (name lyr-id) bit
                             (marshal/channel response-c true)])
         (go
           (reset! text-response (<! response-c)))))))
@@ -614,7 +615,7 @@
         going? (atom false)
         subscriber-c (async/chan)]
 
-    (put! into-sim [:subscribe-to-status (marshal/channel subscriber-c)])
+    (put! into-sim ["subscribe-to-status" (marshal/channel subscriber-c)])
 
     (go-loop []
       (when-let [[g?] (<! subscriber-c)]
@@ -670,7 +671,7 @@
           [:li (when-not @going? {:class "hidden"})
            [:button.btn.btn-default.navbar-btn
             (cond-> {:type :button
-                     :on-click #(put! into-sim [:pause])
+                     :on-click #(put! into-sim ["pause"])
                      :style {:width "5em"}}
               (not @step-template) (assoc :disabled "disabled"))
             "Pause"]]
@@ -678,7 +679,7 @@
           [:li (when @going? {:class "hidden"})
            [:button.btn.btn-primary.navbar-btn
             (cond-> {:type :button
-                     :on-click #(put! into-sim [:run])
+                     :on-click #(put! into-sim ["run"])
                      :style {:width "5em"}}
               (not @step-template) (assoc :disabled "disabled"))
             "Run"]]
@@ -816,31 +817,31 @@
              [:ul.dropdown-menu {:role "menu"}
               [:li [:a {:href "#"
                         :on-click (fn []
-                                    (put! into-sim [:set-step-ms 0])
+                                    (put! into-sim ["set-step-ms" 0])
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 1))}
                     "max sim speed"]]
               [:li [:a {:href "#"
                         :on-click (fn []
-                                    (put! into-sim [:set-step-ms 0])
+                                    (put! into-sim ["set-step-ms" 0])
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 100))}
                     "max sim speed, draw every 100 steps"]]
               [:li [:a {:href "#"
                         :on-click (fn []
-                                    (put! into-sim [:set-step-ms 250])
+                                    (put! into-sim ["set-step-ms" 250])
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 1))}
                     "limit to 4 steps/sec."]]
               [:li [:a {:href "#"
                         :on-click (fn []
-                                    (put! into-sim [:set-step-ms 500])
+                                    (put! into-sim ["set-step-ms" 500])
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 1))}
                     "limit to 2 steps/sec."]]
               [:li [:a {:href "#"
                         :on-click (fn []
-                                    (put! into-sim [:set-step-ms 1000])
+                                    (put! into-sim ["set-step-ms" 1000])
                                     (swap! viz-options assoc-in
                                            [:drawing :anim-every] 1))}
                     "limit to 1 step/sec."]]]])
