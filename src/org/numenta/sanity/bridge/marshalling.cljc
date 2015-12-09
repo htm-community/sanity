@@ -118,12 +118,8 @@
   (close! [_]
     (p/close! ch)))
 
-;; Use `:json-verbose` to avoid Transit's caching, which has bugs. For custom
-;; tags, it only writes the first instance of the tag, then uses tags like "^<"
-;; to refer to it later. But with our handlers, with certain combinations of
-;; parameters in a message, e.g. a BigValueMarshal followed by a ChannelMarshal,
-;; this retrieval fails and it will create the wrong type. It might be because
-;; our BigValueMarshal's serialized output contains a ChannelMarshal.
+;; Use `:json-verbose` to avoid Transit's caching, which has bugs.
+;; This issue is tracked in https://github.com/cognitect/transit-cljs/issues/22
 (def encoding :json-verbose)
 
 (defn write-handlers

@@ -5,6 +5,7 @@
             [goog.dom.forms :as forms]
             [goog.dom.classes :as classes]
             [goog.string :as gstr]
+            [clojure.browser.repl :as browser-repl]
             [clojure.string :as str]
             [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
@@ -590,6 +591,45 @@
      [bind-fields keep-steps-template capture-options])
    [bind-fields viz-options-template viz-options]])
 
+(def default-debug-data
+  {:repl-url "http://localhost:9000/repl"
+   :started? false
+   :conn nil})
+
+(defn debug-tab
+  [debug-data]
+  [:div
+   [:p.text-muted {:style {:margin-top 15
+                           :margin-bottom 15}}
+    "Inspect the inspector."]
+   [:div.col-sm-12
+    [:div.panel.panel-default
+     [:div.panel-heading
+      [:h4.panel-title "REPL"]]
+     [:div.panel-body
+      [:p "ClojureScript REPL URL:"]
+      (if (:started? @debug-data)
+        [:p (:repl-url @debug-data)]
+        [:div
+         [:p [bind-fields [:input {:style {:width "100%"}
+                                   :field :text
+                                   :id :repl-url}]
+              debug-data]]
+         [:p [:button.btn.btn-primary.btn-block
+              {:on-click (fn [_]
+                           (let [conn (browser-repl/connect (:repl-url
+                                                             @debug-data))]
+                             (swap! debug-data assoc
+                                    :started? true
+                                    :conn conn)))}
+              "Connect to Browser REPL"]]])
+      [:p "Go start a ClojureScript REPL, then connect to it from here."]
+      [:p [:a {:href "https://github.com/nupic-community/sanity"} "Sanity"]
+       " has a browser_repl.clj that you can run."]
+      [:p "Pro-tip: in Emacs, do 'M-x shell', run "
+       "'lein run -m clojure.main browser_repl.clj', "
+       "and maybe do 'M-x paredit-mode'."]]]]])
+
 (defn send-command [ch command & xs]
   (fn [e]
     (put! ch (into [command] xs))
@@ -602,8 +642,7 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [_ _ steps show-help viz-options viz-expanded step-template into-viz into-sim
-  ]
+  [_ _ steps show-help viz-options viz-expanded step-template into-viz into-sim]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -1012,8 +1051,7 @@
      [:hr]]))
 
 (defn sanity-app
-  [_ _ _ features _ _ selection steps step-template _ _ _ into-journal
-  ]
+  [_ _ _ features _ _ selection steps step-template _ _ _ into-journal _]
   (let [show-help (atom false)
         viz-expanded (atom false)
         time-plots-tab (when (features :time-plots)
@@ -1022,8 +1060,7 @@
                         (cell-sdrs-tab-builder steps step-template selection
                                                into-journal))]
     (fn [title model-tab main-pane _ capture-options viz-options selection steps
-         step-template series-colors into-viz into-sim into-journal
-        ]
+         step-template series-colors into-viz into-sim into-journal debug-data]
       [:div
        [navbar title features steps show-help viz-options viz-expanded
         step-template into-viz into-sim]
@@ -1053,6 +1090,6 @@
                       [:sources [sources-tab step-template selection
                                  series-colors into-journal]])
                     (when (features :details)
-                      [:details [details-tab selection into-journal
-                                ]])])]]]
+                      [:details [details-tab selection into-journal]])
+                    [:debug [debug-tab debug-data]]])]]]
         [:div#loading-message "loading"]]])))

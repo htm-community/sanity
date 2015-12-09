@@ -23,6 +23,10 @@
 (def viz-options (atom viz/default-viz-options))
 (def into-viz (chan))
 
+;;; ## Controls data
+
+(def debug-data (atom cui/default-debug-data))
+
 ;;; ## Connect journal to viz
 
 (defn subscribe-to-steps! []
@@ -98,7 +102,7 @@
   [title model-tab world-pane features into-sim]
   [cui/sanity-app title model-tab [main-pane world-pane into-sim]
    features capture-options viz-options selection steps step-template
-   viz/state-colors into-viz into-sim into-journal])
+   viz/state-colors into-viz into-sim into-journal debug-data])
 
 ;;; ## Exported helpers
 
