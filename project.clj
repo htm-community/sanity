@@ -28,7 +28,6 @@
   :source-paths ["src"]
 
   :clean-targets ["public/demos/out"
-                  "public/cortical_io/out"
                   "public/local_inhibition/out"]
 
   :profiles {:dev {:dependencies [[org.clojure/data.csv "0.1.3"]
@@ -44,12 +43,6 @@
                                    :output-dir "public/demos/out"
                                    :source-map "public/demos/out/sanity.js.map"
                                    :output-to "public/demos/out/sanity.js"}}
-                       {:id "cortical-io"
-                        :source-paths ["src" "examples/cortical_io"]
-                        :compiler {:optimizations :whitespace
-                                   :output-dir "public/cortical_io/out"
-                                   :source-map "public/cortical_io/out/sanity_cio.js.map"
-                                   :output-to "public/cortical_io/out/sanity_cio.js"}}
                        {:id "inh"
                         :source-paths ["src" "examples/local_inhibition"]
                         :compiler {:optimizations :whitespace

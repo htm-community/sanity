@@ -1,4 +1,4 @@
-(ns org.numenta.sanity.cortical-io-demo
+(ns org.numenta.sanity.demos.cortical-io
   (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.encoders :as enc]
@@ -7,6 +7,7 @@
              :refer [cortical-io-encoder
                      cache-fingerprint!]]
             [clojure.string :as str]
+            [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.helpers :as helpers]
             [org.numenta.sanity.bridge.browser :as server]
@@ -358,7 +359,8 @@ fox eat something.
 
 (defn ^:export init
   []
-  (reagent/render [main/sanity-app [model-tab] [world-pane] into-sim]
+  (reagent/render [main/sanity-app "Comportex" [model-tab] [world-pane]
+                   all-features into-sim]
                   (dom/getElement "sanity-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (put! into-sim ["run"]))
