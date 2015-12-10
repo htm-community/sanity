@@ -7,14 +7,13 @@
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
 (defn all-cell-segments
-  [col depth distal-sg]
-  (let [cell-ids (map vector (repeat col) (range depth))]
-    (mapv (fn [cell-id]
-            (->> (p/cell-segments distal-sg cell-id)
-                 (reverse)
-                 (drop-while empty?)
-                 (reverse)))
-          cell-ids)))
+  [cell-ids sg]
+  (mapv (fn [cell-id]
+          (->> (p/cell-segments sg cell-id)
+               (reverse)
+               (drop-while empty?)
+               (reverse)))
+        cell-ids))
 
 (defn group-synapses
   [syns ac pcon]
@@ -86,23 +85,23 @@
                   :apical (get-in lyr [:prior-apical-state :active-bits])
                   :distal (get-in lyr [:prior-distal-state :active-bits])
                   :proximal (get-in lyr [:state :in-ff-bits]))
-        depth (p/layer-depth lyr)
         learning (get-in lyr [:learn-state :learning seg-type])
+        cell-ids (if (= seg-type :proximal)
+                   [[col 0]]
+                   (for [ci (range (p/layer-depth lyr))]
+                     [col ci]))
         seg-up (first
-                (vals (select-keys learning
-                                   (for [ci (range depth)]
-                                     [col ci]))))
+                (vals (select-keys learning cell-ids)))
         {[_ learn-ci learn-si] :target-id} seg-up
         sg-key (case seg-type
                  :apical :apical-sg
                  :distal :distal-sg
                  :proximal :proximal-sg)
-        segs-by-cell (->> (get lyr sg-key)
-                          (all-cell-segments col depth))
+        segs-by-cell (all-cell-segments cell-ids (get lyr sg-key))
         ;; get synapse info from before learning -- so from prev step:
         p-segs-by-cell (when prev-htm
                          (->> (get-in prev-htm [:regions rgn-id lyr-id sg-key])
-                              (all-cell-segments col depth)))]
+                              (all-cell-segments cell-ids)))]
     (into
      {}
      (for [[ci _] (map-indexed vector segs-by-cell)
