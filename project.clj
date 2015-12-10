@@ -37,16 +37,15 @@
               ;; :jvm-opts ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"]
               }}
 
-  :cljsbuild {:builds [{:id "demos"
-                        :source-paths ["src" "examples/demos"]
-                        :compiler {:optimizations :whitespace
-                                   :output-dir "public/demos/out"
-                                   :source-map "public/demos/out/sanity.js.map"
-                                   :output-to "public/demos/out/sanity.js"}}
-                       {:id "inh"
-                        :source-paths ["src" "examples/local_inhibition"]
-                        :compiler {:optimizations :whitespace
-                                   :output-dir "public/local_inhibition/out"
-                                   :source-map "public/local_inhibition/out/sanity_inh.js.map"
-                                   :output-to "public/local_inhibition/out/sanity_inh.js"}}
-                       ]})
+  :cljsbuild {:builds
+              {:demos {:source-paths ["src" "examples/demos"]
+                       :compiler {:optimizations :whitespace
+                                  :output-dir "public/demos/out"
+                                  :source-map "public/demos/out/sanity.js.map"
+                                  :output-to "public/demos/out/sanity.js"}}
+               ;; :inh {:source-paths ["src" "examples/local_inhibition"]
+               ;;       :compiler {:optimizations :whitespace
+               ;;                  :output-dir "public/local_inhibition/out"
+               ;;                  :source-map "public/local_inhibition/out/sanity_inh.js.map"
+               ;;                  :output-to "public/local_inhibition/out/sanity_inh.js"}}
+               }})
