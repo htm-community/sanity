@@ -7,12 +7,14 @@ It works with:
 - [Comportex](http://github.com/nupic-community/comportex/)
 - [NuPIC](https://github.com/numenta/nupic) via [sanity-nupic](https://github.com/nupic-community/sanity-nupic)
 
-See it in action in [the online demos](https://nupic-community.github.io/sanity/).
-
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
 ## The Runner
+
+See it in action in [the online demos](https://nupic-community.github.io/sanity/).
+
+<a href="https://nupic-community.github.io/sanity/"><img src="runner.png" style="width:100%;max-width:800px;" /></a>
 
 Sanity runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
@@ -39,12 +41,21 @@ Sanity interactive visualizations are also available in notebook
 form, similar to IPython Notebook or Mathematica. It builds on
 [Gorilla REPL](https://github.com/JonyEpsilon/gorilla-repl).
 
+<img src="notebook.png" style="width:100%;max-width:800px;" />
+
 The notebook:
 
 - Is a fun-filled way to drive and present HTM models
 - Is a launchpad for Sanity runners
 - Is [built for blogging](https://github.com/nupic-community/sanity/wiki/Putting-notebooks-on-the-web).
   Interactive graphics are saved as images in the state that you left them.
+
+Some cool examples:
+
+- [Predicting power consumptions with HTM](http://mrcslws.com/gorilla/?path=hotgym.clj)
+  by Marcus Lewis
+- [Sequence replay in HTM](http://viewer.gorilla-repl.org/view.html?source=gist&id=95da4401dc7293e02df3&filename=seq-replay.clj)
+  by Felix Andrews
 
 ## Usage
 
@@ -80,7 +91,6 @@ From the REPL, start a notebook:
 
 You can now launch it in a web browser. The notebook will show you how
 to launch your own Sanity runner.
-
 
 ## Online demos
 
