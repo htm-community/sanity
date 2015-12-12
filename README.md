@@ -41,7 +41,7 @@ Sanity interactive visualizations are also available in notebook
 form, similar to IPython Notebook or Mathematica. It builds on
 [Gorilla REPL](https://github.com/JonyEpsilon/gorilla-repl).
 
-<img src="notebook.png" style="width:100%;max-width:800px;" />
+<a href="http://viewer.gorilla-repl.org/view.html?source=gist&id=95da4401dc7293e02df3&filename=seq-replay.clj"><img src="notebook.png" style="width:100%;max-width:800px;" /></a>
 
 The notebook:
 
