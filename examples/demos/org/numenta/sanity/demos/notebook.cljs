@@ -8,7 +8,8 @@
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [reagent.core :as reagent :refer [atom]]
-            [cljs.core.async :as async :refer [chan put! <!]])
+            [cljs.core.async :as async :refer [chan put! <!]]
+            [clojure.walk :refer [keywordize-keys]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (enable-console-print!)
@@ -47,9 +48,23 @@
     (@pipe-to-remote-target! journal-target into-journal)
     (put! into-journal ["get-steps" (marshal/channel response-c true)])
     (go
-      (let [[step-template all-steps :as r] (<! response-c)
-            step-template (atom step-template)
+      (let [[st all-steps :as r] (<! response-c)
+            ;; keywordize the template, but don't mangle layer / sense IDs
+            {regions "regions" senses "senses"} st
+            step-template (atom
+                           {:regions
+                            (into {}
+                                  (for [[rgn-id rgn] regions]
+                                    [rgn-id
+                                     (into {}
+                                           (for [[lyr-id lyr] rgn]
+                                             [lyr-id (keywordize-keys lyr)]))]))
+                            :senses
+                            (into {}
+                                  (for [[sense-id sense] senses]
+                                    [sense-id (keywordize-keys sense)]))})
             steps (->> all-steps
+                       keywordize-keys
                        reverse
                        vec
                        atom)

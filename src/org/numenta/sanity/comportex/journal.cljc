@@ -1,6 +1,7 @@
 (ns org.numenta.sanity.comportex.journal
   (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
                :cljs [cljs.core.async :as async :refer [put! <!]])
+            [clojure.walk :refer [keywordize-keys stringify-keys]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.details]
             [org.numenta.sanity.comportex.data :as data]
@@ -16,33 +17,15 @@
 (defn make-step
   [htm id]
   (let [input-value (:input-value htm)]
-    {:model-id id
-     :timestep (p/timestep htm)
-     :input-value input-value
-     :sensed-values (into {}
-                          (for [sense-id (core/sense-keys htm)
-                                :let [[selector _] (get-in htm [:sensors
-                                                                sense-id])
-                                      v (p/extract selector input-value)]]
-                            [sense-id v]))
-     :senses (into
-              {}
-              (for [sense-id (core/sense-keys htm)
-                    :let [sense (get-in htm [:senses sense-id])]]
-                [sense-id {:active-bits (set (data/active-bits sense))}]))
-     :regions (into
-               {}
-               (for [rgn-id (core/region-keys htm)
-                     :let [rgn (get-in htm [:regions rgn-id])]]
-                 [rgn-id
-                  (into
-                   {}
-                   (for [lyr-id (core/layers rgn)
-                         :let [lyr (get rgn lyr-id)]]
-                     [lyr-id {:active-columns (p/active-columns lyr)
-                              :pred-columns (->> (p/prior-predictive-cells lyr)
-                                                 (map first)
-                                                 (distinct))}]))]))}))
+    {"model-id" id
+     "timestep" (p/timestep htm)
+     "input-value" input-value
+     "sensed-values" (into {}
+                           (for [sense-id (core/sense-keys htm)
+                                 :let [[selector _] (get-in htm [:sensors
+                                                                 sense-id])
+                                       v (p/extract selector input-value)]]
+                             [sense-id v]))}))
 
 (defn id-missing-response
   [id steps-offset]
@@ -140,32 +123,121 @@
             (swap! client-info assoc :steps-mchannel steps-mchannel)
             (println "JOURNAL: Client subscribed to steps.")
             (put! response-c
-                  [(data/step-template-data @current-model) @capture-options]))
+                  [(data/step-template-data @current-model)
+                   (stringify-keys @capture-options)]))
 
           "set-capture-options"
           (let [[co] xs]
-            (reset! capture-options co))
+            (reset! capture-options (keywordize-keys co)))
 
-          "get-inbits-cols"
-          (let [[id fetches onscreen-bits-marshal {response-c :ch}] xs
-                path->ids (:value onscreen-bits-marshal)]
+          "get-layer-bits"
+          (let [[id rgn-id lyr-id fetches {cols-subset :value}
+                 {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [htm (find-model id)]
+                    (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                      (cond-> {}
+                        (contains? fetches "active-columns")
+                        (assoc "active-columns" (p/active-columns lyr))
+
+                        (contains? fetches "pred-columns")
+                        (assoc "pred-columns" (->> (p/prior-predictive-cells lyr)
+                                                   (map first)
+                                                   (distinct)))
+
+                        (contains? fetches "overlaps-columns-alpha")
+                        (assoc "overlaps-columns-alpha"
+                               (->> (:col-overlaps (:state lyr))
+                                    (reduce-kv (fn [m [col _ _] v]
+                                                 (assoc!
+                                                  m col
+                                                  (max v (get m col
+                                                              0))))
+                                               (transient {}))
+                                    (persistent!)
+                                    (util/remap #(min 1.0
+                                                      (float (/ % 16))))))
+
+                        (contains? fetches "boost-columns-alpha")
+                        (assoc "boost-columns-alpha"
+                               (let [{:keys [max-boost]} (p/params lyr)]
+                                (->> (:boosts lyr)
+                                     (map
+                                      #(/ (dec %)
+                                          (dec max-boost)))
+                                     (map float)
+                                     (zipmap (range)))))
+
+                        (contains? fetches "active-freq-columns-alpha")
+                        (assoc "active-freq-columns-alpha"
+                               (->> (:active-duty-cycles lyr)
+                                    (map #(min 1.0 (* 2 %)))
+                                    (zipmap (range))))
+
+                        (contains? fetches "n-segments-columns-alpha")
+                        (assoc "n-segments-columns-alpha"
+                               (->> cols-subset
+                                    (map #(data/count-segs-in-column
+                                           (:distal-sg lyr)
+                                           (p/layer-depth lyr) %))
+                                    (map #(min 1.0
+                                               (float (/ % 16.0))))
+                                    (zipmap cols-subset)))
+
+                        (contains? fetches "tp-columns")
+                        (assoc "tp-columns"
+                               (->> (p/temporal-pooling-cells lyr)
+                                    (map first)))
+
+                        true
+                        (assoc "break?"
+                               (-> lyr
+                                   (get-in [:prior-distal-state
+                                            :active-bits])
+                                   empty?))))
+                    (id-missing-response id steps-offset))))
+
+          "get-sense-bits"
+          (let [[id sense-id fetches {bits-subset :value}
+                 {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/inbits-cols-data htm prev-htm path->ids fetches)
+                    (let [sense (get-in htm [:senses sense-id])
+                          ;; region this sense feeds to, for predictions
+                          ff-rgn-id (first (get-in htm [:fb-deps sense-id]))
+                          prev-ff-rgn (when (pos? (p/size (p/ff-topology
+                                                           sense)))
+                                        (get-in prev-htm [:regions ff-rgn-id]))]
+                      (cond-> {}
+                        (contains? fetches "active-bits")
+                        (assoc "active-bits" (set (data/active-bits sense)))
+
+                        (and (contains? fetches "pred-bits-alpha")
+                             prev-ff-rgn)
+                        (assoc "pred-bits-alpha"
+                               (let [start (core/ff-base htm ff-rgn-id
+                                                         sense-id)
+                                     end (+ start
+                                            (-> sense p/ff-topology p/size))]
+                                 (->> (core/predicted-bit-votes prev-ff-rgn)
+                                      (keep (fn [[id votes]]
+                                              (when (and (<= start id)
+                                                         (< id end))
+                                                [(- id start) votes])))
+                                      (into {})
+                                      (util/remap
+                                       #(min 1.0 (float (/ % 8)))))))))
                     (id-missing-response id steps-offset))))
 
           "get-proximal-synapses-by-source-bit"
-          (let [[id sense-id bit syn-states {response-c :ch}] xs
-                sense-id (keyword sense-id)]
+          (let [[id sense-id bit syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (data/syns-from-source-bit htm sense-id bit syn-states)
                     (id-missing-response id steps-offset))))
 
           "get-column-cells"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])
@@ -174,46 +246,38 @@
                                                       (when (= col column)
                                                         ci)))
                                               (into #{}))]
-                      {:cells-per-column (p/layer-depth lyr)
-                       :active-cells (extract-cells
-                                      (p/active-cells lyr))
-                       :prior-predicted-cells (extract-cells
-                                               (p/prior-predictive-cells lyr))
-                       :winner-cells (extract-cells
-                                      (p/winner-cells lyr))})
+                      {"cells-per-column" (p/layer-depth lyr)
+                       "active-cells" (extract-cells
+                                       (p/active-cells lyr))
+                       "prior-predicted-cells" (extract-cells
+                                                (p/prior-predictive-cells lyr))
+                       "winner-cells" (extract-cells
+                                       (p/winner-cells lyr))})
                     (id-missing-response id steps-offset))))
 
           "get-column-apical-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :apical)
                     (id-missing-response id steps-offset))))
 
           "get-column-distal-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :distal)
                     (id-missing-response id steps-offset))))
 
           "get-column-proximal-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/column-segs htm prev-htm rgn-id lyr-id col :proximal)
                     (id-missing-response id steps-offset))))
 
           "get-apical-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
@@ -221,9 +285,7 @@
                     (id-missing-response id steps-offset))))
 
           "get-distal-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
@@ -231,9 +293,7 @@
                     (id-missing-response id steps-offset))))
 
           "get-proximal-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
@@ -241,9 +301,7 @@
                     (id-missing-response id steps-offset))))
 
           "get-details-text"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
                     (org.numenta.sanity.comportex.details/detail-text
@@ -267,13 +325,12 @@
                                 layer-id (core/layers rgn)]
                             [[region-key layer-id]
                              (-> (get-in htm [:regions region-key])
-                                 (core/column-state-freqs layer-id))]))
+                                 (core/column-state-freqs layer-id)
+                                 stringify-keys)]))
                     (id-missing-response id steps-offset))))
 
           "get-cell-excitation-data"
-          (let [[id rgn-id lyr-id sel-col {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id sel-col {response-c :ch}] xs]
             (put! response-c
                   (let [[prev-htm htm] (find-model-pair id)]
                     (if prev-htm
@@ -282,9 +339,7 @@
                       (id-missing-response id steps-offset)))))
 
           "get-cells-by-state"
-          (let [[id rgn-id lyr-id {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [layer (get-in htm [:regions rgn-id lyr-id])]
@@ -295,10 +350,7 @@
                     (id-missing-response id steps-offset))))
 
           "get-transitions-data"
-          (let [[id rgn-id lyr-id cell-sdr-fracs
-                 {response-c :ch}] xs
-                rgn-id (keyword rgn-id)
-                lyr-id (keyword lyr-id)]
+          (let [[id rgn-id lyr-id cell-sdr-fracs {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (data/transitions-data htm rgn-id lyr-id cell-sdr-fracs)

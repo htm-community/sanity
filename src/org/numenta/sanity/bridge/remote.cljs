@@ -3,7 +3,6 @@
             [cljs.pprint :refer [pprint]]
             [cognitect.transit :as transit]
             [org.numenta.sanity.bridge.marshalling :as marshal]
-            [org.numenta.sanity.util :refer [keywordize-keys* stringify-keys*]]
             [org.nfrac.comportex.topology :refer [map->OneDTopology
                                                   map->TwoDTopology
                                                   map->ThreeDTopology]])
@@ -25,7 +24,7 @@
 
 (defn target-put
   [target v]
-  ["put!" target (stringify-keys* v)])
+  ["put!" target v])
 
 (defn target-close
   [target]
@@ -105,7 +104,6 @@
                                                (put! to-network-c
                                                      (target-close t)))
                                              remote-resources))
-                                      true keywordize-keys*
                                       @log-messages? (log "RECEIVED:"))
                     {:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                            target)]

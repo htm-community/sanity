@@ -7,6 +7,7 @@
             [goog.string :as gstr]
             [clojure.browser.repl :as browser-repl]
             [clojure.string :as str]
+            [clojure.walk :refer [keywordize-keys]]
             [cljs.core.async :as async :refer [put! <!]]
             [cljs.reader]
             [org.numenta.sanity.helpers :as helpers]
@@ -161,7 +162,7 @@
                         (:model-id step)
                         (marshal/channel response-c true)])
     (go
-      (let [r (<! response-c)]
+      (let [r (keywordize-keys (<! response-c))]
         (swap! col-state-history
                #(reduce
                  (fn [csh [layer-path col-state-freqs]]
@@ -374,8 +375,7 @@
         [rgn-id lyr-id] (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
-        (put! into-journal ["get-details-text" model-id (name rgn-id)
-                            (name lyr-id) bit
+        (put! into-journal ["get-details-text" model-id rgn-id lyr-id bit
                             (marshal/channel response-c true)])
         (go
           (reset! text-response (<! response-c)))))))

@@ -5,7 +5,8 @@
             [org.numenta.sanity.selection :as sel]
             [org.numenta.sanity.viz-canvas :as viz]
             [reagent.core :as reagent :refer [atom]]
-            [cljs.core.async :as async :refer [chan put! <!]])
+            [cljs.core.async :as async :refer [chan put! <!]]
+            [clojure.walk :refer [keywordize-keys stringify-keys]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (enable-console-print!)
@@ -36,9 +37,20 @@
                         (marshal/channel response-c true)])
     (go
       ;; Get the template before getting any steps.
-      (let [[st co] (<! response-c)]
-        (reset! step-template st)
-        (reset! capture-options co))
+      (let [[st co] (<! response-c)
+            ;; keywordize the template, but don't mangle layer / sense IDs
+            {regions "regions" senses "senses"} st]
+        (reset! step-template
+                {:regions (into {}
+                                (for [[rgn-id rgn] regions]
+                                  [rgn-id
+                                   (into {}
+                                         (for [[lyr-id lyr] rgn]
+                                           [lyr-id (keywordize-keys lyr)]))]))
+                 :senses (into {}
+                               (for [[sense-id sense] senses]
+                                 [sense-id (keywordize-keys sense)]))})
+        (reset! capture-options (keywordize-keys co)))
       (let [[region-key rgn] (-> @step-template :regions seq first)
             layer-id (-> rgn keys first)]
         (reset! selection
@@ -46,14 +58,17 @@
                   :path [:regions region-key layer-id]}]))
       (add-watch capture-options ::push-to-server
                  (fn [_ _ _ opts]
-                   (put! into-journal ["set-capture-options" opts])))
+                   (put! into-journal ["set-capture-options"
+                                       (stringify-keys opts)])))
 
       (loop []
         (when-let [step (<! steps-c)]
-          (let [keep-steps (:keep-steps @capture-options)
+          (let [step* (keywordize-keys step)
+                keep-steps (:keep-steps @capture-options)
                 [kept dropped] (split-at keep-steps
-                                         (cons step @steps))]
-            (reset! steps kept))
+                                         (cons step* @steps))]
+            (reset! steps kept)
+            (put! into-viz [:drop-steps-data dropped]))
           (recur))))
     steps-c))
 

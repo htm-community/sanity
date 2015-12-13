@@ -17,7 +17,8 @@
             [monet.canvas :as c]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
-            [cljs.core.async :as async :refer [<! put!]])
+            [cljs.core.async :as async :refer [<! put!]]
+            [clojure.walk :refer [keywordize-keys]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
                    [org.numenta.sanity.macros :refer [with-cache]]))
 
@@ -290,22 +291,23 @@
 
 (defn active-ids
   "Returns the set of active columns or bits for the sense/layer."
-  [step path]
-  (let [[lyr-type & _] path]
-    (-> (get-in step path)
-        (get (case lyr-type
-               :regions :active-columns
-               :senses :active-bits)))))
+  [m-bits step path]
+  (let [[lyr-type & _] path
+        {:keys [model-id]} step]
+    (get-in m-bits [model-id path (case lyr-type
+                                    :regions :active-columns
+                                    :senses :active-bits)])))
 
 (defn add-facets!
-  [viz-layouts viz-options paths step]
+  [viz-layouts viz-options paths step m-bits]
   (swap! viz-layouts
          (fn [m]
            (reduce (fn [m path]
                      (update-in m path
                                 (fn [lay]
                                   (lay/add-facet lay
-                                                 (sort (active-ids step path))
+                                                 (sort (active-ids m-bits step
+                                                                   path))
                                                  (:timestep step)))))
                    m
                    paths)))
@@ -322,7 +324,7 @@
   (invalidate! viz-options paths))
 
 (defn sort!
-  [viz-layouts viz-options paths steps sel-dt]
+  [viz-layouts viz-options paths steps sel-dt m-bits]
   (let [use-steps (max 2 (get-in @viz-options [:drawing :draw-steps]))
         steps (->> steps (drop sel-dt) (take use-steps))]
     (swap! viz-layouts
@@ -330,7 +332,8 @@
              (reduce (fn [m path]
                        (update-in m path
                                   (fn [lay]
-                                    (->> (map active-ids steps (repeat path))
+                                    (->> (map (partial active-ids m-bits)
+                                              steps (repeat path))
                                          (lay/sort-by-recent-activity lay)))))
                      m
                      paths))))
@@ -382,24 +385,21 @@
                                    :let [active-syns (:active syns-by-state)]
                                    {:keys [src-id src-lyr src-col]} active-syns
                                    :when src-lyr
-                                   :let [new-path [:regions (keyword src-id)
-                                                   (keyword src-lyr)]
+                                   :let [new-path [:regions src-id src-lyr]
                                          new-col-path [target-model-id new-path
                                                        src-col]]
                                    :when (not (contains? seen-col-paths
                                                          new-col-path))]
                                new-col-path))
-              target-lay (get-in r-lays [(keyword target-rgn-id)
-                                         (keyword target-lyr-id)])
+              target-lay (get-in r-lays [target-rgn-id target-lyr-id])
               dt (utilv/index-of steps #(= target-model-id (:model-id %)))
               [target-x target-y] (element-xy target-lay target-col dt)]
           (doseq [[_ syns-by-seg] syns-by-cell
                   [_ syns-by-state] syns-by-seg
                   [syn-state syns] syns-by-state
                   {:keys [src-id src-col src-lyr src-dt perm]} syns
-                  :let [src-lay (or (get s-lays (keyword src-id))
-                                    (get-in r-lays [(keyword src-id)
-                                                    (keyword src-lyr)]))
+                  :let [src-lay (or (get s-lays src-id)
+                                    (get-in r-lays [src-id src-lyr]))
                         [src-x src-y] (element-xy src-lay src-col
                                                   (+ dt src-dt))]]
             (doto ctx
@@ -425,10 +425,9 @@
             :let [[src-x src-y] (element-xy lay src-bit dt)]
             {:keys [target-id target-col target-lyr target-dt perm
                     syn-state]} syns
-                    :let [target-lay (or (get s-lays (keyword target-id))
+                    :let [target-lay (or (get s-lays target-id)
                                          (get-in r-lays
-                                                 [(keyword target-id)
-                                                  (keyword target-lyr)]))
+                                                 [target-id target-lyr]))
                           [target-x target-y] (element-xy
                                                target-lay target-col
                                                (+ dt target-dt))]]
@@ -768,9 +767,8 @@
                 (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts
                                               (if src-lyr
-                                                [:regions (keyword src-id)
-                                                 (keyword src-lyr)]
-                                                [:senses (keyword src-id)]))
+                                                [:regions src-id src-lyr]
+                                                [:senses src-id]))
                               [src-x src-y] (element-xy src-lay src-col
                                                         (+ dt src-dt))]]
                   (when draw-perm?
@@ -877,8 +875,8 @@
               (recur)))))
 
       :reagent-render
-      (fn [viz-steps selection capture-options]
-        (let [steps @viz-steps
+      (fn [steps selection capture-options]
+        (let [steps @steps
               sel @selection
               sel-dts (into #{} (map :dt sel))
               keep-steps (or (:keep-steps @capture-options)
@@ -933,12 +931,9 @@
                        (str (:timestep (nth steps dt)))])]))]))})))
 
 (defn draw-viz!
-  [ctx viz-steps p-syns p-syns-by-source c-states d-segs d-syns a-segs a-syns
-   layouts sel opts]
-  (let [s-lays (:senses layouts)
-        r-lays (:regions layouts)
-
-        d-opts (:drawing opts)
+  [ctx steps s-caches m-bits p-syns p-syns-by-source c-states d-segs d-syns
+   a-segs a-syns layouts sel opts]
+  (let [d-opts (:drawing opts)
 
         draw-steps (case (:display-mode d-opts)
                      :one-d (:draw-steps d-opts)
@@ -950,20 +945,20 @@
                    ;; in case scrolled back in history
                    (let [dt0 (max 0 (- center-dt (quot draw-steps 2)))]
                      (range dt0 (min (+ dt0 draw-steps)
-                                     (count viz-steps)))))]
+                                     (count steps)))))]
     (c/clear-rect ctx {:x 0 :y 0
                        :w (.-width (.-canvas ctx))
                        :h (.-height (.-canvas ctx))})
 
     (doseq [dt draw-dts
-            :let [{sc :cache inbits-cols :inbits-cols
-                   senses :senses regions :regions
-                   :as step} (nth viz-steps dt)]]
+            :let [{:keys [model-id]} (nth steps dt)
+                  sc (get s-caches model-id)
+                  path->bits (get m-bits model-id)]]
       ;; draw encoded inbits
-      (doseq [[sense-id {:keys [active-bits]}] senses
-              :let [{:keys [pred-bits-alpha]} (get-in inbits-cols [:senses
-                                                                   sense-id])
-                    lay (s-lays sense-id)
+      (doseq [[_ sense-id :as path] (sense-layout-paths layouts)
+              :let [{:keys [active-bits
+                            pred-bits-alpha]} (get path->bits path)
+                    lay (get-in layouts path)
                     lay-cache (::cache (meta lay))]]
         (->> (bg-image lay)
              (with-cache lay-cache [::bg sense-id] opts #{:drawing})
@@ -978,65 +973,63 @@
                (fill-ids-alpha-image lay (:predicted state-colors))
                (with-cache sc [::pbits sense-id] opts #{:inbits :drawing})
                (draw-image-dt ctx lay dt))))
-
       ;; draw regions / layers
-      (doseq [[rgn-id rgn-data] regions]
-        (doseq [[lyr-id {:keys [active-columns
-                                pred-columns]}] rgn-data
-                :let [{:keys [overlaps-columns-alpha
-                              boost-columns-alpha
-                              active-freq-columns-alpha
-                              n-segments-columns-alpha
-                              tp-columns
-                              break?]} (get-in inbits-cols
-                                               [:regions rgn-id lyr-id])
-                      uniqix (str (name rgn-id) (name lyr-id))
-                      lay (get-in r-lays [rgn-id lyr-id])
-                      lay-cache (::cache (meta lay))]
-                :when lay]
-          (->> (bg-image lay)
-               (with-cache lay-cache [::bg uniqix] opts #{:drawing})
-               (draw-image-dt ctx lay dt))
-          (when overlaps-columns-alpha
-            (->> overlaps-columns-alpha
-                 (fill-ids-alpha-image lay "black")
-                 (with-cache sc [::ocols uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when boost-columns-alpha
-            (->> boost-columns-alpha
-                 (fill-ids-alpha-image lay "black")
-                 (with-cache sc [::boosts uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when active-freq-columns-alpha
-            (->> active-freq-columns-alpha
-                 (fill-ids-alpha-image lay "black")
-                 (with-cache sc [::afreq uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when n-segments-columns-alpha
-            (->> n-segments-columns-alpha
-                 (fill-ids-alpha-image lay "black")
-                 (with-cache sc [::nsegcols uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when (and active-columns
-                     (get-in opts [:columns :active]))
-            (->> active-columns
-                 (fill-ids-image lay (:active state-colors))
-                 (with-cache sc [::acols uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when (and pred-columns
-                     (get-in opts [:columns :predictive]))
-            (->> pred-columns
-                 (fill-ids-image lay (:predicted state-colors))
-                 (with-cache sc [::pcols uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when tp-columns
-            (->> tp-columns
-                 (fill-ids-image lay (:temporal-pooling state-colors))
-                 (with-cache sc [::tpcols uniqix] opts #{:columns :drawing})
-                 (draw-image-dt ctx lay dt)))
-          (when (and break? (= :one-d (:display-mode d-opts)))
-            (->> (break-image lay)
-                 (draw-image-dt ctx lay dt))))))
+      (doseq [[_ lyr-id rgn-id :as path] (layer-layout-paths layouts)
+              :let [{:keys [active-columns
+                            pred-columns
+                            overlaps-columns-alpha
+                            boost-columns-alpha
+                            active-freq-columns-alpha
+                            n-segments-columns-alpha
+                            tp-columns
+                            break?]} (get path->bits path)
+                    uniqix (str (name rgn-id) (name lyr-id))
+                    lay (get-in layouts path)
+                    lay-cache (::cache (meta lay))]
+              :when lay]
+        (->> (bg-image lay)
+             (with-cache lay-cache [::bg uniqix] opts #{:drawing})
+             (draw-image-dt ctx lay dt))
+        (when overlaps-columns-alpha
+          (->> overlaps-columns-alpha
+               (fill-ids-alpha-image lay "black")
+               (with-cache sc [::ocols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when boost-columns-alpha
+          (->> boost-columns-alpha
+               (fill-ids-alpha-image lay "black")
+               (with-cache sc [::boosts uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when active-freq-columns-alpha
+          (->> active-freq-columns-alpha
+               (fill-ids-alpha-image lay "black")
+               (with-cache sc [::afreq uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when n-segments-columns-alpha
+          (->> n-segments-columns-alpha
+               (fill-ids-alpha-image lay "black")
+               (with-cache sc [::nsegcols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when (and active-columns
+                   (get-in opts [:columns :active]))
+          (->> active-columns
+               (fill-ids-image lay (:active state-colors))
+               (with-cache sc [::acols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when (and pred-columns
+                   (get-in opts [:columns :predictive]))
+          (->> pred-columns
+               (fill-ids-image lay (:predicted state-colors))
+               (with-cache sc [::pcols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when tp-columns
+          (->> tp-columns
+               (fill-ids-image lay (:temporal-pooling state-colors))
+               (with-cache sc [::tpcols uniqix] opts #{:columns :drawing})
+               (draw-image-dt ctx lay dt)))
+        (when (and break? (= :one-d (:display-mode d-opts)))
+          (->> (break-image lay)
+               (draw-image-dt ctx lay dt)))))
 
     ;; mark facets
     (doseq [lay (grid-layout-vals layouts)]
@@ -1055,12 +1048,12 @@
         (lay/highlight-element lay ctx dt bit bit (:highlight state-colors))))
 
     ;; draw ff synapses
-    (draw-ff-synapses ctx p-syns p-syns-by-source viz-steps r-lays s-lays sel
-                      opts)
+    (draw-ff-synapses ctx p-syns p-syns-by-source steps (:regions layouts)
+                      (:senses layouts) sel opts)
 
     (when-let [cslay (:cells-segments layouts)]
       ;; draw selected cells and segments
-      (draw-cells-segments ctx c-states d-segs d-syns a-segs a-syns viz-steps
+      (draw-cells-segments ctx c-states d-segs d-syns a-segs a-syns steps
                            (peek sel) layouts opts))))
 
 (def code-key
@@ -1148,22 +1141,14 @@
 (defn on-onscreen-bits-changed!
   [cached-onscreen-bits layouts]
   (assert (not-empty layouts))
-  (let [path->ids-onscreen (into
-                            {}
-                            (concat
-                             (for [[_ rgn-id lyr-id
-                                    :as path] (layer-layout-paths layouts)]
-                               [[rgn-id lyr-id]
-                                (lay/ids-onscreen (get-in layouts path))])
-                             (for [[_ sense-id
-                                    :as path] (sense-layout-paths layouts)]
-                               [sense-id
-                                (lay/ids-onscreen (get-in layouts path))])))]
-    (swap! cached-onscreen-bits
-           (fn [ob]
-             (when ob
-               (marshal/release! ob))
-             (marshal/big-value path->ids-onscreen)))))
+  (doseq [[path big-value] @cached-onscreen-bits]
+    (marshal/release! big-value))
+  (reset! cached-onscreen-bits
+          (into {}
+                (for [path (grid-layout-paths layouts)]
+                  [path (marshal/big-value
+                         (into #{}
+                               (lay/ids-onscreen (get-in layouts path))))]))))
 
 (defn absorb-step-template
   [step-template viz-options viz-layouts cached-onscreen-bits]
@@ -1172,13 +1157,13 @@
   (on-onscreen-bits-changed! cached-onscreen-bits @viz-layouts))
 
 (defn fetch-ff-syns-by-source!
-  [into-journal proximal-syns-by-source steps sel opts]
+  [into-journal proximal-syns-by-source m-bits sel opts]
   (doseq [{:keys [model-id path dt bit] :as sel1} sel
           :when (= :senses (first path))
           :let [[_ sense-id] path
                 src-bits (case (get-in opts [:ff-synapses :to])
-                           :all (concat (get-in (nth steps dt)
-                                                [:senses sense-id :active-bits])
+                           :all (concat (get-in m-bits
+                                                [model-id path :active-bits])
                                         (when bit
                                           [bit]))
                            :selected (when bit
@@ -1192,35 +1177,69 @@
                                  (concat (when do-disconn? ["disconnected"])
                                          (when do-inactive? ["inactive-syn"])
                                          (when do-growing? ["growing"])))]]
-    (put! into-journal ["get-proximal-synapses-by-source-bit" model-id
-                        (name sense-id) src-bit syn-states
+    (put! into-journal ["get-proximal-synapses-by-source-bit" model-id sense-id
+                        src-bit syn-states
                         (marshal/channel response-c true)])
     (go
       (let [syns (<! response-c)]
-        (swap! proximal-syns-by-source assoc-in [model-id path src-bit] syns)))))
+        (swap! proximal-syns-by-source assoc-in [model-id path src-bit]
+               (keywordize-keys syns))))))
 
-(defn fetch-inbits-cols!
-  [into-journal steps-data steps opts c-onscreen-bits]
-  (let [fetches (into #{} (remove nil?)
-                      [(when (get-in opts [:inbits :predicted])
-                         "pred-bits-alpha")
-                       (when (get-in opts [:columns :overlaps])
-                         "overlaps-columns-alpha")
-                       (when (get-in opts [:columns :boosts])
-                         "boost-columns-alpha")
-                       (when (get-in opts [:columns :active-freq])
-                         "active-freq-columns-alpha")
-                       (when (get-in opts [:columns :n-segments])
-                         "n-segments-columns-alpha")
-                       (when (get-in opts [:columns :temporal-pooling])
-                         "tp-columns")])]
-   (doseq [step steps
-           :let [model-id (:model-id step)
-                 response-c (async/chan)]]
-     (put! into-journal ["get-inbits-cols" model-id fetches c-onscreen-bits
-                         (marshal/channel response-c true)])
-     (go
-       (swap! steps-data assoc-in [step :inbits-cols] (<! response-c))))))
+;; keywordize-keys is slow if the data contains sequences of bits, since it has
+;; to crawl them all to check for maps.
+(defn keywordize1 [m] (into {} (for [[k v] m] [(keyword k) v])))
+
+(defn fetch-model-bits!
+  [into-journal model-bits steps s-template opts path->onscreen-bits]
+  (doseq [:let [sense-ids (keys (:senses s-template))
+                rgn-lyr-ids (for [[rgn-id rgn] (:regions s-template)
+                                  lyr-id (keys rgn)]
+                              [rgn-id lyr-id])
+                sense-fetches (into #{} (remove nil?)
+                                    [;; active bits needed even if not displayed
+                                     "active-bits"
+                                     (when (get-in opts [:inbits :predicted])
+                                       "pred-bits-alpha")])
+                layer-fetches (into #{} (remove nil?)
+                                    [;; active cols needed even if not displayed
+                                     "active-columns"
+                                     (when (get-in opts [:columns :predictive])
+                                       "pred-columns")
+                                     (when (get-in opts [:columns :overlaps])
+                                       "overlaps-columns-alpha")
+                                     (when (get-in opts [:columns :boosts])
+                                       "boost-columns-alpha")
+                                     (when (get-in opts [:columns :active-freq])
+                                       "active-freq-columns-alpha")
+                                     (when (get-in opts [:columns :n-segments])
+                                       "n-segments-columns-alpha")
+                                     (when (get-in opts [:columns
+                                                         :temporal-pooling])
+                                       "tp-columns")])]
+          step steps
+          :let [model-id (:model-id step)]]
+    (doseq [sense-id sense-ids
+            :let [path [:senses sense-id]
+                  onscreen-bits-marshal (path->onscreen-bits path)
+                  response-c (async/chan)]]
+      (put! into-journal ["get-sense-bits" model-id sense-id sense-fetches
+                          onscreen-bits-marshal
+                          (marshal/channel response-c true)])
+      (go
+        (let [fetched-bits (<! response-c)]
+          (swap! model-bits assoc-in [model-id path]
+                 (keywordize1 fetched-bits)))))
+    (doseq [[rgn-id lyr-id] rgn-lyr-ids
+            :let [path [:regions rgn-id lyr-id]
+                  onscreen-bits-marshal (path->onscreen-bits path)
+                  response-c (async/chan)]]
+      (put! into-journal ["get-layer-bits" model-id rgn-id lyr-id layer-fetches
+                          onscreen-bits-marshal
+                          (marshal/channel response-c true)])
+      (go
+        (let [fetched-bits (<! response-c)]
+          (swap! model-bits assoc-in [model-id path]
+                 (keywordize1 fetched-bits)))))))
 
 ;; `seen-col-paths` is an atom shared between the parallel recursive go blocks
 (defn fetch-segs-traceback!
@@ -1236,11 +1255,11 @@
              :apical "get-column-apical-segments"
              :distal "get-column-distal-segments"
              :proximal "get-column-proximal-segments")
-           model-id (name rgn-id) (name lyr-id) col
-           (marshal/channel response-c true)])
+           model-id rgn-id lyr-id col (marshal/channel response-c true)])
     (go
       (let [segs-by-cell (<! response-c)]
-        (swap! segs-atom assoc-in col-path segs-by-cell)
+        (swap! segs-atom assoc-in col-path
+               (keywordize-keys segs-by-cell))
         (doseq [[ci segs] (segs-decider segs-by-cell)
                 [si seg] segs
                 :let [response2-c (async/chan)]]
@@ -1249,26 +1268,25 @@
                    :apical "get-apical-segment-synapses"
                    :distal "get-distal-segment-synapses"
                    :proximal "get-proximal-segment-synapses")
-                 model-id (name rgn-id) (name lyr-id) col ci si syn-states
+                 model-id rgn-id lyr-id col ci si syn-states
                  (marshal/channel response-c true)])
           (go
             (let [syns-by-state (<! response-c)]
               (swap! syns-atom assoc-in (into col-path [ci si])
-                     syns-by-state)
+                     (keywordize-keys syns-by-state))
               (when trace-back?
                 (let [syns (:active syns-by-state)
                       new-cps (for [{:keys [src-id src-lyr src-col]} syns
                                     ;; continue tracing till we reach a sense
                                     :when src-lyr]
-                                [model-id [:regions (keyword src-id)
-                                           (keyword src-lyr)] src-col])]
+                                [model-id [:regions src-id src-lyr] src-col])]
                   (fetch-segs-traceback! into-journal segs-atom syns-atom
                                          seen-col-paths new-cps seg-type
                                          syn-states segs-decider
                                          trace-back?))))))))))
 
 (defn fetch-segs!
-  [into-journal segs-atom syns-atom steps sel opts seg-type]
+  [into-journal segs-atom syns-atom m-bits sel opts seg-type]
   (let [{draw-to :to
          get-inactive? :inactive
          get-disconnected? :disconnected
@@ -1291,12 +1309,11 @@
                                                [bit])
                                      :proximal
                                      (case draw-to
-                                       :all (concat
-                                             (get-in (nth steps dt)
-                                                     [:regions rgn-id lyr-id
-                                                      :active-columns])
-                                             (when bit
-                                               [bit]))
+                                       :all (concat (get-in m-bits
+                                                            [model-id path
+                                                             :active-columns])
+                                                    (when bit
+                                                      [bit]))
                                        :selected (when bit
                                                    [bit])
                                        :none nil))]
@@ -1324,26 +1341,22 @@
     (fetch-segs-traceback! into-journal segs-atom syns-atom (atom #{}) col-paths
                            seg-type syn-states segs-decider trace-back?)))
 
-;; A "viz-step" is a step with viz-canvas-specific data added.
-(defn make-viz-step
-  [step steps-data]
-  (merge step (get steps-data step)))
-
-(defn make-viz-steps
-  [steps steps-data]
-  (map make-viz-step steps (repeat steps-data)))
-
 (defn absorb-new-steps!
-  [steps-v steps-data into-journal opts c-onscreen-bits]
-  (let [new-steps (->> steps-v
-                       (remove (partial contains?
-                                        @steps-data)))]
-    (swap! steps-data
-           #(into (select-keys % steps-v) ;; remove old steps
-                  (for [step new-steps] ;; insert new caches
-                    [step {:cache (atom {})}])))
-    (fetch-inbits-cols! into-journal steps-data new-steps opts
-                        c-onscreen-bits)))
+  [steps-v step-caches model-bits into-journal s-template opts
+   path->onscreen-bits]
+  ;; Assumption: all new steps are at the beginning
+  (let [new-steps (loop [xs (seq steps-v)
+                         new-steps []]
+                    (if-let [step (first xs)]
+                      (if-not (contains? @step-caches (:model-id step))
+                        (recur (next xs)
+                               (conj new-steps step))
+                        new-steps)
+                      new-steps))]
+    (swap! step-caches into (for [step new-steps]
+                              [(:model-id step) (atom {})]))
+    (fetch-model-bits! into-journal model-bits new-steps s-template opts
+                       path->onscreen-bits)))
 
 (defn ids-onscreen-changed?
   [before after]
@@ -1354,23 +1367,31 @@
 
 (defn viz-canvas
   [_ steps selection step-template viz-options into-viz into-sim into-journal]
-  (let [steps-data (atom {})
-
-        ;; model-id -> path -> col -> data
+  (let [;; ## Fetched remote data
+        ;; model-id -> path-vector -> {:active-columns [] :active-cells [] ...}
+        model-bits (atom {})
+        ;; model-id -> path-vector -> col -> data
         cell-states (atom {})
-        ;; model-id -> path -> col -> cell-index -> segs
+        ;; model-id -> path-vector -> col -> cell-i -> segs
         apical-segs (atom {})
         distal-segs (atom {})
         proximal-segs (atom {})
-        ;; model-id -> path -> col -> cell-index -> seg-index -> syns-by-state
+        ;; model-id -> path-vector -> col -> cell-i -> seg-i -> syns-by-state
         apical-syns (atom {})
         distal-syns (atom {})
         proximal-syns (atom {})
-        ;; model-id -> path -> bit -> syns
+        ;; model-id -> path-vector -> bit -> syns
         proximal-syns-by-source (atom {})
 
-        viz-layouts (atom nil)
+        ;; ## Saved local data
+        ;; path-vector -> BigValueMarshal
         cached-onscreen-bits (atom nil)
+        ;; path -> layout
+        ;; (use `get-in m path-vector`, not `get m path-vector`)
+        viz-layouts (atom nil)
+        ;; model-id -> cache-atom
+        step-caches (atom {})
+
         into-viz (or into-viz (async/chan))
         teardown-c (async/chan)]
     (go-loop []
@@ -1378,6 +1399,10 @@
                                       into-viz ([v] v)
                                       :priority true)]
         (case command
+          :drop-steps-data (let [[dropped] xs
+                                 ids (map :model-id dropped)]
+                             (doseq [m-atom [model-bits step-caches]]
+                               (apply swap! m-atom dissoc ids)))
           :background-clicked (swap! selection sel/clear)
           :sort (let [[apply-to-all?] xs]
                   (sort! viz-layouts viz-options
@@ -1385,7 +1410,8 @@
                            (grid-layout-paths @viz-layouts)
                            (map :path @selection))
                          @steps
-                         (:dt (peek @selection))))
+                         (:dt (peek @selection))
+                         @model-bits))
           :clear-sort (let [[apply-to-all?] xs]
                         (clear-sort! viz-layouts viz-options
                                      (if apply-to-all?
@@ -1397,7 +1423,8 @@
                                       (grid-layout-paths @viz-layouts)
                                       (map :path @selection))
                                     (nth @steps
-                                         (:dt (peek @selection)))))
+                                         (:dt (peek @selection)))
+                                    @model-bits))
           :clear-facets (let [[apply-to-all?] xs]
                           (clear-facets! viz-layouts viz-options
                                          (if apply-to-all?
@@ -1476,13 +1503,15 @@
           (absorb-step-template @step-template viz-options viz-layouts
                                 cached-onscreen-bits)
           (when (not-empty @steps)
-            (absorb-new-steps! @steps steps-data into-journal @viz-options
+            (absorb-new-steps! @steps step-caches model-bits into-journal
+                               @step-template @viz-options
                                @cached-onscreen-bits)))
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
-                     (absorb-new-steps! xs steps-data into-journal @viz-options
-                                        @cached-onscreen-bits)))
+                     (absorb-new-steps! xs step-caches model-bits
+                                        into-journal @step-template
+                                        @viz-options @cached-onscreen-bits)))
         (add-watch viz-layouts ::onscreen-bits
                    (fn onscreen-bits<-layouts [_ _ prev layouts]
                      (when (and prev
@@ -1491,8 +1520,8 @@
                                                   layouts))))
         (add-watch cached-onscreen-bits ::fetch-bits
                    (fn on-onscreen-bits-change [_ _ _ cob]
-                     (fetch-inbits-cols! into-journal steps-data @steps
-                                         @viz-options cob)))
+                     (fetch-model-bits! into-journal model-bits @steps
+                                        @step-template @viz-options cob)))
         (add-watch step-template ::absorb-step-template
                    (fn step-template-changed [_ _ _ template]
                      (absorb-step-template template viz-options viz-layouts
@@ -1528,7 +1557,7 @@
                          (swap! proximal-segs empty)
                          (swap! proximal-syns empty)
                          (fetch-segs! into-journal proximal-segs proximal-syns
-                                      @steps sel opts :proximal))
+                                      @model-bits sel opts :proximal))
                        (when-not (->> sel
                                       (every?
                                        (fn [{:keys [model-id path bit]}]
@@ -1538,7 +1567,7 @@
                          (swap! proximal-syns-by-source empty)
                          (fetch-ff-syns-by-source! into-journal
                                                    proximal-syns-by-source
-                                                   steps sel opts))
+                                                   @model-bits sel opts))
                        ;; Cells and distal/apical synapses: just check sel1
                        (when-not (get-in @cell-states [model-id path bit])
                          (swap! cell-states empty)
@@ -1547,57 +1576,81 @@
                            (let [response-c (async/chan)
                                  [_ rgn-id lyr-id] path]
                              (put! into-journal
-                                   ["get-column-cells" model-id (name rgn-id)
-                                    (name lyr-id) bit
-                                    (marshal/channel response-c true)])
+                                   ["get-column-cells" model-id rgn-id lyr-id
+                                    bit (marshal/channel response-c true)])
                              (go
-                               (let [{:keys [cells-per-column winner-cells
-                                             active-cells
-                                             prior-predicted-cells]}
-                                     (<! response-c)]
+                               (let [column-cells (<! response-c)]
                                  (swap! cell-states assoc-in [model-id path bit]
-                                        {:active-cells active-cells
-                                         :prior-predicted-cells prior-predicted-cells
-                                         :winner-cells winner-cells
-                                         :cells-per-column cells-per-column}))))))
-                       (when (or (not (get-in @distal-segs [model-id path bit]))
-                                 (not= distal-seg (:distal-seg old-sel1)))
+                                        (keywordize-keys column-cells)))))))
+                       (when (and bit
+                                  (or (not (get-in @distal-segs
+                                                   [model-id path bit]))
+                                      (not= distal-seg (:distal-seg old-sel1))))
                          (swap! distal-segs empty)
                          (swap! distal-syns empty)
                          (fetch-segs! into-journal distal-segs distal-syns
-                                      @steps [sel1] opts :distal))
-                       (when (or (not (get-in @apical-segs [model-id path bit]))
-                                 (not= apical-seg (:apical-seg old-sel1)))
+                                      @model-bits [sel1] opts :distal))
+                       (when (and bit
+                                  (or (not (get-in @apical-segs
+                                                   [model-id path bit]))
+                                      (not= apical-seg (:apical-seg old-sel1))))
                          (swap! apical-segs empty)
                          (swap! distal-syns empty)
                          (fetch-segs! into-journal apical-segs apical-syns
-                                      @steps [sel1] opts :apical)))))
+                                      @model-bits [sel1] opts :apical)))))
         (add-watch viz-options ::fetches
                    (fn [_ _ old-opts opts]
                      (when (or (not= (:inbits old-opts)
                                      (:inbits opts))
                                (not= (:columns old-opts)
                                      (:columns opts)))
-                       (fetch-inbits-cols! into-journal steps-data @steps opts
-                                           @cached-onscreen-bits))
+                       (fetch-model-bits! into-journal model-bits @steps
+                                          @step-template opts
+                                          @cached-onscreen-bits))
                      (when (not= (:ff-synapses old-opts)
                                  (:ff-synapses opts))
                        (swap! proximal-segs empty)
                        (swap! proximal-syns empty)
                        (fetch-segs! into-journal proximal-segs proximal-syns
-                                    @steps @selection opts :proximal))
+                                    @model-bits @selection opts :proximal))
                      (when (not= (:distal-synapses old-opts)
                                  (:distal-synapses opts))
                        (swap! distal-segs empty)
                        (swap! distal-syns empty)
-                       (fetch-segs! into-journal distal-segs distal-syns @steps
-                                    @selection opts :distal))
+                       (fetch-segs! into-journal distal-segs distal-syns
+                                    @model-bits @selection opts :distal))
                      (when (not= (:apical-synapses old-opts)
                                  (:apical-synapses opts))
                        (swap! apical-segs empty)
                        (swap! apical-syns empty)
-                       (fetch-segs! into-journal apical-segs apical-syns @steps
-                                    @selection opts :apical))))
+                       (fetch-segs! into-journal apical-segs apical-syns
+                                    @model-bits @selection opts :apical))))
+        (add-watch model-bits ::synapses-waiting-on-active-bits
+                   (fn [_ _ old-m-bits m-bits]
+                     (when (= :all (get-in @viz-options [:ff-synapses :to]))
+                       (doseq [{:keys [model-id path]} @selection
+                               :when (not (contains?
+                                           (get-in old-m-bits [model-id path])
+                                           :active-columns))]
+                         (when (and (= :regions (first path))
+                                    (not (contains?
+                                          (get-in old-m-bits [model-id path])
+                                          :active-columns))
+                                    (contains? (get-in m-bits [model-id path])
+                                               :active-columns))
+                           (fetch-segs! into-journal proximal-segs proximal-syns
+                                        m-bits @selection @viz-options
+                                        :proximal))
+                         (when (and (= :senses (first path))
+                                    (not (contains? (get-in old-m-bits
+                                                            [model-id path])
+                                                    :active-bits))
+                                    (contains? (get-in m-bits [model-id path])
+                                               :active-bits))
+                           (fetch-ff-syns-by-source! into-journal
+                                                     proximal-syns-by-source
+                                                     m-bits @selection
+                                                     @viz-options))))))
         (add-watch distal-segs ::cells-segments-layout
                    (fn [_ _ _ d-s]
                      (let [opts @viz-options]
@@ -1680,14 +1733,13 @@
                    :on-click #(viz-click % @steps selection
                                          @viz-layouts))
             width height
-            [selection steps steps-data proximal-syns proximal-syns-by-source
+            [selection steps model-bits proximal-syns proximal-syns-by-source
              cell-states distal-segs distal-syns apical-segs apical-syns
              viz-layouts viz-options]
             (fn [ctx]
-              (let [viz-steps (make-viz-steps @steps @steps-data)
-                    opts @viz-options]
-                (when (should-draw? viz-steps opts)
-                  (draw-viz! ctx viz-steps @proximal-syns
+              (let [opts @viz-options]
+                (when (should-draw? @steps opts)
+                  (draw-viz! ctx @steps @step-caches @model-bits @proximal-syns
                              @proximal-syns-by-source @cell-states @distal-segs
                              @distal-syns @apical-segs @apical-syns @viz-layouts
                              @selection opts))))]]))})))
