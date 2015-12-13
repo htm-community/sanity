@@ -18,7 +18,6 @@
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [cljs.core.async :as async :refer [<! put!]]
-            [clojure.set :as set]
             [clojure.walk :refer [keywordize-keys]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]
                    [org.numenta.sanity.macros :refer [with-cache]]))
@@ -1186,6 +1185,10 @@
         (swap! proximal-syns-by-source assoc-in [model-id path src-bit]
                (keywordize-keys syns))))))
 
+;; keywordize-keys is slow if the data contains sequences of bits, since it has
+;; to crawl them all to check for maps.
+(defn keywordize1 [m] (into {} (for [[k v] m] [(keyword k) v])))
+
 (defn fetch-model-bits!
   [into-journal model-bits steps s-template opts path->onscreen-bits]
   (doseq [:let [sense-ids (keys (:senses s-template))
@@ -1225,7 +1228,7 @@
       (go
         (let [fetched-bits (<! response-c)]
           (swap! model-bits assoc-in [model-id path]
-                 (keywordize-keys fetched-bits)))))
+                 (keywordize1 fetched-bits)))))
     (doseq [[rgn-id lyr-id] rgn-lyr-ids
             :let [path [:regions rgn-id lyr-id]
                   onscreen-bits-marshal (path->onscreen-bits path)
@@ -1236,7 +1239,7 @@
       (go
         (let [fetched-bits (<! response-c)]
           (swap! model-bits assoc-in [model-id path]
-                 (keywordize-keys fetched-bits)))))))
+                 (keywordize1 fetched-bits)))))))
 
 ;; `seen-col-paths` is an atom shared between the parallel recursive go blocks
 (defn fetch-segs-traceback!
@@ -1341,16 +1344,19 @@
 (defn absorb-new-steps!
   [steps-v step-caches model-bits into-journal s-template opts
    path->onscreen-bits]
-  (let [ids (set (map :model-id steps-v))
-        old-ids (set (keys @step-caches))
-        added-ids (set/difference ids old-ids)
-        removed-ids (set/difference old-ids ids)
-        new-steps (filter #(contains? added-ids (:model-id %)) steps-v)]
-    (swap! step-caches into (for [id added-ids]
-                              [id (atom {})]))
+  ;; Assumption: all new steps are at the beginning
+  (let [new-steps (loop [xs (seq steps-v)
+                         new-steps []]
+                    (if-let [step (first xs)]
+                      (if-not (contains? @step-caches (:model-id step))
+                        (recur (next xs)
+                               (conj new-steps step))
+                        new-steps)
+                      new-steps))]
+    (swap! step-caches into (for [step new-steps]
+                              [(:model-id step) (atom {})]))
     (fetch-model-bits! into-journal model-bits new-steps s-template opts
-                       path->onscreen-bits)
-    removed-ids))
+                       path->onscreen-bits)))
 
 (defn ids-onscreen-changed?
   [before after]
@@ -1393,6 +1399,10 @@
                                       into-viz ([v] v)
                                       :priority true)]
         (case command
+          :drop-steps-data (let [[dropped] xs
+                                 ids (map :model-id dropped)]
+                             (doseq [m-atom [model-bits step-caches]]
+                               (apply swap! m-atom dissoc ids)))
           :background-clicked (swap! selection sel/clear)
           :sort (let [[apply-to-all?] xs]
                   (sort! viz-layouts viz-options
@@ -1499,16 +1509,9 @@
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
-                     (let [removed-ids (absorb-new-steps!
-                                        xs step-caches model-bits
+                     (absorb-new-steps! xs step-caches model-bits
                                         into-journal @step-template
-                                        @viz-options @cached-onscreen-bits)]
-                       ;; Cleanup
-                       (doseq [m-atom [model-bits cell-states apical-segs
-                                       distal-segs proximal-segs apical-syns
-                                       distal-syns proximal-syns
-                                       proximal-syns-by-source step-caches]]
-                         (apply swap! model-bits dissoc removed-ids)))))
+                                        @viz-options @cached-onscreen-bits)))
         (add-watch viz-layouts ::onscreen-bits
                    (fn onscreen-bits<-layouts [_ _ prev layouts]
                      (when (and prev
@@ -1579,14 +1582,18 @@
                                (let [column-cells (<! response-c)]
                                  (swap! cell-states assoc-in [model-id path bit]
                                         (keywordize-keys column-cells)))))))
-                       (when (or (not (get-in @distal-segs [model-id path bit]))
-                                 (not= distal-seg (:distal-seg old-sel1)))
+                       (when (and bit
+                                  (or (not (get-in @distal-segs
+                                                   [model-id path bit]))
+                                      (not= distal-seg (:distal-seg old-sel1))))
                          (swap! distal-segs empty)
                          (swap! distal-syns empty)
                          (fetch-segs! into-journal distal-segs distal-syns
                                       @model-bits [sel1] opts :distal))
-                       (when (or (not (get-in @apical-segs [model-id path bit]))
-                                 (not= apical-seg (:apical-seg old-sel1)))
+                       (when (and bit
+                                  (or (not (get-in @apical-segs
+                                                   [model-id path bit]))
+                                      (not= apical-seg (:apical-seg old-sel1))))
                          (swap! apical-segs empty)
                          (swap! distal-syns empty)
                          (fetch-segs! into-journal apical-segs apical-syns

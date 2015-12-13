@@ -67,7 +67,8 @@
                 keep-steps (:keep-steps @capture-options)
                 [kept dropped] (split-at keep-steps
                                          (cons step* @steps))]
-            (reset! steps kept))
+            (reset! steps kept)
+            (put! into-viz [:drop-steps-data dropped]))
           (recur))))
     steps-c))
 
