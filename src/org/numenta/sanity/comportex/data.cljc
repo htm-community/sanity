@@ -60,18 +60,18 @@
                          predictive-col?)
                     active-bit?)
           :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
-      {:target-id (name rgn-id)
-       :target-lyr (name lyr-id)
-       :target-col col
-       :target-dt 0
-       :syn-state (if active-bit?
-                    (if predictive-col?
-                      "active-predicted"
-                      "active")
-                    (if predictive-col?
-                      "predicted"
-                      "inactive-syn"))
-       :perm perm})))
+      {"target-id" rgn-id
+       "target-lyr" lyr-id
+       "target-col" col
+       "target-dt" 0
+       "syn-state" (if active-bit?
+                     (if predictive-col?
+                       "active-predicted"
+                       "active")
+                     (if predictive-col?
+                       "predicted"
+                       "inactive-syn"))
+       "perm" perm})))
 
 (defn column-segs
   [htm prev-htm rgn-id lyr-id col seg-type]
@@ -123,14 +123,14 @@
                      disc-tot (+ (count (grouped-syns [:disconnected :inactive]))
                                  disc-act)]]
            [si
-            {:learn-seg? (and (= ci learn-ci)
+            {"learn-seg?" (and (= ci learn-ci)
                               (= si learn-si))
-             :n-conn-act conn-act
-             :n-conn-tot conn-tot
-             :n-disc-act disc-act
-             :n-disc-tot disc-tot
-             :stimulus-th stimulus-th
-             :learning-th learning-th}]))]))))
+             "n-conn-act" conn-act
+             "n-conn-tot" conn-tot
+             "n-disc-act" disc-act
+             "n-disc-tot" disc-tot
+             "stimulus-th" stimulus-th
+             "learning-th" learning-th}]))]))))
 
 (defn segment-syns
   [htm prev-htm rgn-id lyr-id col ci si syn-states seg-type]
@@ -202,12 +202,12 @@
                                                      (repeat pinit)))))
         syn-sources (cond-> {}
                       (contains? syn-states "active")
-                      (assoc :active
+                      (assoc "active"
                              (grouped-sourced-syns
                               [:connected :active]))
 
                       (contains? syn-states "inactive-syn")
-                      (assoc :inactive-syn
+                      (assoc "inactive-syn"
                              (concat (grouped-sourced-syns
                                       [:connected :inactive])
                                      (if (:disconnected syn-states)
@@ -216,12 +216,12 @@
                                          :inactive]))))
 
                       (contains? syn-states "disconnected")
-                      (assoc :disconnected
+                      (assoc "disconnected"
                              (grouped-sourced-syns
                               [:disconnected :active]))
 
                       (contains? syn-states "growing")
-                      (assoc :growing
+                      (assoc "growing"
                              (grouped-sourced-syns :growing)))
         dt (case seg-type
              :apical 1
@@ -230,7 +230,7 @@
     (->> syn-sources
          (util/remap (fn [source-info]
                        (for [[i [src-id src-lyr src-i] p] source-info]
-                         {:src-col
+                         {"src-col"
                           (if src-lyr
                             (first (p/source-of-bit
                                     (get-in regions
@@ -238,10 +238,10 @@
                                     src-i))
                             src-i)
 
-                          :src-id (name src-id)
-                          :src-lyr (when src-lyr (name src-lyr))
-                          :src-dt dt
-                          :perm p}))))))
+                          "src-id" src-id
+                          "src-lyr" (when src-lyr src-lyr)
+                          "src-dt" dt
+                          "perm" p}))))))
 
 (defn cell-excitation-data
   [htm prior-htm rgn-id lyr-id sel-col]
@@ -259,26 +259,26 @@
 (defn step-template-data
   [htm]
   (let [sense-keys (core/sense-keys htm)]
-    {:senses (->> (map vector (range) sense-keys)
-                  (reduce (fn [st [ordinal sense-id]]
-                            (let [sense (get-in htm [:senses sense-id])]
-                              (assoc st sense-id
-                                     {:dimensions (p/dims-of sense)
-                                      :ordinal ordinal})))
-                          {}))
-     :regions (->> (map vector (range)
-                        (for [rgn-id (core/region-keys htm)
-                              :let [rgn (get-in htm [:regions rgn-id])]
-                              lyr-id (core/layers rgn)]
-                          [rgn-id lyr-id]))
-                   (reduce (fn [rt [ordinal [rgn-id lyr-id]]]
-                             (let [lyr (get-in htm [:regions rgn-id lyr-id])]
-                               (assoc-in rt [rgn-id lyr-id]
-                                         {:spec (p/params lyr)
-                                          :dimensions (p/dims-of lyr)
-                                          :ordinal (+ ordinal
-                                                      (count sense-keys))})))
-                           {}))}))
+    {"senses" (->> (map vector (range) sense-keys)
+                   (reduce (fn [st [ordinal sense-id]]
+                             (let [sense (get-in htm [:senses sense-id])]
+                               (assoc st sense-id
+                                      {"dimensions" (p/dims-of sense)
+                                       "ordinal" ordinal})))
+                           {}))
+     "regions" (->> (map vector (range)
+                         (for [rgn-id (core/region-keys htm)
+                               :let [rgn (get-in htm [:regions rgn-id])]
+                               lyr-id (core/layers rgn)]
+                           [rgn-id lyr-id]))
+                    (reduce (fn [rt [ordinal [rgn-id lyr-id]]]
+                              (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                                (assoc-in rt [rgn-id lyr-id]
+                                          {"spec" (p/params lyr)
+                                           "dimensions" (p/dims-of lyr)
+                                           "ordinal" (+ ordinal
+                                                        (count sense-keys))})))
+                            {}))}))
 
 (defn- cell->id
   [depth [col ci]]

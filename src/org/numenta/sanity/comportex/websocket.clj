@@ -3,7 +3,6 @@
             [cognitect.transit :as transit]
             [compojure.core :refer [routes GET]]
             [compojure.route :as route]
-            [org.numenta.sanity.util :refer [keywordize-keys* stringify-keys*]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [ring.adapter.jetty9 :as jetty :refer [run-jetty]])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
@@ -72,8 +71,7 @@
                               target->mchannel
                               (fn [t v]
                                 (put! to-network-c (transit-str
-                                                    ["put!" t
-                                                     (stringify-keys* v)]
+                                                    ["put!" t v]
                                                     (marshal/write-handlers
                                                      target->mchannel
                                                      local-resources))))
@@ -82,8 +80,7 @@
                                                     ["close!" t]
                                                     (marshal/write-handlers
                                                      target->mchannel))))
-                              remote-resources))
-            msg (keywordize-keys* msg)]
+                              remote-resources))]
         (if-let [{:keys [ch single-use?] :as mchannel} (@target->mchannel
                                                         target)]
           (do
