@@ -24,25 +24,7 @@
                                 :let [[selector _] (get-in htm [:sensors
                                                                 sense-id])
                                       v (p/extract selector input-value)]]
-                            [sense-id v]))
-     :senses (into
-              {}
-              (for [sense-id (core/sense-keys htm)
-                    :let [sense (get-in htm [:senses sense-id])]]
-                [sense-id {:active-bits (set (data/active-bits sense))}]))
-     :regions (into
-               {}
-               (for [rgn-id (core/region-keys htm)
-                     :let [rgn (get-in htm [:regions rgn-id])]]
-                 [rgn-id
-                  (into
-                   {}
-                   (for [lyr-id (core/layers rgn)
-                         :let [lyr (get rgn lyr-id)]]
-                     [lyr-id {:active-columns (p/active-columns lyr)
-                              :pred-columns (->> (p/prior-predictive-cells lyr)
-                                                 (map first)
-                                                 (distinct))}]))]))}))
+                            [sense-id v]))}))
 
 (defn id-missing-response
   [id steps-offset]
@@ -153,6 +135,14 @@
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])]
                       (cond-> {}
+                        (contains? fetches "active-columns")
+                        (assoc :active-columns (p/active-columns lyr))
+
+                        (contains? fetches "pred-columns")
+                        (assoc :pred-columns (->> (p/prior-predictive-cells lyr)
+                                                  (map first)
+                                                  (distinct)))
+
                         (contains? fetches "overlaps-columns-alpha")
                         (assoc :overlaps-columns-alpha
                                (->> (:col-overlaps (:state lyr))
@@ -217,6 +207,9 @@
                                                            sense)))
                                         (get-in prev-htm [:regions ff-rgn-id]))]
                       (cond-> {}
+                        (contains? fetches "active-bits")
+                        (assoc :active-bits (set (data/active-bits sense)))
+
                         (and (contains? fetches "pred-bits-alpha")
                              prev-ff-rgn)
                         (assoc :pred-bits-alpha
