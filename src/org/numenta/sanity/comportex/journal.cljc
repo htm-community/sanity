@@ -146,12 +146,92 @@
           (let [[co] xs]
             (reset! capture-options co))
 
-          "get-inbits-cols"
-          (let [[id fetches onscreen-bits-marshal {response-c :ch}] xs
-                path->ids (:value onscreen-bits-marshal)]
+          "get-layer-bits"
+          (let [[id rgn-id lyr-id fetches {cols-subset :value}
+                 {response-c :ch}] xs]
+            (put! response-c
+                  (if-let [htm (find-model id)]
+                    (let [lyr (get-in htm [:regions rgn-id lyr-id])]
+                      (cond-> {}
+                        (contains? fetches "overlaps-columns-alpha")
+                        (assoc :overlaps-columns-alpha
+                               (->> (:col-overlaps (:state lyr))
+                                    (reduce-kv (fn [m [col _ _] v]
+                                                 (assoc!
+                                                  m col
+                                                  (max v (get m col
+                                                              0))))
+                                               (transient {}))
+                                    (persistent!)
+                                    (util/remap #(min 1.0
+                                                      (float (/ % 16))))))
+
+                        (contains? fetches "boost-columns-alpha")
+                        (assoc :boost-columns-alpha
+                               (let [{:keys [max-boost]} (p/params lyr)]
+                                (->> (:boosts lyr)
+                                     (map
+                                      #(/ (dec %)
+                                          (dec max-boost)))
+                                     (map float)
+                                     (zipmap (range)))))
+
+                        (contains? fetches "active-freq-columns-alpha")
+                        (assoc :active-freq-columns-alpha
+                               (->> (:active-duty-cycles lyr)
+                                    (map #(min 1.0 (* 2 %)))
+                                    (zipmap (range))))
+
+                        (contains? fetches "n-segments-columns-alpha")
+                        (assoc :n-segments-columns-alpha
+                               (->> cols-subset
+                                    (map #(data/count-segs-in-column
+                                           (:distal-sg lyr)
+                                           (p/layer-depth lyr) %))
+                                    (map #(min 1.0
+                                               (float (/ % 16.0))))
+                                    (zipmap cols-subset)))
+
+                        (contains? fetches "tp-columns")
+                        (assoc :tp-columns
+                               (->> (p/temporal-pooling-cells lyr)
+                                    (map first)))
+
+                        true
+                        (assoc :break?
+                               (-> lyr
+                                   (get-in [:prior-distal-state
+                                            :active-bits])
+                                   empty?))))
+                    (id-missing-response id steps-offset))))
+
+          "get-sense-bits"
+          (let [[id sense-id fetches {bits-subset :value}
+                 {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/inbits-cols-data htm prev-htm path->ids fetches)
+                    (let [sense (get-in htm [:senses sense-id])
+                          ;; region this sense feeds to, for predictions
+                          ff-rgn-id (first (get-in htm [:fb-deps sense-id]))
+                          prev-ff-rgn (when (pos? (p/size (p/ff-topology
+                                                           sense)))
+                                        (get-in prev-htm [:regions ff-rgn-id]))]
+                      (cond-> {}
+                        (and (contains? fetches "pred-bits-alpha")
+                             prev-ff-rgn)
+                        (assoc :pred-bits-alpha
+                               (let [start (core/ff-base htm ff-rgn-id
+                                                         sense-id)
+                                     end (+ start
+                                            (-> sense p/ff-topology p/size))]
+                                 (->> (core/predicted-bit-votes prev-ff-rgn)
+                                      (keep (fn [[id votes]]
+                                              (when (and (<= start id)
+                                                         (< id end))
+                                                [(- id start) votes])))
+                                      (into {})
+                                      (util/remap
+                                       #(min 1.0 (float (/ % 8)))))))))
                     (id-missing-response id steps-offset))))
 
           "get-proximal-synapses-by-source-bit"
