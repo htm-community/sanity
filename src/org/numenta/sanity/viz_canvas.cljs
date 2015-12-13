@@ -1257,9 +1257,8 @@
              :proximal "get-column-proximal-segments")
            model-id rgn-id lyr-id col (marshal/channel response-c true)])
     (go
-      (let [segs-by-cell (<! response-c)]
-        (swap! segs-atom assoc-in col-path
-               (keywordize-keys segs-by-cell))
+      (let [segs-by-cell (keywordize-keys (<! response-c))]
+        (swap! segs-atom assoc-in col-path segs-by-cell)
         (doseq [[ci segs] (segs-decider segs-by-cell)
                 [si seg] segs
                 :let [response2-c (async/chan)]]
@@ -1582,22 +1581,24 @@
                                (let [column-cells (<! response-c)]
                                  (swap! cell-states assoc-in [model-id path bit]
                                         (keywordize-keys column-cells)))))))
-                       (when (and bit
-                                  (or (not (get-in @distal-segs
-                                                   [model-id path bit]))
-                                      (not= distal-seg (:distal-seg old-sel1))))
-                         (swap! distal-segs empty)
-                         (swap! distal-syns empty)
-                         (fetch-segs! into-journal distal-segs distal-syns
-                                      @model-bits [sel1] opts :distal))
-                       (when (and bit
-                                  (or (not (get-in @apical-segs
-                                                   [model-id path bit]))
-                                      (not= apical-seg (:apical-seg old-sel1))))
-                         (swap! apical-segs empty)
-                         (swap! distal-syns empty)
-                         (fetch-segs! into-journal apical-segs apical-syns
-                                      @model-bits [sel1] opts :apical)))))
+                       (when (or (not (get-in @distal-segs
+                                              [model-id path bit]))
+                                 (not= distal-seg (:distal-seg old-sel1)))
+                         (when (or bit (:bit (peek old-sel)))
+                           (swap! distal-segs empty)
+                           (swap! distal-syns empty))
+                         (when bit
+                           (fetch-segs! into-journal distal-segs distal-syns
+                                        @model-bits [sel1] opts :distal)))
+                       (when (or (not (get-in @apical-segs
+                                              [model-id path bit]))
+                                 (not= apical-seg (:apical-seg old-sel1)))
+                         (when (or bit (:bit (peek old-sel)))
+                           (swap! apical-segs empty)
+                           (swap! distal-syns empty))
+                         (when bit
+                           (fetch-segs! into-journal apical-segs apical-syns
+                                        @model-bits [sel1] opts :apical))))))
         (add-watch viz-options ::fetches
                    (fn [_ _ old-opts opts]
                      (when (or (not= (:inbits old-opts)
