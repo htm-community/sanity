@@ -120,7 +120,10 @@
 
 ;; Use `:json-verbose` to avoid Transit's caching, which has bugs.
 ;; This issue is tracked in https://github.com/cognitect/transit-cljs/issues/22
-(def encoding :json-verbose)
+;; But there are other issues with `:json-verbose` in Python.
+;; This issue is tracked in https://github.com/cognitect/transit-python/issues/23
+;; So, for the moment, the transit-cljs bug isn't causing any known issues.
+(def encoding :json)
 
 (defn write-handlers
   [target->mchannel local-resources]
