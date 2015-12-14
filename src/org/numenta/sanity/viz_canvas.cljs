@@ -484,8 +484,7 @@
                              (:min-cells-segs-w-px d-opts))
         max-height-px (:max-height-px d-opts)
         our-top (+ (:top-px d-opts) cell-r-px (:cell-label-h-px d-opts))
-        our-height (cond-> (* nseg-pad (* 8 cell-r-px))
-                     max-height-px (min (- max-height-px our-top)))]
+        our-height (* nseg-pad 4 cell-r-px)]
     (reify
       lay/PBox
       (layout-bounds [_]
