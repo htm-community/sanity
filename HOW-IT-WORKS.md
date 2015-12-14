@@ -2,6 +2,34 @@
 
 _(This page is currently a draft / dumping ground.)_
 
+- [High-level description](#high-level)
+- [The network / messaging layer](#network-messaging-layer)
+  - [Channels](#channels)
+  - [Drawing boxes](#drawing-boxes)
+  - [Why Transit?](#why-transit)
+- [The messages](#the-messages)
+  - [Journal](#journal)
+    - ["subscribe"](#subscribe)
+    - ["set-capture-options"](#set-capture-options)
+    - ["get-column-apical-segments"](#get-column-apical-segments)
+    - ["get-column-distal-segments"](#get-column-distal-segments)
+    - ["get-column-proximal-segments"](#get-column-proximal-segments)
+    - ["get-apical-segment-synapses"](#get-apical-segment-synapses)
+    - ["get-distal-segment-synapses"](#get-distal-segment-synapses)
+    - ["get-proximal-segment-synapses"](#get-proximal-segment-synapses)
+    - ["get-column-state-freqs"](#get-column-state-freqs)
+    - ["get-column-cells"](#get-column-cells)
+    - ["get-layer-bits"](#get-layer-bits)
+    - ["get-sense-bits"](#get-sense-bits)
+  - [Simulation](#simulation)
+    - ["subscribe-to-status"](#subscribe-to-status)
+    - ["run"](#run)
+    - ["pause"](#pause)
+    - ["toggle"](#toggle)
+    - ["step"](#step)
+
+## <a name="high-level" /> High-level description
+
 This page focuses on Sanity's data flow. What is the client sending to the
 server? And vice versa?
 
@@ -22,7 +50,7 @@ channels and putting values into other channels. Now: rip that system apart.
 Put some of the components on different machines. Sanity does this without
 making the UI or the components do messaging differently. It's just channels.
 
-## The network / messaging layer
+## <a name="network-messaging-layer" /> The network / messaging layer
 
 Let's dive right in.
 
@@ -49,7 +77,7 @@ The `msg` is arbitrary large. It is often a vector containing a command and
 arguments, and other times it's a response to a specific request or
 subscription.
 
-### Channels
+### <a name="channels" /> Channels
 
 Sanity's messaging is built on top of:
 
@@ -64,7 +92,7 @@ channel. They can even respond multiple times (i.e. a "subscription").
 
 So, messages are passed via channels, and messages can contain channels.
 
-### The high level: Drawing boxes
+### <a name="drawing-boxes" /> Drawing boxes
 
 When you send a message, you know what's in it, and the final recipient of the
 message knows what to expect. You don't know whether the recipient is in your
@@ -97,7 +125,7 @@ So, in other words:
 Normally it's dirty for intermediaries to inspect messages, but serializers and
 deserializers already have to do it, so let's use them!
 
-#### Why Transit?
+### <a name="why-transit" /> Why Transit?
 
 Initially, it was because it was convenient for Clojure while being accessible
 from everywhere else. It's like JSON, but the Map keys can be anything (not just
@@ -108,7 +136,7 @@ But the real reason we use Transit is its customizable read-handlers and
 write-handlers. They're how this whole "drawing boxes" / "marshal" approach
 works.
 
-## The messages
+## <a name="the-messages" /> The messages
 
 For these messages, there's something important to remember: they're not just
 remotely inspecting a data structure. They're inspecting:
@@ -127,5 +155,311 @@ designating learning.
 
 If you're experimenting with the HTM algorithms, you might go further. Nothing's
 stopping you from showing a synapse reaching back 5 timesteps.
+
+Naming conventions:
+
+- In a synapse:
+  - the "source" is the presynaptic neuron
+  - the "target" is the postsynaptic neuron
+
+### <a name="journal" /> Journal
+
+#### <a name="subscribe" /> "subscribe"
+
+**Parameters:**
+
+- `steps_channel_marshal`
+- `response-channel_marshal`
+
+**Side effects:** Save the `steps_channel`. Whenever the model is stepped, put
+the new step into the provided channel. This subscription lasts until the client
+disconnects.
+
+~~~python
+# Example step
+{
+    'model-id': 'choose a unique identifier for this step',
+    'timestep': 42,
+    'display-value': [['myField1', 'Training'], ['myField2', 1.21]]
+}
+~~~
+
+**Response:** `[step_template, capture_options]`
+
+~~~python
+# Example step template
+{
+    'senses': {
+        'mySense1': {
+            'ordinal': 0, # Display order
+            'dimensions': (200,),
+        },
+    }
+    'regions': {
+        'myRegion1': {
+            'myLayer1': {
+                'ordinal': 1, # Display order
+                'cellsPerColumn': 32,
+                'dimensions': (20,),
+            }
+        }
+    }
+}
+
+# Example capture options
+{
+    'keep-steps': 50,
+    'ff-synapses': {
+        'capture?': False,
+        'only-active?': True,
+        'only-connected?': True,
+    },
+    'distal-synapses': {
+        'capture?': False,
+        'only-active?': True,
+        'only-connected?': True,
+        'only-noteworthy-columns?': True,
+    },
+    'apical-synapses': {
+        'capture?': False,
+        'only-active?': True,
+        'only-connected?': True,
+        'only-noteworthy-columns?': True,
+    },
+}
+~~~
+
+#### <a name="set-capture-options" /> "set-capture-options"
+
+**Parameters:**
+
+- `capture_options`
+
+**Side effects:** Start using these new capture-options for all clients.
+
+#### Get apical/distal/proximal segments
+
+<a name="get-column-apical-segments" />
+<a name="get-column-distal-segments" />
+<a name="get-column-proximal-segments" />
+
+**Messages:**
+
+- `"get-column-apical-segments"`
+- `"get-column-distal-segments"`
+- `"get-column-proximal-segments"`
+
+**Parameters:**
+
+- `model_id`
+- `region_id`
+- `layer_id`
+- `column`
+- `response_channel_marshal`
+
+**Response:**
+
+The segments of the given apical/distal/proximal type by cell index and segment
+index.
+
+~~~python
+{
+    0: {
+        0: {
+            'n-conn-act': 14,
+            'n-conn-tot': 18,
+            'n-disc-act': 2,
+            'n-disc-tot': 10,
+            'stimulus-th': 12,
+            'learning-th': 8,
+        }
+    },
+    1: {},
+    2: {},
+}
+~~~
+
+#### Get apical/distal/proximal synapses
+
+<a name="get-apical-segment-synapses" />
+<a name="get-distal-segment-synapses" />
+<a name="get-proximal-segment-synapses" />
+
+**Messages:**
+
+- `"get-apical-segment-synapses"`
+- `"get-distal-segment-synapses"`
+- `"get-proximal-segment-synapses"`
+
+**Parameters:**
+
+- `model_id`
+- `region_id`
+- `layer_id`
+- `column`
+- `cell_index` the index within the column
+- `segment_index`the index within the cell
+- `synapse_states` a set potentially containing:
+  - `"active"`
+  - `"inactive-syn"`
+  - `"disconnected"`
+- `response_channel_marshal`
+
+**Response:**
+
+Synapses by state
+
+~~~python
+# Example response
+{
+    'active': [
+        {
+            'src-id': 'mySense1',
+            'syn-state': 'active',
+            'src-col': 48,
+            'perm': 0.4,
+            'src-dt' 1,
+        },
+        {
+            'src-id': 'myRegion1',
+            'src-lyr': 'myLayer1',
+            'syn-state': 'active',
+            'src-col': 23,
+            'perm': 0.3,
+            'src-dt' 1,
+        }
+    ],
+    'inactive-syn': {},
+    'disconnected': {},
+}
+~~~
+
+#### <a name="get-column-state-freqs" /> "get-column-state-freqs"
+
+**Parameters**:
+
+- `model_id`
+- `response_channel_marshal`
+
+**Response**: Frequencies of each column state ("active", "predicted",
+"active-predicted"), by path. The column states are mutually exclusive.
+Anything labelled as "active" is not predicted, and vice versa.
+
+~~~python
+# Example response
+{
+    ('myRegion1', 'myLayer1'): {
+        'active': 10,
+        'predicted': 10,
+        'active-predicted': 30,
+        'timestep': 42,
+        'size': 2048,
+    },
+}
+~~~
+
+#### <a name="get-column-cells" /> "get-column-cells"
+
+**Parameters:** `model_id`, `region_id`, `layer_id`, `column`,
+`response_channel_marshal`
+
+**Response:**
+
+~~~python
+# Example response
+{
+    'cells-per-column': 32,
+    'active-cells': set([1, 2, 3]),
+    'prior-predicted-cells': set([2, 3, 4]),
+}
+~~~
+
+#### <a name="get-layer-bits" /> "get-layer-bits"
+
+**Parameters:**
+
+- `model_id`
+- `region_id`
+- `layer_id`
+- `fetches` a set potentially containing each of the following values. Servers
+  might only implement some of these values. Feel free to ignore some.
+  - `"active-columns"`
+  - `"pred-columns"`
+  - `"overlaps-columns-alpha"`
+  - `"boost-columns-alpha"`
+  - `"active-freq-columns-alpha"`
+  - `"n-segments-columns-alpha"`
+  - `"tp-columns"`
+  - `"break?"`
+- `onscreen_bits_marshal` a BigValueMarshal for the onscreen columns. Servers
+  are free to choose whether they pay attention to onscreen bits. It won't hurt
+  anything if you return data for offscreen bits.
+- `response_channel_marshal`
+
+**Response:**
+
+~~~python
+# Example response. Here `fetches` was `set(['active-columns', 'pred-columns'])`
+{
+    'active-columns': set([42, 43, 44]),
+    'pred-columns': set([40, 41, 42]),
+}
+~~~
+
+#### <a name="get-sense-bits" /> "get-sense-bits"
+
+**Parameters:**
+
+- `model_id`
+- `sense_id`
+- `fetches` a set potentially containing each of:
+  - `"active-bits"`
+  - `"pred-bits-alpha"`
+- `onscreen_bits_marshal` a BigValueMarshal for the onscreen bits. Servers are
+  free to choose whether they pay attention to onscreen bits. It won't hurt
+  anything if you return data for offscreen bits.
+- `response_channel_marshal`
+
+**Response:**
+
+~~~python
+# Example response
+{
+    'active-bits': set([3, 4, 5,]),
+}
+~~~
+
+### Simulation
+
+#### <a name="subscribe-to-status" /> "subscribe-to-status"
+
+**Parameters:** `subscriber_channel_marshal`
+
+**Side effects:** Save the `subscriber_channel`. Whenever the simulation is
+paused or unpaused, put `[true]` or `[false]` on the channel, depending on
+whether the simulation is now going.
+
+**Response:** Put the simulation's current `[true]` / `[false]` status on the
+channel immediately, without waiting for a pause / unpause.
+
+**Remarks:** The boolean is wrapped in a list because some parts of the pipeline
+might get confused by a falsy value like `false`.
+
+#### <a name="run" /> "run"
+
+**Side effects:** Unpause the simulation if it's currently paused.
+
+#### <a name="pause" /> "pause"
+
+**Side effects:** Pause the simulation if it's currently going.
+
+#### <a name="toggle" /> "toggle"
+
+**Side effects:** Unpause the simulation if it's currently paused, pause the
+simulation if it's currently going.
+
+#### <a name="step" /> "step"
+
+**Side effects:** Perform one step of the simulation.
 
 _(This page is currently a draft / dumping ground.)_
