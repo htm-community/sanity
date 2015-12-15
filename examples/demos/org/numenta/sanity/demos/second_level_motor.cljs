@@ -8,7 +8,7 @@
             [org.numenta.sanity.demos.sensorimotor-1d :refer [draw-eye]]
             [org.numenta.sanity.bridge.browser :as server]
             [org.numenta.sanity.comportex.data :as data]
-            [org.numenta.sanity.util :as utilv]
+            [org.numenta.sanity.util :refer [translate-network-shape]]
             [monet.canvas :as c]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
@@ -149,7 +149,8 @@
           (server/init model world-c main/into-journal into-sim
                        (demo/htm-step-with-action-selection world-c
                                                             control-c))
-          (reset! main/step-template (data/step-template-data @model)))
+          (reset! main/network-shape (translate-network-shape
+                                      (data/network-shape @model))))
         ;; seed input
         (let [sentences (demo/parse-sentences (:text @config))]
           (put! world-c (demo/initial-inval sentences)))))))

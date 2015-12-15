@@ -112,19 +112,23 @@
           "get-steps"
           (let [[{response-c :ch}] xs]
             (put! response-c
-                  [(data/step-template-data @current-model)
-                   (->> (map make-step @model-steps (drop @steps-offset
-                                                          (range)))
-                        vec)]))
+                  (->> (map make-step @model-steps (drop @steps-offset
+                                                         (range)))
+                       vec)))
 
           "subscribe"
-          (let [[steps-mchannel {response-c :ch}] xs]
+          (let [[steps-mchannel] xs]
             (async/tap steps-mult (:ch steps-mchannel))
             (swap! client-info assoc :steps-mchannel steps-mchannel)
-            (println "JOURNAL: Client subscribed to steps.")
-            (put! response-c
-                  [(data/step-template-data @current-model)
-                   (stringify-keys @capture-options)]))
+            (println "JOURNAL: Client subscribed to steps."))
+
+          "get-network-shape"
+          (let [[{response-c :ch}] xs]
+            (put! response-c (data/network-shape @current-model)))
+
+          "get-capture-options"
+          (let [[{response-c :ch}] xs]
+            (put! response-c (stringify-keys @capture-options)))
 
           "set-capture-options"
           (let [[co] xs]

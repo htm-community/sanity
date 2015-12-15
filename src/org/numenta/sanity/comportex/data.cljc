@@ -256,7 +256,7 @@
               wc)]
     (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id wc+)))
 
-(defn step-template-data
+(defn network-shape
   [htm]
   (let [sense-keys (core/sense-keys htm)]
     {"senses" (->> (map vector (range) sense-keys)

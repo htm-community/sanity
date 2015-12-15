@@ -10,6 +10,8 @@ _(This page is currently a draft / dumping ground.)_
 - [The messages](#the-messages)
   - [Journal](#journal)
     - ["subscribe"](#subscribe)
+    - ["get-network-shape"](#get-network-shape)
+    - ["get-capture-options"](#get-capture-options)
     - ["set-capture-options"](#set-capture-options)
     - ["get-column-apical-segments"](#get-column-apical-segments)
     - ["get-column-distal-segments"](#get-column-distal-segments)
@@ -28,7 +30,7 @@ _(This page is currently a draft / dumping ground.)_
     - ["toggle"](#toggle)
     - ["step"](#step)
 
-## <a name="high-level" /> High-level description
+## <a name="high-level" />High-level description
 
 This page focuses on Sanity's data flow. What is the client sending to the
 server? And vice versa?
@@ -50,7 +52,7 @@ channels and putting values into other channels. Now: rip that system apart.
 Put some of the components on different machines. Sanity does this without
 making the UI or the components do messaging differently. It's just channels.
 
-## <a name="network-messaging-layer" /> The network / messaging layer
+## <a name="network-messaging-layer" />The network / messaging layer
 
 Let's dive right in.
 
@@ -77,7 +79,7 @@ The `msg` is arbitrary large. It is often a vector containing a command and
 arguments, and other times it's a response to a specific request or
 subscription.
 
-### <a name="channels" /> Channels
+### <a name="channels" />Channels
 
 Sanity's messaging is built on top of:
 
@@ -92,7 +94,7 @@ channel. They can even respond multiple times (i.e. a "subscription").
 
 So, messages are passed via channels, and messages can contain channels.
 
-### <a name="drawing-boxes" /> Drawing boxes
+### <a name="drawing-boxes" />Drawing boxes
 
 When you send a message, you know what's in it, and the final recipient of the
 message knows what to expect. You don't know whether the recipient is in your
@@ -125,7 +127,7 @@ So, in other words:
 Normally it's dirty for intermediaries to inspect messages, but serializers and
 deserializers already have to do it, so let's use them!
 
-### <a name="why-transit" /> Why Transit?
+### <a name="why-transit" />Why Transit?
 
 Initially, it was because it was convenient for Clojure while being accessible
 from everywhere else. It's like JSON, but the Map keys can be anything (not just
@@ -136,7 +138,7 @@ But the real reason we use Transit is its customizable read-handlers and
 write-handlers. They're how this whole "drawing boxes" / "marshal" approach
 works.
 
-## <a name="the-messages" /> The messages
+## <a name="the-messages" />The messages
 
 For these messages, there's something important to remember: they're not just
 remotely inspecting a data structure. They're inspecting:
@@ -162,14 +164,13 @@ Naming conventions:
   - the "source" is the presynaptic neuron
   - the "target" is the postsynaptic neuron
 
-### <a name="journal" /> Journal
+### <a name="journal" />Journal
 
-#### <a name="subscribe" /> "subscribe"
+#### <a name="subscribe" />"subscribe"
 
 **Parameters:**
 
 - `steps_channel_marshal`
-- `response-channel_marshal`
 
 **Side effects:** Save the `steps_channel`. Whenever the model is stepped, put
 the new step into the provided channel. This subscription lasts until the client
@@ -184,10 +185,12 @@ disconnects.
 }
 ~~~
 
-**Response:** `[step_template, capture_options]`
+#### <a name="get-network-shape" />"get-network-shape"
+
+**Response:**
 
 ~~~python
-# Example step template
+# Example response
 {
     'senses': {
         'mySense1': {
@@ -205,7 +208,13 @@ disconnects.
         }
     }
 }
+~~~
 
+#### <a name="get-capture-options" />"get-capture-options"
+
+**Response:**
+
+~~~python
 # Example capture options
 {
     'keep-steps': 50,
@@ -229,7 +238,7 @@ disconnects.
 }
 ~~~
 
-#### <a name="set-capture-options" /> "set-capture-options"
+#### <a name="set-capture-options" />"set-capture-options"
 
 **Parameters:**
 
@@ -334,7 +343,7 @@ Synapses by state
 }
 ~~~
 
-#### <a name="get-column-state-freqs" /> "get-column-state-freqs"
+#### <a name="get-column-state-freqs" />"get-column-state-freqs"
 
 **Parameters**:
 
@@ -358,7 +367,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 }
 ~~~
 
-#### <a name="get-column-cells" /> "get-column-cells"
+#### <a name="get-column-cells" />"get-column-cells"
 
 **Parameters:** `model_id`, `region_id`, `layer_id`, `column`,
 `response_channel_marshal`
@@ -374,7 +383,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 }
 ~~~
 
-#### <a name="get-layer-bits" /> "get-layer-bits"
+#### <a name="get-layer-bits" />"get-layer-bits"
 
 **Parameters:**
 
@@ -406,7 +415,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 }
 ~~~
 
-#### <a name="get-sense-bits" /> "get-sense-bits"
+#### <a name="get-sense-bits" />"get-sense-bits"
 
 **Parameters:**
 
@@ -431,7 +440,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 
 ### Simulation
 
-#### <a name="subscribe-to-status" /> "subscribe-to-status"
+#### <a name="subscribe-to-status" />"subscribe-to-status"
 
 **Parameters:** `subscriber_channel_marshal`
 
@@ -445,20 +454,20 @@ channel immediately, without waiting for a pause / unpause.
 **Remarks:** The boolean is wrapped in a list because some parts of the pipeline
 might get confused by a falsy value like `false`.
 
-#### <a name="run" /> "run"
+#### <a name="run" />"run"
 
 **Side effects:** Unpause the simulation if it's currently paused.
 
-#### <a name="pause" /> "pause"
+#### <a name="pause" />"pause"
 
 **Side effects:** Pause the simulation if it's currently going.
 
-#### <a name="toggle" /> "toggle"
+#### <a name="toggle" />"toggle"
 
 **Side effects:** Unpause the simulation if it's currently paused, pause the
 simulation if it's currently going.
 
-#### <a name="step" /> "step"
+#### <a name="step" />"step"
 
 **Side effects:** Perform one step of the simulation.
 

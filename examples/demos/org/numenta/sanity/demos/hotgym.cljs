@@ -6,6 +6,7 @@
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.comportex.data :as data]
+            [org.numenta.sanity.util :refer [translate-network-shape]]
             [org.numenta.sanity.viz-canvas :as viz]
             [goog.dom :as dom]
             [goog.net.XhrIo :as XhrIo]
@@ -554,7 +555,8 @@
                                 " failed. " (.. e -target getStatus) " - "
                                 (.. e -target getStatusText))))))
           (server/init model world-c main/into-journal into-sim))
-        (reset! main/step-template (data/step-template-data @model))))))
+        (reset! main/network-shape (translate-network-shape
+                                    (data/network-shape @model)))))))
 
 (defn model-tab
   []

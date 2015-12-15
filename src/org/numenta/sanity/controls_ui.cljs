@@ -38,13 +38,13 @@
     :else :number))
 
 (defn- spec-form
-  [step-template partypes spec spec-path skip-set]
+  [network-shape partypes spec spec-path skip-set]
   (for [[k v] (sort spec)
         :when (not (skip-set k))
         :let [typ (or (get @partypes k)
                       (get (swap! partypes assoc k (param-type v))
                            k))
-              setv! #(swap! step-template assoc-in spec-path
+              setv! #(swap! network-shape assoc-in spec-path
                             (assoc spec k %))]]
     [:div.row {:class (when (or (nil? v) (string? v))
                         "has-error")}
@@ -86,9 +86,9 @@
                          (setv! newval)))}])]]))
 
 (defn parameters-tab
-  [step-template _ into-sim _]
+  [network-shape _ into-sim _]
 
-  (add-watch step-template ::push-to-server
+  (add-watch network-shape ::push-to-server
              (fn [_ _ prev-st st]
                (when-not (nil? prev-st) ;; don't push when getting initial template
                  (doseq [path (for [[r-id rgn] (:regions st)
@@ -100,7 +100,7 @@
                      (put! into-sim ["set-spec" path new-spec]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
-    (fn [step-template selection into-sim]
+    (fn [network-shape selection into-sim]
       (let [[sel-region sel-layer] (some sel/layer @selection)]
         [:div
          [:p.text-muted "Read/write model parameters of the selected region layer,
@@ -110,11 +110,11 @@
             (str (name sel-region) " " (name sel-layer)))]
          (into
          [:div.form-horizontal]
-         (when @step-template
+         (when @network-shape
            (let [spec-path [:regions sel-region sel-layer :spec]
-                 spec (get-in @step-template spec-path)]
+                 spec (get-in @network-shape spec-path)]
              (concat
-              (spec-form step-template partypes spec spec-path
+              (spec-form network-shape partypes spec spec-path
                          #{:proximal :distal :apical})
               (for [[sub-k title] [[:proximal "Proximal dendrites"]
                                    [:distal "Distal (lateral) dendrites"]
@@ -124,7 +124,7 @@
                  [:div.panel-body
                   (into
                    [:div.form-horizontal]
-                   (spec-form step-template partypes
+                   (spec-form network-shape partypes
                               (get spec sub-k) (conj spec-path sub-k) #{}))]])
               [
                [:div.panel.panel-default
@@ -192,17 +192,17 @@
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn sources-tab
-  [step-template selection series-colors into-journal]
+  [network-shape selection series-colors into-journal]
   [:div
    [:p.text-muted "Plots of cell excitation broken down by source."]
    [:div
-    (when @step-template
-      (for [[region-key rgn] (:regions @step-template)
+    (when @network-shape
+      (for [[region-key rgn] (:regions @network-shape)
             layer-id (keys rgn)]
         ^{:key [region-key layer-id]}
         [:fieldset
          [:legend (str (name region-key) " " (name layer-id))]
-         [plots/cell-excitation-plot-cmp step-template selection series-colors
+         [plots/cell-excitation-plot-cmp network-shape selection series-colors
           region-key layer-id into-journal]]))]])
 
 (def default-cell-sdrs-plot-options
@@ -288,13 +288,13 @@
    ])
 
 (defn cell-sdrs-tab-builder
-  [steps step-template selection into-journal]
+  [steps network-shape selection into-journal]
   (let [plot-opts (atom default-cell-sdrs-plot-options)
         component (atom nil)
         enable! (fn []
                   (reset!
                    component
-                   (plots/cell-sdrs-plot-builder steps step-template selection
+                   (plots/cell-sdrs-plot-builder steps network-shape selection
                                                  into-journal
                                                  plot-opts)))
         disable! (fn []
@@ -642,7 +642,7 @@
            :timestep (:timestep (first steps))}))
 
 (defn navbar
-  [_ _ steps show-help viz-options viz-expanded step-template into-viz into-sim]
+  [_ _ steps show-help viz-options viz-expanded network-shape into-viz into-sim]
   ;; Ideally we would only show unscroll/unsort/unwatch when they are relevant...
   ;; but that is tricky. An easier option is to hide those until the
   ;; first time they are possible, then always show them. We keep track here:
@@ -694,7 +694,7 @@
             (cond-> {:type :button
                      :on-click (send-command into-viz :step-backward)
                      :title "Step backward in time"}
-              (not @step-template) (assoc :disabled "disabled"))
+              (not @network-shape) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-backward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step backward"]]]
           ;; step forward
@@ -703,7 +703,7 @@
             (cond-> {:type :button
                      :on-click (send-command into-viz :step-forward)
                      :title "Step forward in time"}
-              (not @step-template) (assoc :disabled "disabled"))
+              (not @network-shape) (assoc :disabled "disabled"))
             [:span.glyphicon.glyphicon-step-forward {:aria-hidden "true"}]
             [:span.visible-xs-inline " Step forward"]]]
           ;; pause button
@@ -712,7 +712,7 @@
             (cond-> {:type :button
                      :on-click #(put! into-sim ["pause"])
                      :style {:width "5em"}}
-              (not @step-template) (assoc :disabled "disabled"))
+              (not @network-shape) (assoc :disabled "disabled"))
             "Pause"]]
           ;; run button
           [:li (when @going? {:class "hidden"})
@@ -720,7 +720,7 @@
             (cond-> {:type :button
                      :on-click #(put! into-sim ["run"])
                      :style {:width "5em"}}
-              (not @step-template) (assoc :disabled "disabled"))
+              (not @network-shape) (assoc :disabled "disabled"))
             "Run"]]
           ;; display mode
           [:li.dropdown
@@ -1051,19 +1051,19 @@
      [:hr]]))
 
 (defn sanity-app
-  [_ _ _ features _ _ selection steps step-template _ _ _ into-journal _]
+  [_ _ _ features _ _ selection steps network-shape _ _ _ into-journal _]
   (let [show-help (atom false)
         viz-expanded (atom false)
         time-plots-tab (when (features :time-plots)
                          (time-plots-tab-builder steps into-journal))
         cell-sdrs-tab (when (features :cell-SDRs)
-                        (cell-sdrs-tab-builder steps step-template selection
+                        (cell-sdrs-tab-builder steps network-shape selection
                                                into-journal))]
     (fn [title model-tab main-pane _ capture-options viz-options selection steps
-         step-template series-colors into-viz into-sim into-journal debug-data]
+         network-shape series-colors into-viz into-sim into-journal debug-data]
       [:div
        [navbar title features steps show-help viz-options viz-expanded
-        step-template into-viz into-sim]
+        network-shape into-viz into-sim]
        [help-block show-help]
        [:div.container-fluid
         [:div.row
@@ -1080,14 +1080,14 @@
                       [:drawing [drawing-tab features viz-options
                                  capture-options]])
                     (when (features :params)
-                      [:params [parameters-tab step-template selection into-sim
-                               ]])
+                      [:params [parameters-tab network-shape selection
+                                into-sim]])
                     (when time-plots-tab
                       [:time-plots [time-plots-tab series-colors]])
                     (when cell-sdrs-tab
                       [:cell-SDRs [cell-sdrs-tab]])
                     (when (features :sources)
-                      [:sources [sources-tab step-template selection
+                      [:sources [sources-tab network-shape selection
                                  series-colors into-journal]])
                     (when (features :details)
                       [:details [details-tab selection into-journal]])
