@@ -170,9 +170,9 @@
     layouts))
 
 (defn create-layouts
-  [step-template opts insertions]
-  (let [senses (:senses step-template)
-        regions (:regions step-template)
+  [network-shape opts insertions]
+  (let [senses (:senses network-shape)
+        regions (:regions network-shape)
         d-opts (:drawing opts)
         display-mode (:display-mode d-opts)
         spacer (:h-space-px d-opts)
@@ -228,8 +228,8 @@
   changed. Maintains any sorting, facets, and dt/scroll position on
   each layer/sense layout. I.e. replaces the GridLayout within each
   OrderableLayout."
-  [viz-layouts step-template opts insertions]
-  (let [new-layouts (create-layouts step-template opts insertions)
+  [viz-layouts network-shape opts insertions]
+  (let [new-layouts (create-layouts network-shape opts insertions)
         sorted-layouts (reduce (fn [m path]
                                  (let [prev-lay (get-in viz-layouts path)
                                        scraps (select-keys (:layout prev-lay)
@@ -245,8 +245,8 @@
     (reset-layout-caches sorted-layouts)))
 
 (defn init-layouts
-  [step-template opts]
-  (let [layouts (create-layouts step-template opts nil)]
+  [network-shape opts]
+  (let [layouts (create-layouts network-shape opts nil)]
     (->
      (reduce (fn [m path]
                (update-in m path
@@ -1149,10 +1149,10 @@
                          (into #{}
                                (lay/ids-onscreen (get-in layouts path))))]))))
 
-(defn absorb-step-template
-  [step-template viz-options viz-layouts cached-onscreen-bits]
+(defn absorb-network-shape
+  [network-shape viz-options viz-layouts cached-onscreen-bits]
   (reset! viz-layouts
-          (init-layouts step-template @viz-options))
+          (init-layouts network-shape @viz-options))
   (on-onscreen-bits-changed! cached-onscreen-bits @viz-layouts))
 
 (defn fetch-ff-syns-by-source!
@@ -1189,12 +1189,8 @@
 (defn keywordize1 [m] (into {} (for [[k v] m] [(keyword k) v])))
 
 (defn fetch-model-bits!
-  [into-journal model-bits steps s-template opts path->onscreen-bits]
-  (doseq [:let [sense-ids (keys (:senses s-template))
-                rgn-lyr-ids (for [[rgn-id rgn] (:regions s-template)
-                                  lyr-id (keys rgn)]
-                              [rgn-id lyr-id])
-                sense-fetches (into #{} (remove nil?)
+  [into-journal model-bits steps opts path->onscreen-bits]
+  (doseq [:let [sense-fetches (into #{} (remove nil?)
                                     [;; active bits needed even if not displayed
                                      "active-bits"
                                      (when (get-in opts [:inbits :predicted])
@@ -1216,7 +1212,12 @@
                                                          :temporal-pooling])
                                        "tp-columns")])]
           step steps
-          :let [model-id (:model-id step)]]
+          :let [{:keys [senses regions]} (:network-shape step)
+                sense-ids (keys senses)
+                rgn-lyr-ids (for [[rgn-id rgn] regions
+                                  lyr-id (keys rgn)]
+                              [rgn-id lyr-id])
+                model-id (:model-id step)]]
     (doseq [sense-id sense-ids
             :let [path [:senses sense-id]
                   onscreen-bits-marshal (path->onscreen-bits path)
@@ -1340,7 +1341,7 @@
                            seg-type syn-states segs-decider trace-back?)))
 
 (defn absorb-new-steps!
-  [steps-v step-caches model-bits into-journal s-template opts
+  [steps-v step-caches model-bits into-journal opts
    path->onscreen-bits]
   ;; Assumption: all new steps are at the beginning
   (let [new-steps (loop [xs (seq steps-v)
@@ -1353,7 +1354,7 @@
                       new-steps))]
     (swap! step-caches into (for [step new-steps]
                               [(:model-id step) (atom {})]))
-    (fetch-model-bits! into-journal model-bits new-steps s-template opts
+    (fetch-model-bits! into-journal model-bits new-steps opts
                        path->onscreen-bits)))
 
 (defn ids-onscreen-changed?
@@ -1364,7 +1365,7 @@
           (map extractor (grid-layout-vals after)))))
 
 (defn viz-canvas
-  [_ steps selection step-template viz-options into-viz into-sim into-journal]
+  [_ steps selection network-shape viz-options into-viz into-sim into-journal]
   (let [;; ## Fetched remote data
         ;; model-id -> path-vector -> {:active-columns [] :active-cells [] ...}
         model-bits (atom {})
@@ -1438,7 +1439,7 @@
                                                   :model-id (:model-id
                                                              (nth @steps dt)))))))
           :step-forward (if (some #(zero? (:dt %)) @selection)
-                          (when (and @step-template into-sim)
+                          (when (and @network-shape into-sim)
                             (put! into-sim ["step"]))
                           (swap! selection
                                  #(conj (pop %)
@@ -1490,26 +1491,25 @@
                                   (grid-layout-paths @viz-layouts)
                                   (map :path @selection))
                                 false))
-          :toggle-run (when (and @step-template into-sim)
+          :toggle-run (when (and @network-shape into-sim)
                         (put! into-sim ["toggle"])))
         (recur)))
 
     (reagent/create-class
      {:component-will-mount
       (fn [_]
-        (when @step-template
-          (absorb-step-template @step-template viz-options viz-layouts
+        (when @network-shape
+          (absorb-network-shape @network-shape viz-options viz-layouts
                                 cached-onscreen-bits)
           (when (not-empty @steps)
             (absorb-new-steps! @steps step-caches model-bits into-journal
-                               @step-template @viz-options
-                               @cached-onscreen-bits)))
+                               @viz-options @cached-onscreen-bits)))
 
         (add-watch steps ::init-caches-and-request-data
                    (fn init-caches-and-request-data [_ _ _ xs]
                      (absorb-new-steps! xs step-caches model-bits
-                                        into-journal @step-template
-                                        @viz-options @cached-onscreen-bits)))
+                                        into-journal @viz-options
+                                        @cached-onscreen-bits)))
         (add-watch viz-layouts ::onscreen-bits
                    (fn onscreen-bits<-layouts [_ _ prev layouts]
                      (when (and prev
@@ -1519,16 +1519,16 @@
         (add-watch cached-onscreen-bits ::fetch-bits
                    (fn on-onscreen-bits-change [_ _ _ cob]
                      (fetch-model-bits! into-journal model-bits @steps
-                                        @step-template @viz-options cob)))
-        (add-watch step-template ::absorb-step-template
-                   (fn step-template-changed [_ _ _ template]
-                     (absorb-step-template template viz-options viz-layouts
+                                        @viz-options cob)))
+        (add-watch network-shape ::absorb-network-shape
+                   (fn network-shape-changed [_ _ _ template]
+                     (absorb-network-shape template viz-options viz-layouts
                                            cached-onscreen-bits)))
         (add-watch viz-options ::rebuild-layouts
                    (fn layouts<-viz-options [_ _ old-opts opts]
                      (when (not= (:drawing opts)
                                  (:drawing old-opts))
-                       (when-let [st @step-template]
+                       (when-let [st @network-shape]
                          (swap! viz-layouts rebuild-layouts st opts
                                 (cells-segments-insertions
                                  (peek @selection) @cell-states @distal-segs
@@ -1605,8 +1605,7 @@
                                (not= (:columns old-opts)
                                      (:columns opts)))
                        (fetch-model-bits! into-journal model-bits @steps
-                                          @step-template opts
-                                          @cached-onscreen-bits))
+                                          opts @cached-onscreen-bits))
                      (when (not= (:ff-synapses old-opts)
                                  (:ff-synapses opts))
                        (swap! proximal-segs empty)
@@ -1654,7 +1653,7 @@
         (add-watch distal-segs ::cells-segments-layout
                    (fn [_ _ _ d-s]
                      (let [opts @viz-options]
-                       (swap! viz-layouts rebuild-layouts @step-template opts
+                       (swap! viz-layouts rebuild-layouts @network-shape opts
                               (cells-segments-insertions
                                (peek @selection) @cell-states d-s @apical-segs
                                opts)))))
@@ -1662,7 +1661,7 @@
         (add-watch apical-segs ::cells-segments-layout
                    (fn [_ _ _ ap-s]
                      (let [opts @viz-options]
-                       (swap! viz-layouts rebuild-layouts @step-template opts
+                       (swap! viz-layouts rebuild-layouts @network-shape opts
                               (cells-segments-insertions
                                (peek @selection) @cell-states @distal-segs ap-s
                                opts))))))
@@ -1670,7 +1669,7 @@
       :component-will-unmount
       (fn [_]
         (remove-watch steps ::init-caches-and-request-data)
-        (remove-watch step-template ::absorb-step-template)
+        (remove-watch network-shape ::absorb-network-shape)
         (remove-watch viz-options ::rebuild-layouts)
         (remove-watch selection ::update-dt-offsets)
         (remove-watch selection ::fetch-selection-change)

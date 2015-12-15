@@ -213,21 +213,21 @@
    :distal])
 
 (defn viz-rgn-shades
-  [step-template]
-  (let [srcs (concat (keys (:senses @step-template))
-                     (keys (:regions @step-template)))]
+  [network-shape]
+  (let [srcs (concat (keys (:senses @network-shape))
+                     (keys (:regions @network-shape)))]
     (zipmap srcs (range -0.3 0.31 (/ 1.0 (count srcs))))))
 
 (defn- abs [x] (if (neg? x) (- x) x))
 
 (defn draw-cell-excitation-plot!
-  [ctx breakdowns step-template sel-col series-colors]
+  [ctx breakdowns network-shape sel-col series-colors]
   (let [width-px (.-width (.-canvas ctx))
         height-px (.-height (.-canvas ctx))
         plot-size {:w width-px
                    :h 200}
 
-        src-shades (viz-rgn-shades step-template)
+        src-shades (viz-rgn-shades network-shape)
         y-max (* 1.1 (apply max (map :total (vals breakdowns))))
         x-lim [-0.5 (+ (count breakdowns) 3)] ;; space for legend
         y-lim [y-max 0]
@@ -333,7 +333,7 @@
 
       :reagent-render
       (let [size-invalidates-c (async/chan)]
-        (fn [step-template _ series-colors region-key layer-id _ _]
+        (fn [network-shape _ series-colors region-key layer-id _ _]
           [:div nil
            [window-resize-listener size-invalidates-c]
            [resizing-canvas
@@ -343,7 +343,7 @@
             (fn [ctx]
               (let [sel (first (filter sel/layer @selection))
                     bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
-                (draw-cell-excitation-plot! ctx @excitation-data step-template
+                (draw-cell-excitation-plot! ctx @excitation-data network-shape
                                             bit series-colors)))
             size-invalidates-c]]))
       })))
@@ -793,8 +793,8 @@
    :threshold 0})
 
 (defn update-cell-sdrs-states!
-  [states step-template step prev-step into-journal]
-  (for [[region layer-map] (:regions @step-template)
+  [states network-shape step prev-step into-journal]
+  (for [[region layer-map] (:regions @network-shape)
         layer (keys layer-map)
         :let [response-c (async/chan)
               model-id (:model-id step)]]
@@ -809,7 +809,7 @@
             ac (:active-cells cells-by-state)
             pc (:pred-cells cells-by-state)
             on? (:engaged? cells-by-state)
-            threshold (get-in @step-template [:regions region layer
+            threshold (get-in @network-shape [:regions region layer
                                               :spec :distal :learn-threshold])
             ;; for each cell, represents its specificity to each SDR
             cell-sdr-fracs (->> (:cell-sdr-counts state)
@@ -889,13 +889,13 @@
         (swap! states assoc-in [model-id [region layer]] new-state)))))
 
 (defn cell-sdrs-plot-builder
-  [steps step-template selection into-journal plot-opts]
+  [steps network-shape selection into-journal plot-opts]
   (let [states (atom {})
         plot-data (atom (assoc empty-cell-sdrs-state :title ""))]
     (add-watch steps ::cell-sdrs-plot
                (fn [_ _ _ [step prev-step]]
                  (when (:model-id step)
-                   (let [procs (update-cell-sdrs-states! states step-template
+                   (let [procs (update-cell-sdrs-states! states network-shape
                                                          step prev-step
                                                          into-journal)]
                      (go
@@ -918,7 +918,7 @@
                    (:model-id (last to-ingest)))
           (go
             (doseq [[prev-step step] (partition 2 1 (cons nil to-ingest))]
-              (let [procs (update-cell-sdrs-states! states step-template
+              (let [procs (update-cell-sdrs-states! states network-shape
                                                     step prev-step
                                                     into-journal)]
                 ;; await update processes before going on to next time step

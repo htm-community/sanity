@@ -4,6 +4,7 @@
             [org.numenta.sanity.bridge.remote :as remote]
             [org.numenta.sanity.demos.runner :as runner]
             [org.numenta.sanity.selection :as sel]
+            [org.numenta.sanity.util :refer [translate-network-shape]]
             [org.numenta.sanity.viz-canvas :as viz]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
@@ -46,69 +47,63 @@
         response-c (async/chan)]
     (swap! remote-target->chan assoc journal-target into-journal)
     (@pipe-to-remote-target! journal-target into-journal)
-    (put! into-journal ["get-steps" (marshal/channel response-c true)])
+    (put! into-journal ["get-network-shape" (marshal/channel response-c true)])
     (go
-      (let [[st all-steps :as r] (<! response-c)
-            ;; keywordize the template, but don't mangle layer / sense IDs
-            {regions "regions" senses "senses"} st
-            step-template (atom
-                           {:regions
-                            (into {}
-                                  (for [[rgn-id rgn] regions]
-                                    [rgn-id
-                                     (into {}
-                                           (for [[lyr-id lyr] rgn]
-                                             [lyr-id (keywordize-keys lyr)]))]))
-                            :senses
-                            (into {}
-                                  (for [[sense-id sense] senses]
-                                    [sense-id (keywordize-keys sense)]))})
-            steps (->> all-steps
-                       keywordize-keys
-                       reverse
-                       vec
-                       atom)
-            selection (atom sel/blank-selection)
-            base-opts (cond-> viz/default-viz-options
-                        (= 1 (count @steps))
-                        (assoc-in [:drawing :display-mode]
-                                  :two-d))
-            viz-options (atom
-                         (util/deep-merge-with
-                          (fn [& xs]
-                            (let [last-non-nil (->> (reverse xs)
-                                                    (filter (complement nil?))
-                                                    first)]
-                              (if (coll? last-non-nil)
-                                last-non-nil
-                                (last xs))))
-                          base-opts
-                          opts))]
-        (let [[region-key rgn] (-> @step-template :regions seq first)
+      (let [network-shape (atom
+                           (translate-network-shape (<! response-c)))
+            response-c (async/chan)]
+        (put! into-journal ["get-steps" (marshal/channel response-c true)])
+        (let [all-steps (<! response-c)
+              steps (->> all-steps
+                         keywordize-keys
+                         (map (fn [step]
+                                (assoc step :network-shape @network-shape)))
+                         reverse
+                         vec
+                         atom)
+              selection (atom sel/blank-selection)
+              base-opts (cond-> viz/default-viz-options
+                          (= 1 (count @steps))
+                          (assoc-in [:drawing :display-mode]
+                                    :two-d))
+              viz-options (atom
+                           (util/deep-merge-with
+                            (fn [& xs]
+                              (let [last-non-nil (->> (reverse xs)
+                                                      (filter (complement nil?))
+                                                      first)]
+                                (if (coll? last-non-nil)
+                                  last-non-nil
+                                  (last xs))))
+                            base-opts
+                            opts))
+              [region-key rgn] (-> @network-shape :regions seq first)
               layer-id (-> rgn keys first)]
-          (swap! selection
-                 #(conj (empty %)
-                        {:dt 0
-                         :region region-key
-                         :layer layer-id
-                         :model-id (:model-id (first @steps))})))
-        (reagent/render [:div
-                         {:on-click #(put! into-viz [:background-clicked])
-                          :on-key-down #(viz/viz-key-down % into-viz)
-                          :tabIndex 1}
-                         (when (> (count @steps) 1)
-                           [viz/viz-timeline steps selection viz-options])
-                         [:table
-                          [:tr
-                           [:td {:style {:border "none"
-                                         :vertical-align "top"}}
-                            [runner/world-pane steps selection]]
-                           [:td {:style {:border "none"
-                                         :vertical-align "top"}}
-                            [viz/viz-canvas {:tabIndex 0} steps
-                             selection step-template viz-options into-viz nil
-                             into-journal]]]]]
-                        el)))))
+          (let [[region-key rgn] (-> @network-shape :regions seq first)
+                layer-id (-> rgn keys first)]
+            (swap! selection
+                   #(conj (empty %)
+                          {:dt 0
+                           :region region-key
+                           :layer layer-id
+                           :model-id (:model-id (first @steps))})))
+          (reagent/render [:div
+                           {:on-click #(put! into-viz [:background-clicked])
+                            :on-key-down #(viz/viz-key-down % into-viz)
+                            :tabIndex 1}
+                           (when (> (count @steps) 1)
+                             [viz/viz-timeline steps selection viz-options])
+                           [:table
+                            [:tr
+                             [:td {:style {:border "none"
+                                           :vertical-align "top"}}
+                              [runner/world-pane steps selection]]
+                             [:td {:style {:border "none"
+                                           :vertical-align "top"}}
+                              [viz/viz-canvas {:tabIndex 0} steps
+                               selection network-shape viz-options into-viz nil
+                               into-journal]]]]]
+                          el))))))
 
 (defn ^:export release-viz [el serialized]
   (reagent/unmount-component-at-node el)

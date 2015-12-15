@@ -8,7 +8,7 @@
             [org.numenta.sanity.bridge.browser :as server]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.data :as data]
-            [org.numenta.sanity.util :as utilv]
+            [org.numenta.sanity.util :refer [translate-network-shape]]
             [reagent.core :as reagent :refer [atom]]
             [reagent-forms.core :refer [bind-fields]]
             [goog.dom :as dom]
@@ -81,7 +81,8 @@
       (reset! model (demo/n-region-model n-regions demo/spec))
       (if init?
         (server/init model world-c main/into-journal into-sim)
-        (reset! main/step-template (data/step-template-data @model))))))
+        (reset! main/network-shape (translate-network-shape
+                                    (data/network-shape @model)))))))
 
 (defn send-text!
   []
