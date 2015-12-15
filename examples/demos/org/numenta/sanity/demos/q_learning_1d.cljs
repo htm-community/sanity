@@ -154,9 +154,9 @@
   (let [selected-htm (atom nil)]
     (add-watch main/selection ::fetch-selected-htm
                (fn [_ _ _ [sel]]
-                 (when-let [model-id (:model-id sel)]
+                 (when-let [snapshot-id (:snapshot-id sel)]
                    (let [out-c (async/chan)]
-                     (put! main/into-journal ["get-model" model-id
+                     (put! main/into-journal ["get-model" snapshot-id
                                               (marshal/channel out-c true)])
                      (go
                        (reset! selected-htm (<! out-c)))))))

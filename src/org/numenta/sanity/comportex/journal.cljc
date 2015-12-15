@@ -17,7 +17,7 @@
 (defn make-step
   [htm id]
   (let [input-value (:input-value htm)]
-    {"model-id" id
+    {"snapshot-id" id
      "timestep" (p/timestep htm)
      "input-value" input-value
      "sensed-values" (into {}
@@ -384,7 +384,7 @@
                                         capture-options)]
     (go-loop []
       (when-let [model (<! steps-c)]
-        (let [model-id (+ @steps-offset (count @model-steps))
+        (let [snapshot-id (+ @steps-offset (count @model-steps))
               added (conj @model-steps model)
               keep-steps (:keep-steps @capture-options)
               to-drop (if (not (neg? keep-steps))
@@ -394,7 +394,7 @@
                                 (pos? to-drop)
                                 (subvec to-drop)))
           (swap! steps-offset + to-drop)
-          (put! steps-in (make-step model model-id)))
+          (put! steps-in (make-step model snapshot-id)))
         (recur)))
     (go-loop []
       (let [c (<! commands-c)]

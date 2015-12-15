@@ -86,7 +86,7 @@
                           {:dt 0
                            :region region-key
                            :layer layer-id
-                           :model-id (:model-id (first @steps))})))
+                           :snapshot-id (:snapshot-id (first @steps))})))
           (reagent/render [:div
                            {:on-click #(put! into-viz [:background-clicked])
                             :on-key-down #(viz/viz-key-down % into-viz)

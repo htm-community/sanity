@@ -293,8 +293,8 @@
   "Returns the set of active columns or bits for the sense/layer."
   [m-bits step path]
   (let [[lyr-type & _] path
-        {:keys [model-id]} step]
-    (get-in m-bits [model-id path (case lyr-type
+        {:keys [snapshot-id]} step]
+    (get-in m-bits [snapshot-id path (case lyr-type
                                     :regions :active-columns
                                     :senses :active-bits)])))
 
@@ -359,11 +359,11 @@
         draw-to (get-in opts [:ff-synapses :to])]
     ;; Selected layers: traceback
     (loop [seen-col-paths #{}
-           rest-col-paths (for [{:keys [dt model-id path bit]} sel
+           rest-col-paths (for [{:keys [dt snapshot-id path bit]} sel
                                 :when (= (first path) :regions)
                                 :let [[_ rgn-id lyr-id] path
                                       cols-with-data (keys (get-in p-syns
-                                                                   [model-id
+                                                                   [snapshot-id
                                                                     path]))
                                       cols (case draw-to
                                              :all (concat cols-with-data
@@ -373,11 +373,11 @@
                                                          [bit])
                                              :none nil)]
                                 col cols]
-                            [model-id path col])]
+                            [snapshot-id path col])]
       (when (not-empty rest-col-paths)
         (let [[col-path & rest-col-paths*] rest-col-paths
               syns-by-cell (get-in p-syns col-path)
-              [target-model-id [_ target-rgn-id target-lyr-id]
+              [target-snapshot-id [_ target-rgn-id target-lyr-id]
                target-col] col-path
               new-col-paths (distinct
                              (for [[_ syns-by-seg] syns-by-cell
@@ -386,13 +386,13 @@
                                    {:keys [src-id src-lyr src-col]} active-syns
                                    :when src-lyr
                                    :let [new-path [:regions src-id src-lyr]
-                                         new-col-path [target-model-id new-path
-                                                       src-col]]
+                                         new-col-path [target-snapshot-id
+                                                       new-path src-col]]
                                    :when (not (contains? seen-col-paths
                                                          new-col-path))]
                                new-col-path))
               target-lay (get-in r-lays [target-rgn-id target-lyr-id])
-              dt (utilv/index-of steps #(= target-model-id (:model-id %)))
+              dt (utilv/index-of steps #(= target-snapshot-id (:snapshot-id %)))
               [target-x target-y] (element-xy target-lay target-col dt)]
           (doseq [[_ syns-by-seg] syns-by-cell
                   [_ syns-by-state] syns-by-seg
@@ -412,11 +412,11 @@
           (recur (into seen-col-paths new-col-paths)
                  (concat rest-col-paths* new-col-paths)))))
     ;; Selected senses
-    (doseq [{:keys [dt model-id path bit]} sel
+    (doseq [{:keys [dt snapshot-id path bit]} sel
             :when (= (first path) :senses)
             :let [[_ sense-id] path
                   lay (get s-lays sense-id)
-                  syns-by-bit (get-in p-syns-by-source [model-id path])
+                  syns-by-bit (get-in p-syns-by-source [snapshot-id path])
                   syns-by-bit (case draw-to
                                 :all syns-by-bit
                                 :selected (select-keys syns-by-bit [bit])
@@ -533,10 +533,11 @@
 
 (defn cells-segments-insertions
   [sel1 c-states d-segs a-segs opts]
-  (let [{:keys [model-id path bit]} sel1
-        cells-per-column (get-in c-states [model-id path bit :cells-per-column])
-        d-segs-by-cell (get-in d-segs [model-id path bit])
-        a-segs-by-cell (get-in a-segs [model-id path bit])]
+  (let [{:keys [snapshot-id path bit]} sel1
+        cells-per-column (get-in c-states [snapshot-id path bit
+                                           :cells-per-column])
+        d-segs-by-cell (get-in d-segs [snapshot-id path bit])
+        a-segs-by-cell (get-in a-segs [snapshot-id path bit])]
     (when d-segs-by-cell
       {path (fn [left-px]
               (let [n-segs-by-cell (merge-with
@@ -577,7 +578,7 @@
 
 (defn choose-selected-seg
   [segs-by-cell sel1 seg-type]
-  (let [{:keys [model-id path bit]} sel1
+  (let [{:keys [snapshot-id path bit]} sel1
         [sel-ci sel-si] (get sel1 (case seg-type
                                     :apical :apical-seg
                                     :distal :distal-seg))]
@@ -601,18 +602,18 @@
 (defn draw-cells-segments
   [ctx c-states d-segs d-syns a-segs a-syns steps sel1 layouts opts]
   (c/save ctx)
-  (let [{path :path col :bit model-id :model-id} sel1
-        dt (utilv/index-of steps #(= model-id (:model-id %)))
+  (let [{path :path col :bit snapshot-id :snapshot-id} sel1
+        dt (utilv/index-of steps #(= snapshot-id (:snapshot-id %)))
         [d-sel-ci d-sel-si] (choose-selected-seg (get-in d-segs
-                                                         [model-id path col])
+                                                         [snapshot-id path col])
                                                  sel1 :distal)
         [a-sel-ci a-sel-si] (choose-selected-seg (get-in a-segs
-                                                         [model-id path col])
+                                                         [snapshot-id path col])
                                                  sel1 :apical)]
     (when dt
-      (let [d-segs-by-cell (get-in d-segs [model-id path col])
-            a-segs-by-cell (get-in a-segs [model-id path col])
-            cells-in-col (get-in c-states [model-id path col])
+      (let [d-segs-by-cell (get-in d-segs [snapshot-id path col])
+            a-segs-by-cell (get-in a-segs [snapshot-id path col])
+            cells-in-col (get-in c-states [snapshot-id path col])
             sel-lay (get-in layouts (:path sel1))
             col-d-px (get-in opts [:drawing :col-d-px])
             cell-r-px (get-in opts [:drawing :cell-r-px])
@@ -760,8 +761,8 @@
             (when (or (and (= draw-to :selected)
                            selected-seg?)
                       (= draw-to :all))
-              (doseq [[syn-state syns] (get-in syns-by-model [model-id path col
-                                                              ci si])]
+              (doseq [[syn-state syns] (get-in syns-by-model [snapshot-id path
+                                                              col ci si])]
                 (c/stroke-style ctx (state-colors syn-state))
                 (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts
@@ -851,7 +852,7 @@
   (.stopPropagation e)
   (let [append? (.-metaKey e)
         sel1 {:dt click-dt
-              :model-id (:model-id (nth steps click-dt))}]
+              :snapshot-id (:snapshot-id (nth steps click-dt))}]
     (if append?
       (let [same-dt? #(= click-dt (:dt %))]
         (if (some same-dt? @selection)
@@ -950,9 +951,9 @@
                        :h (.-height (.-canvas ctx))})
 
     (doseq [dt draw-dts
-            :let [{:keys [model-id]} (nth steps dt)
-                  sc (get s-caches model-id)
-                  path->bits (get m-bits model-id)]]
+            :let [{:keys [snapshot-id]} (nth steps dt)
+                  sc (get s-caches snapshot-id)
+                  path->bits (get m-bits snapshot-id)]]
       ;; draw encoded inbits
       (doseq [[_ sense-id :as path] (sense-layout-paths layouts)
               :let [{:keys [active-bits
@@ -1110,7 +1111,7 @@
                        (min dt max-dt)
                        (:dt (peek @selection)))
                   sel1 {:path path :bit id :dt dt
-                        :model-id (:model-id (nth steps dt nil))}]]
+                        :snapshot-id (:snapshot-id (nth steps dt nil))}]]
       (reset! hit? true)
       (if append?
         (let [same-bit? #(and (= dt (:dt %))
@@ -1157,12 +1158,12 @@
 
 (defn fetch-ff-syns-by-source!
   [into-journal proximal-syns-by-source m-bits sel opts]
-  (doseq [{:keys [model-id path dt bit] :as sel1} sel
+  (doseq [{:keys [snapshot-id path dt bit] :as sel1} sel
           :when (= :senses (first path))
           :let [[_ sense-id] path
                 src-bits (case (get-in opts [:ff-synapses :to])
                            :all (concat (get-in m-bits
-                                                [model-id path :active-bits])
+                                                [snapshot-id path :active-bits])
                                         (when bit
                                           [bit]))
                            :selected (when bit
@@ -1176,12 +1177,12 @@
                                  (concat (when do-disconn? ["disconnected"])
                                          (when do-inactive? ["inactive-syn"])
                                          (when do-growing? ["growing"])))]]
-    (put! into-journal ["get-proximal-synapses-by-source-bit" model-id sense-id
-                        src-bit syn-states
+    (put! into-journal ["get-proximal-synapses-by-source-bit" snapshot-id
+                        sense-id src-bit syn-states
                         (marshal/channel response-c true)])
     (go
       (let [syns (<! response-c)]
-        (swap! proximal-syns-by-source assoc-in [model-id path src-bit]
+        (swap! proximal-syns-by-source assoc-in [snapshot-id path src-bit]
                (keywordize-keys syns))))))
 
 ;; keywordize-keys is slow if the data contains sequences of bits, since it has
@@ -1217,28 +1218,28 @@
                 rgn-lyr-ids (for [[rgn-id rgn] regions
                                   lyr-id (keys rgn)]
                               [rgn-id lyr-id])
-                model-id (:model-id step)]]
+                snapshot-id (:snapshot-id step)]]
     (doseq [sense-id sense-ids
             :let [path [:senses sense-id]
                   onscreen-bits-marshal (path->onscreen-bits path)
                   response-c (async/chan)]]
-      (put! into-journal ["get-sense-bits" model-id sense-id sense-fetches
+      (put! into-journal ["get-sense-bits" snapshot-id sense-id sense-fetches
                           onscreen-bits-marshal
                           (marshal/channel response-c true)])
       (go
         (let [fetched-bits (<! response-c)]
-          (swap! model-bits assoc-in [model-id path]
+          (swap! model-bits assoc-in [snapshot-id path]
                  (keywordize1 fetched-bits)))))
     (doseq [[rgn-id lyr-id] rgn-lyr-ids
             :let [path [:regions rgn-id lyr-id]
                   onscreen-bits-marshal (path->onscreen-bits path)
                   response-c (async/chan)]]
-      (put! into-journal ["get-layer-bits" model-id rgn-id lyr-id layer-fetches
-                          onscreen-bits-marshal
+      (put! into-journal ["get-layer-bits" snapshot-id rgn-id lyr-id
+                          layer-fetches onscreen-bits-marshal
                           (marshal/channel response-c true)])
       (go
         (let [fetched-bits (<! response-c)]
-          (swap! model-bits assoc-in [model-id path]
+          (swap! model-bits assoc-in [snapshot-id path]
                  (keywordize1 fetched-bits)))))))
 
 ;; `seen-col-paths` is an atom shared between the parallel recursive go blocks
@@ -1247,7 +1248,7 @@
    segs-decider trace-back?]
   (doseq [col-path col-paths
           :when (not (contains? @seen-col-paths col-path))
-          :let [[model-id [_ rgn-id lyr-id] col] col-path
+          :let [[snapshot-id [_ rgn-id lyr-id] col] col-path
                 response-c (async/chan)]]
     (swap! seen-col-paths conj col-path)
     (put! into-journal
@@ -1255,7 +1256,7 @@
              :apical "get-column-apical-segments"
              :distal "get-column-distal-segments"
              :proximal "get-column-proximal-segments")
-           model-id rgn-id lyr-id col (marshal/channel response-c true)])
+           snapshot-id rgn-id lyr-id col (marshal/channel response-c true)])
     (go
       (let [segs-by-cell (keywordize-keys (<! response-c))]
         (swap! segs-atom assoc-in col-path segs-by-cell)
@@ -1267,7 +1268,7 @@
                    :apical "get-apical-segment-synapses"
                    :distal "get-distal-segment-synapses"
                    :proximal "get-proximal-segment-synapses")
-                 model-id rgn-id lyr-id col ci si syn-states
+                 snapshot-id rgn-id lyr-id col ci si syn-states
                  (marshal/channel response-c true)])
           (go
             (let [syns-by-state (<! response-c)]
@@ -1278,7 +1279,8 @@
                       new-cps (for [{:keys [src-id src-lyr src-col]} syns
                                     ;; continue tracing till we reach a sense
                                     :when src-lyr]
-                                [model-id [:regions src-id src-lyr] src-col])]
+                                [snapshot-id [:regions src-id src-lyr]
+                                 src-col])]
                   (fetch-segs-traceback! into-journal segs-atom syns-atom
                                          seen-col-paths new-cps seg-type
                                          syn-states segs-decider
@@ -1298,7 +1300,7 @@
                      get-inactive? (conj "inactive-syn")
                      get-disconnected? (conj "disconnected")
                      get-growing? (conj "growing"))
-        col-paths (for [{:keys [model-id bit path dt]} sel
+        col-paths (for [{:keys [snapshot-id bit path dt]} sel
                         :when (= (first path) :regions)
                         :let [[_ rgn-id lyr-id] path
                               cols (case seg-type
@@ -1309,7 +1311,7 @@
                                      :proximal
                                      (case draw-to
                                        :all (concat (get-in m-bits
-                                                            [model-id path
+                                                            [snapshot-id path
                                                              :active-columns])
                                                     (when bit
                                                       [bit]))
@@ -1317,7 +1319,7 @@
                                                    [bit])
                                        :none nil))]
                         col cols]
-                    [model-id path col])
+                    [snapshot-id path col])
         segs-decider (cond (or (= seg-type :proximal)
                                (and (or (= seg-type :apical)
                                         (= seg-type :distal))
@@ -1347,13 +1349,13 @@
   (let [new-steps (loop [xs (seq steps-v)
                          new-steps []]
                     (if-let [step (first xs)]
-                      (if-not (contains? @step-caches (:model-id step))
+                      (if-not (contains? @step-caches (:snapshot-id step))
                         (recur (next xs)
                                (conj new-steps step))
                         new-steps)
                       new-steps))]
     (swap! step-caches into (for [step new-steps]
-                              [(:model-id step) (atom {})]))
+                              [(:snapshot-id step) (atom {})]))
     (fetch-model-bits! into-journal model-bits new-steps opts
                        path->onscreen-bits)))
 
@@ -1367,19 +1369,19 @@
 (defn viz-canvas
   [_ steps selection network-shape viz-options into-viz into-sim into-journal]
   (let [;; ## Fetched remote data
-        ;; model-id -> path-vector -> {:active-columns [] :active-cells [] ...}
+        ;; snapshot-id -> path-vector -> {:active-columns [] :active-cells [] ...}
         model-bits (atom {})
-        ;; model-id -> path-vector -> col -> data
+        ;; snapshot-id -> path-vector -> col -> data
         cell-states (atom {})
-        ;; model-id -> path-vector -> col -> cell-i -> segs
+        ;; snapshot-id -> path-vector -> col -> cell-i -> segs
         apical-segs (atom {})
         distal-segs (atom {})
         proximal-segs (atom {})
-        ;; model-id -> path-vector -> col -> cell-i -> seg-i -> syns-by-state
+        ;; snapshot-id -> path-vector -> col -> cell-i -> seg-i -> syns-by-state
         apical-syns (atom {})
         distal-syns (atom {})
         proximal-syns (atom {})
-        ;; model-id -> path-vector -> bit -> syns
+        ;; snapshot-id -> path-vector -> bit -> syns
         proximal-syns-by-source (atom {})
 
         ;; ## Saved local data
@@ -1388,7 +1390,7 @@
         ;; path -> layout
         ;; (use `get-in m path-vector`, not `get m path-vector`)
         viz-layouts (atom nil)
-        ;; model-id -> cache-atom
+        ;; snapshot-id -> cache-atom
         step-caches (atom {})
 
         into-viz (or into-viz (async/chan))
@@ -1399,7 +1401,7 @@
                                       :priority true)]
         (case command
           :drop-steps-data (let [[dropped] xs
-                                 ids (map :model-id dropped)]
+                                 ids (map :snapshot-id dropped)]
                              (doseq [m-atom [model-bits step-caches]]
                                (apply swap! m-atom dissoc ids)))
           :background-clicked (swap! selection sel/clear)
@@ -1436,8 +1438,9 @@
                                                dt (min (inc (:dt sel1)) max-dt)]
                                            (assoc sel1
                                                   :dt dt
-                                                  :model-id (:model-id
-                                                             (nth @steps dt)))))))
+                                                  :snapshot-id (:snapshot-id
+                                                                (nth @steps
+                                                                     dt)))))))
           :step-forward (if (some #(zero? (:dt %)) @selection)
                           (when (and @network-shape into-sim)
                             (put! into-sim ["step"]))
@@ -1447,8 +1450,9 @@
                                               dt (dec (:dt (peek %)))]
                                           (assoc sel1
                                                  :dt dt
-                                                 :model-id (:model-id
-                                                            (nth @steps dt)))))))
+                                                 :snapshot-id (:snapshot-id
+                                                               (nth @steps
+                                                                    dt)))))))
           :bit-up (let [{:keys [path bit]} (peek @selection)]
                     (when bit
                       (let [lay (get-in @viz-layouts path)
@@ -1541,47 +1545,48 @@
         (add-watch selection ::fetch-selection-change
                    (fn fetch-selection-change [_ _ old-sel sel]
                      (let [opts @viz-options
-                           {:keys [bit model-id path cell
+                           {:keys [bit snapshot-id path cell
                                    distal-seg apical-seg]
                             :as sel1} (peek sel)
                            old-sel1 (peek old-sel)]
                        ;; Proximal synapses: check all of selection
                        (when-not (->> sel
                                       (every?
-                                       (fn [{:keys [model-id path bit]}]
+                                       (fn [{:keys [snapshot-id path bit]}]
                                          (or (= :senses (first path))
                                              (get-in @proximal-syns
-                                                     [model-id path bit])))))
+                                                     [snapshot-id path bit])))))
                          (swap! proximal-segs empty)
                          (swap! proximal-syns empty)
                          (fetch-segs! into-journal proximal-segs proximal-syns
                                       @model-bits sel opts :proximal))
                        (when-not (->> sel
                                       (every?
-                                       (fn [{:keys [model-id path bit]}]
+                                       (fn [{:keys [snapshot-id path bit]}]
                                          (or (= :regions (first path))
                                              (get-in @proximal-syns-by-source
-                                                     [model-id path bit])))))
+                                                     [snapshot-id path bit])))))
                          (swap! proximal-syns-by-source empty)
                          (fetch-ff-syns-by-source! into-journal
                                                    proximal-syns-by-source
                                                    @model-bits sel opts))
                        ;; Cells and distal/apical synapses: just check sel1
-                       (when-not (get-in @cell-states [model-id path bit])
+                       (when-not (get-in @cell-states [snapshot-id path bit])
                          (swap! cell-states empty)
                          (when (and (= (first path) :regions)
                                     bit)
                            (let [response-c (async/chan)
                                  [_ rgn-id lyr-id] path]
                              (put! into-journal
-                                   ["get-column-cells" model-id rgn-id lyr-id
+                                   ["get-column-cells" snapshot-id rgn-id lyr-id
                                     bit (marshal/channel response-c true)])
                              (go
                                (let [column-cells (<! response-c)]
-                                 (swap! cell-states assoc-in [model-id path bit]
+                                 (swap! cell-states assoc-in [snapshot-id path
+                                                              bit]
                                         (keywordize-keys column-cells)))))))
                        (when (or (not (get-in @distal-segs
-                                              [model-id path bit]))
+                                              [snapshot-id path bit]))
                                  (not= distal-seg (:distal-seg old-sel1)))
                          (when (or bit (:bit (peek old-sel)))
                            (swap! distal-segs empty)
@@ -1590,7 +1595,7 @@
                            (fetch-segs! into-journal distal-segs distal-syns
                                         @model-bits [sel1] opts :distal)))
                        (when (or (not (get-in @apical-segs
-                                              [model-id path bit]))
+                                              [snapshot-id path bit]))
                                  (not= apical-seg (:apical-seg old-sel1)))
                          (when (or bit (:bit (peek old-sel)))
                            (swap! apical-segs empty)
@@ -1627,24 +1632,27 @@
         (add-watch model-bits ::synapses-waiting-on-active-bits
                    (fn [_ _ old-m-bits m-bits]
                      (when (= :all (get-in @viz-options [:ff-synapses :to]))
-                       (doseq [{:keys [model-id path]} @selection
+                       (doseq [{:keys [snapshot-id path]} @selection
                                :when (not (contains?
-                                           (get-in old-m-bits [model-id path])
+                                           (get-in old-m-bits [snapshot-id
+                                                               path])
                                            :active-columns))]
                          (when (and (= :regions (first path))
                                     (not (contains?
-                                          (get-in old-m-bits [model-id path])
+                                          (get-in old-m-bits [snapshot-id path])
                                           :active-columns))
-                                    (contains? (get-in m-bits [model-id path])
+                                    (contains? (get-in m-bits [snapshot-id
+                                                               path])
                                                :active-columns))
                            (fetch-segs! into-journal proximal-segs proximal-syns
                                         m-bits @selection @viz-options
                                         :proximal))
                          (when (and (= :senses (first path))
                                     (not (contains? (get-in old-m-bits
-                                                            [model-id path])
+                                                            [snapshot-id path])
                                                     :active-bits))
-                                    (contains? (get-in m-bits [model-id path])
+                                    (contains? (get-in m-bits [snapshot-id
+                                                               path])
                                                :active-bits))
                            (fetch-ff-syns-by-source! into-journal
                                                      proximal-syns-by-source

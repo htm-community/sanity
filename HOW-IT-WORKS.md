@@ -179,7 +179,7 @@ disconnects.
 ~~~python
 # Example step
 {
-    'model-id': 'choose a unique identifier for this step',
+    'snapshot-id': 'choose a unique identifier for this model snapshot',
     'timestep': 42,
     'display-value': [['myField1', 'Training'], ['myField2', 1.21]]
 }
@@ -260,7 +260,7 @@ disconnects.
 
 **Parameters:**
 
-- `model_id`
+- `snapshot_id`
 - `region_id`
 - `layer_id`
 - `column`
@@ -302,7 +302,7 @@ index.
 
 **Parameters:**
 
-- `model_id`
+- `snapshot_id`
 - `region_id`
 - `layer_id`
 - `column`
@@ -347,7 +347,7 @@ Synapses by state
 
 **Parameters**:
 
-- `model_id`
+- `snapshot_id`
 - `response_channel_marshal`
 
 **Response**: Frequencies of each column state ("active", "predicted",
@@ -369,7 +369,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 
 #### <a name="get-column-cells" />"get-column-cells"
 
-**Parameters:** `model_id`, `region_id`, `layer_id`, `column`,
+**Parameters:** `snapshot_id`, `region_id`, `layer_id`, `column`,
 `response_channel_marshal`
 
 **Response:**
@@ -387,7 +387,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 
 **Parameters:**
 
-- `model_id`
+- `snapshot_id`
 - `region_id`
 - `layer_id`
 - `fetches` a set potentially containing each of the following values. Servers
@@ -419,7 +419,7 @@ Anything labelled as "active" is not predicted, and vice versa.
 
 **Parameters:**
 
-- `model_id`
+- `snapshot_id`
 - `sense_id`
 - `fetches` a set potentially containing each of:
   - `"active-bits"`

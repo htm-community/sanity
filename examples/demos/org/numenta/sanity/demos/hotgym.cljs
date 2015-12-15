@@ -167,9 +167,9 @@
   (let [;; this is sufficient because it's the only proximal input
         candidate {:consumption consumption}
         out-c (async/chan)
-        model-id (:model-id step)]
+        snapshot-id (:snapshot-id step)]
     (put! main/into-journal
-          ["consider-future" model-id candidate (marshal/channel out-c true)])
+          ["consider-future" snapshot-id candidate (marshal/channel out-c true)])
     (go
       (let [[[_ col-state-freqs]] (seq (<! out-c))]
         (swap! step->scores assoc-in [step consumption]
@@ -318,9 +318,9 @@
                                    (remove (partial contains?
                                                     @step->scores)))
                          :let [out-c (async/chan)
-                               model-id (:model-id step)]]
+                               snapshot-id (:snapshot-id step)]]
                    (put! main/into-journal
-                         ["decode-predictive-columns" model-id
+                         ["decode-predictive-columns" snapshot-id
                           :power-consumption @n-predictions
                           (marshal/channel out-c true)])
                    (when @try-boundaries?

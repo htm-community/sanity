@@ -159,7 +159,7 @@
   [col-state-history step into-journal]
   (let [response-c (async/chan)]
     (put! into-journal ["get-column-state-freqs"
-                        (:model-id step)
+                        (:snapshot-id step)
                         (marshal/channel response-c true)])
     (go
       (let [r (keywordize-keys (<! response-c))]
@@ -371,11 +371,11 @@
 
 (defn fetch-details-text!
   [into-journal text-response sel]
-  (let [{:keys [model-id bit] :as sel1} (first (filter sel/layer sel))
+  (let [{:keys [snapshot-id bit] :as sel1} (first (filter sel/layer sel))
         [rgn-id lyr-id] (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
-        (put! into-journal ["get-details-text" model-id rgn-id lyr-id bit
+        (put! into-journal ["get-details-text" snapshot-id rgn-id lyr-id bit
                             (marshal/channel response-c true)])
         (go
           (reset! text-response (<! response-c)))))))
@@ -405,18 +405,18 @@
          [:p.text-muted [:small "(scrollable)"]]
          [:hr]
          [:p.text-muted "If you're brave:"]
-         (let [{:keys [model-id]} (first (filter sel/layer @selection))]
+         (let [{:keys [snapshot-id]} (first (filter sel/layer @selection))]
            [:button.btn.btn-warning.btn-block
             (cond-> {:on-click (fn [e]
                                  (let [response-c (async/chan)]
                                    (put! into-journal
-                                         [:get-model model-id
+                                         [:get-model snapshot-id
                                           (marshal/channel response-c true)
                                           true])
                                    (go
                                      (println (<! response-c))))
                                  (.preventDefault e))}
-              (not model-id) (assoc :disabled "disabled"))
+              (not snapshot-id) (assoc :disabled "disabled"))
             "Dump entire model to console"])
          ])})))
 
