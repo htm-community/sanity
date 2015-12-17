@@ -13,12 +13,12 @@ _(This page is currently a draft / dumping ground.)_
     - ["get-network-shape"](#get-network-shape)
     - ["get-capture-options"](#get-capture-options)
     - ["set-capture-options"](#set-capture-options)
-    - ["get-column-apical-segments"](#get-column-apical-segments)
-    - ["get-column-distal-segments"](#get-column-distal-segments)
-    - ["get-column-proximal-segments"](#get-column-proximal-segments)
-    - ["get-apical-segment-synapses"](#get-apical-segment-synapses)
-    - ["get-distal-segment-synapses"](#get-distal-segment-synapses)
-    - ["get-proximal-segment-synapses"](#get-proximal-segment-synapses)
+    - ["get-apical-segments"](#get-apical-segments)
+    - ["get-distal-segments"](#get-distal-segments)
+    - ["get-proximal-segments"](#get-proximal-segments)
+    - ["get-apical-synapses"](#get-apical-synapses)
+    - ["get-distal-synapses"](#get-distal-synapses)
+    - ["get-proximal-synapses"](#get-proximal-synapses)
     - ["get-column-state-freqs"](#get-column-state-freqs)
     - ["get-column-cells"](#get-column-cells)
     - ["get-layer-bits"](#get-layer-bits)
@@ -248,22 +248,27 @@ disconnects.
 
 #### Get apical/distal/proximal segments
 
-<a name="get-column-apical-segments" />
-<a name="get-column-distal-segments" />
-<a name="get-column-proximal-segments" />
+<a name="get-apical-segments" />
+<a name="get-distal-segments" />
+<a name="get-proximal-segments" />
 
 **Messages:**
 
-- `"get-column-apical-segments"`
-- `"get-column-distal-segments"`
-- `"get-column-proximal-segments"`
+- `"get-apical-segments"`
+- `"get-distal-segments"`
+- `"get-proximal-segments"`
 
 **Parameters:**
 
 - `snapshot_id`
 - `region_id`
 - `layer_id`
-- `column`
+- `segment_selector`
+  - Examples:
+    - `[]` = none
+    - `[1, 7]` = all segments for columns 1, 7
+    - `{1: [2]}` = all segments for column 1, cell 2
+    - `{1: {2: [3, 4]}}` = the third and fourth segments on column 1, cell 2
 - `response_channel_marshal`
 
 **Response:**
@@ -290,24 +295,27 @@ index.
 
 #### Get apical/distal/proximal synapses
 
-<a name="get-apical-segment-synapses" />
-<a name="get-distal-segment-synapses" />
-<a name="get-proximal-segment-synapses" />
+<a name="get-apical-synapses" />
+<a name="get-distal-synapses" />
+<a name="get-proximal-synapses" />
 
 **Messages:**
 
-- `"get-apical-segment-synapses"`
-- `"get-distal-segment-synapses"`
-- `"get-proximal-segment-synapses"`
+- `"get-apical-synapses"`
+- `"get-distal-synapses"`
+- `"get-proximal-synapses"`
 
 **Parameters:**
 
 - `snapshot_id`
 - `region_id`
 - `layer_id`
-- `column`
-- `cell_index` the index within the column
-- `segment_index`the index within the cell
+- `segment_selector`
+  - Examples:
+    - `[]` = none
+    - `[1, 7]` = all synapses for columns 1, 7
+    - `{1: [2]}` = all synapses for column 1, cell 2
+    - `{1: {2: [3, 4]}}` = all synapses on the third and fourth segments on column 1, cell 2
 - `synapse_states` a set potentially containing:
   - `"active"`
   - `"inactive-syn"`
@@ -324,7 +332,6 @@ Synapses by state
     'active': [
         {
             'src-id': 'mySense1',
-            'syn-state': 'active',
             'src-col': 48,
             'perm': 0.4,
             'src-dt' 1,
@@ -332,7 +339,6 @@ Synapses by state
         {
             'src-id': 'myRegion1',
             'src-lyr': 'myLayer1',
-            'syn-state': 'active',
             'src-col': 23,
             'perm': 0.3,
             'src-dt' 1,

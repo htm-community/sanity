@@ -1242,49 +1242,64 @@
           (swap! model-bits assoc-in [snapshot-id path]
                  (keywordize1 fetched-bits)))))))
 
-;; `seen-col-paths` is an atom shared between the parallel recursive go blocks
+;; `seen-cols` is an atom shared between the parallel recursive go blocks
+;; snapshot-id -> path -> #{}
 (defn fetch-segs-traceback!
-  [into-journal segs-atom syns-atom seen-col-paths col-paths seg-type syn-states
+  [into-journal segs-atom syns-atom seen-cols cols-to-fetch seg-type syn-states
    segs-decider trace-back?]
-  (doseq [col-path col-paths
-          :when (not (contains? @seen-col-paths col-path))
-          :let [[snapshot-id [_ rgn-id lyr-id] col] col-path
+  (doseq [[snapshot-id cols-by-path] cols-to-fetch
+          [path cols] cols-by-path
+          :let [seen (get-in @seen-cols [snapshot-id path])
+                cols (remove #(contains? seen %) cols)]
+          :when (not-empty cols)
+          :let [[_ rgn-id lyr-id] path
                 response-c (async/chan)]]
-    (swap! seen-col-paths conj col-path)
+    (swap! seen-cols update-in [snapshot-id path]
+           (fn [seen]
+             (reduce conj (or seen #{}) cols)))
     (put! into-journal
           [(case seg-type
-             :apical "get-column-apical-segments"
-             :distal "get-column-distal-segments"
-             :proximal "get-column-proximal-segments")
-           snapshot-id rgn-id lyr-id col (marshal/channel response-c true)])
+             :apical "get-apical-segments"
+             :distal "get-distal-segments"
+             :proximal "get-proximal-segments")
+           snapshot-id rgn-id lyr-id cols (marshal/channel response-c true)])
     (go
-      (let [segs-by-cell (keywordize-keys (<! response-c))]
-        (swap! segs-atom assoc-in col-path segs-by-cell)
-        (doseq [[ci segs] (segs-decider segs-by-cell)
-                [si seg] segs
-                :let [response2-c (async/chan)]]
-          (put! into-journal
-                [(case seg-type
-                   :apical "get-apical-segment-synapses"
-                   :distal "get-distal-segment-synapses"
-                   :proximal "get-proximal-segment-synapses")
-                 snapshot-id rgn-id lyr-id col ci si syn-states
-                 (marshal/channel response-c true)])
-          (go
-            (let [syns-by-state (<! response-c)]
-              (swap! syns-atom assoc-in (into col-path [ci si])
-                     (keywordize-keys syns-by-state))
-              (when trace-back?
-                (let [syns (:active syns-by-state)
-                      new-cps (for [{:keys [src-id src-lyr src-col]} syns
-                                    ;; continue tracing till we reach a sense
-                                    :when src-lyr]
-                                [snapshot-id [:regions src-id src-lyr]
-                                 src-col])]
-                  (fetch-segs-traceback! into-journal segs-atom syns-atom
-                                         seen-col-paths new-cps seg-type
-                                         syn-states segs-decider
-                                         trace-back?))))))))))
+      (let [segs-by-col (keywordize-keys (<! response-c))
+            _ (swap! segs-atom update-in [snapshot-id path] merge segs-by-col)
+            stf-seq (for [[col segs-by-cell] segs-by-col
+                          [ci segs] (segs-decider segs-by-cell)
+                          [si seg] segs]
+                      [col ci si])
+            syns-to-fetch (reduce (fn [stf [col ci si]]
+                                    (update-in stf [col ci] conj si))
+                                  {} stf-seq)
+            response-c (async/chan)]
+        (put! into-journal
+              [(case seg-type
+                 :apical "get-apical-synapses"
+                 :distal "get-distal-synapses"
+                 :proximal "get-proximal-synapses")
+               snapshot-id rgn-id lyr-id syns-to-fetch syn-states
+               (marshal/channel response-c true)])
+        (let [syns-by-col (keywordize-keys (<! response-c))]
+          (swap! syns-atom update-in [snapshot-id path] merge syns-by-col)
+          (when trace-back?
+            (let [ctf-seq (for [[col syns-by-cell] syns-by-col
+                                [ci syns-by-seg] syns-by-cell
+                                [si syns-by-state] syns-by-seg
+                                :let [syns (:active syns-by-state)]
+                                {:keys [src-id src-lyr src-col]} syns
+                                :when src-lyr
+                                :let [path [:regions src-id src-lyr]]]
+                            [snapshot-id path src-col])
+                  new-ctf (reduce (fn [ctf [snapshot-id path col]]
+                                    (update-in ctf [snapshot-id path]
+                                               conj col))
+                                  {} ctf-seq)]
+              (fetch-segs-traceback! into-journal segs-atom syns-atom
+                                     seen-cols new-ctf seg-type
+                                     syn-states segs-decider
+                                     trace-back?))))))))
 
 (defn fetch-segs!
   [into-journal segs-atom syns-atom m-bits sel opts seg-type]
@@ -1300,26 +1315,28 @@
                      get-inactive? (conj "inactive-syn")
                      get-disconnected? (conj "disconnected")
                      get-growing? (conj "growing"))
-        col-paths (for [{:keys [snapshot-id bit path dt]} sel
-                        :when (= (first path) :regions)
-                        :let [[_ rgn-id lyr-id] path
-                              cols (case seg-type
-                                     :apical (when bit
-                                               [bit])
-                                     :distal (when bit
-                                               [bit])
-                                     :proximal
-                                     (case draw-to
-                                       :all (concat (get-in m-bits
-                                                            [snapshot-id path
-                                                             :active-columns])
-                                                    (when bit
-                                                      [bit]))
-                                       :selected (when bit
-                                                   [bit])
-                                       :none nil))]
-                        col cols]
-                    [snapshot-id path col])
+        ctf-seq (for [{:keys [snapshot-id bit path]} sel
+                      :when (= (first path) :regions)
+                      :let [cols (case seg-type
+                                   :apical (when bit
+                                             [bit])
+                                   :distal (when bit
+                                             [bit])
+                                   :proximal
+                                   (case draw-to
+                                     :all (concat
+                                           (get-in m-bits
+                                                   [snapshot-id path
+                                                    :active-columns])
+                                           (when bit
+                                             [bit]))
+                                     :selected (when bit
+                                                 [bit])
+                                     :none nil))]]
+                  [snapshot-id path cols])
+        cols-to-fetch (reduce (fn [ctf [snapshot-id path cols]]
+                                (assoc-in ctf [snapshot-id path] cols))
+                              {} ctf-seq)
         segs-decider (cond (or (= seg-type :proximal)
                                (and (or (= seg-type :apical)
                                         (= seg-type :distal))
@@ -1339,8 +1356,9 @@
                            (= draw-to :none)
                            (fn [_]
                              nil))]
-    (fetch-segs-traceback! into-journal segs-atom syns-atom (atom #{}) col-paths
-                           seg-type syn-states segs-decider trace-back?)))
+    (fetch-segs-traceback! into-journal segs-atom syns-atom (atom {})
+                           cols-to-fetch seg-type syn-states segs-decider
+                           trace-back?)))
 
 (defn absorb-new-steps!
   [steps-v step-caches model-bits into-journal opts

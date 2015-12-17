@@ -259,49 +259,52 @@
                                        (p/winner-cells lyr))})
                     (id-missing-response id steps-offset))))
 
-          "get-column-apical-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-apical-segments"
+          (let [[id rgn-id lyr-id seg-selector {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/column-segs htm prev-htm rgn-id lyr-id col :apical)
+                    (data/query-segs htm prev-htm rgn-id lyr-id seg-selector
+                                     :apical)
                     (id-missing-response id steps-offset))))
 
-          "get-column-distal-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-distal-segments"
+          (let [[id rgn-id lyr-id seg-selector {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/column-segs htm prev-htm rgn-id lyr-id col :distal)
+                    (data/query-segs htm prev-htm rgn-id lyr-id seg-selector
+                                     :distal)
                     (id-missing-response id steps-offset))))
 
-          "get-column-proximal-segments"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          "get-proximal-segments"
+          (let [[id rgn-id lyr-id seg-selector {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/column-segs htm prev-htm rgn-id lyr-id col :proximal)
+                    (data/query-segs htm prev-htm rgn-id lyr-id seg-selector
+                                     :proximal)
                     (id-missing-response id steps-offset))))
 
-          "get-apical-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-apical-synapses"
+          (let [[id rgn-id lyr-id seg-selector syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
-                                       syn-states :apical)
+                    (data/query-syns htm prev-htm rgn-id lyr-id seg-selector
+                                     syn-states :apical)
                     (id-missing-response id steps-offset))))
 
-          "get-distal-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-distal-synapses"
+          (let [[id rgn-id lyr-id seg-selector syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
-                                       syn-states :distal)
+                    (data/query-syns htm prev-htm rgn-id lyr-id seg-selector
+                                     syn-states :distal)
                     (id-missing-response id steps-offset))))
 
-          "get-proximal-segment-synapses"
-          (let [[id rgn-id lyr-id col ci si syn-states {response-c :ch}] xs]
+          "get-proximal-synapses"
+          (let [[id rgn-id lyr-id seg-selector syn-states {response-c :ch}] xs]
             (put! response-c
                   (if-let [[prev-htm htm] (find-model-pair id)]
-                    (data/segment-syns htm prev-htm rgn-id lyr-id col ci si
-                                       syn-states :proximal)
+                    (data/query-syns htm prev-htm rgn-id lyr-id seg-selector
+                                     syn-states :proximal)
                     (id-missing-response id steps-offset))))
 
           "get-details-text"
