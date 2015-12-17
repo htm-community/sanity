@@ -381,7 +381,8 @@
 
 (defn fetch-details-text!
   [into-journal text-response sel]
-  (let [{:keys [snapshot-id bit] :as sel1} (first (filter sel/layer sel))
+  (let [{:keys [step bit] :as sel1} (first (filter sel/layer sel))
+        {:keys [snapshot-id]} step
         [rgn-id lyr-id] (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
@@ -415,7 +416,8 @@
          [:p.text-muted [:small "(scrollable)"]]
          [:hr]
          [:p.text-muted "If you're brave:"]
-         (let [{:keys [snapshot-id]} (first (filter sel/layer @selection))]
+         (let [{:keys [step]} (first (filter sel/layer @selection))
+               {:keys [snapshot-id]} step]
            [:button.btn.btn-warning.btn-block
             (cond-> {:on-click (fn [e]
                                  (let [response-c (async/chan)]

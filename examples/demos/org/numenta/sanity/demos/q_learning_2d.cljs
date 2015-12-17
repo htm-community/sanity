@@ -112,8 +112,8 @@
   []
   (let [selected-htm (atom nil)]
     (add-watch main/selection ::fetch-selected-htm
-               (fn [_ _ _ [sel]]
-                 (when-let [snapshot-id (:snapshot-id sel)]
+               (fn [_ _ _ [sel1]]
+                 (when-let [snapshot-id (get-in sel1 [:step :snapshot-id])]
                    (let [out-c (async/chan)]
                      (put! main/into-journal ["get-model" snapshot-id
                                               (marshal/channel out-c true)])

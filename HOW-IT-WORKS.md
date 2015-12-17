@@ -202,7 +202,7 @@ disconnects.
         'myRegion1': {
             'myLayer1': {
                 'ordinal': 1, # Display order
-                'cellsPerColumn': 32,
+                'cells-per-column': 32,
                 'dimensions': (20,),
             }
         }
@@ -375,15 +375,24 @@ Synapses by state
 
 #### <a name="get-column-cells" />"get-column-cells"
 
-**Parameters:** `snapshot_id`, `region_id`, `layer_id`, `column`,
-`response_channel_marshal`
+**Parameters:**
+
+- `snapshot_id`
+- `region_id`
+- `layer_id`
+- `column`
+- `fetches` a set potentially containing each of the following values. Servers
+  might only implement some of these values. Feel free to ignore some.
+  - `"active-cells"`
+  - `"prior-predicted-cells"`
+  - `"winner-cells"`
+- `response_channel_marshal`
 
 **Response:**
 
 ~~~python
 # Example response
 {
-    'cells-per-column': 32,
     'active-cells': set([1, 2, 3]),
     'prior-predicted-cells': set([2, 3, 4]),
 }

@@ -17,4 +17,4 @@
 (defn clear
   [sel]
   (conj (empty sel)
-        (select-keys (peek sel) [:dt :path :snapshot-id])))
+        (select-keys (peek sel) [:dt :path :step])))

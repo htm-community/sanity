@@ -242,7 +242,7 @@
                     (id-missing-response id steps-offset))))
 
           "get-column-cells"
-          (let [[id rgn-id lyr-id col {response-c :ch}] xs]
+          (let [[id rgn-id lyr-id col fetches {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])
@@ -251,13 +251,18 @@
                                                       (when (= col column)
                                                         ci)))
                                               (into #{}))]
-                      {"cells-per-column" (p/layer-depth lyr)
-                       "active-cells" (extract-cells
-                                       (p/active-cells lyr))
-                       "prior-predicted-cells" (extract-cells
-                                                (p/prior-predictive-cells lyr))
-                       "winner-cells" (extract-cells
-                                       (p/winner-cells lyr))})
+                      (cond-> {}
+                        (contains? fetches "active-cells")
+                        (assoc "active-cells"
+                               (extract-cells (p/active-cells lyr)))
+
+                        (contains? fetches "prior-predicted-cells")
+                        (assoc "prior-predicted-cells"
+                               (extract-cells (p/prior-predictive-cells lyr)))
+
+                        (contains? fetches "winner-cells")
+                        (assoc "winner-cells"
+                               (extract-cells (p/winner-cells lyr)))))
                     (id-missing-response id steps-offset))))
 
           "get-apical-segments"

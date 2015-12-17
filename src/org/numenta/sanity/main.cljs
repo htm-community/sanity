@@ -32,6 +32,11 @@
 ;;; ## Connect journal to viz
 
 (defn subscribe-to-steps! []
+  (let [response-c (async/chan)]
+    (put! into-journal ["get-capture-options"
+                        (marshal/channel response-c true)])
+    (go
+      (reset! capture-options (keywordize-keys (<! response-c)))))
   (let [steps-c (async/chan)
         response-c (async/chan)]
     (put! into-journal ["get-network-shape" (marshal/channel response-c true)])

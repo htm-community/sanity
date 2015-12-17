@@ -302,9 +302,10 @@
 
 (defn fetch-excitation-data!
   [excitation-data region-key layer-id sels into-journal]
-  (let [sel (first (filter sel/layer sels))
-        bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
-    (if-let [snapshot-id (:snapshot-id sel)]
+  (let [sel1 (first (filter sel/layer sels))
+        bit (when (= (sel/layer sel1) [region-key layer-id])
+              (:bit sel1))]
+    (if-let [snapshot-id (get-in sel1 [:step :snapshot-id])]
       (let [response-c (async/chan)]
         (put! into-journal
               ["get-cell-excitation-data" snapshot-id (name region-key)
@@ -724,9 +725,9 @@
                   [:li (sdr->label a-sdr)]))]]])]))
 
 (defn fetch-transitions-data
-  [sel cell-sdr-counts into-journal]
-  (when-let [[region layer] (sel/layer sel)]
-    (let [snapshot-id (:snapshot-id sel)
+  [sel1 cell-sdr-counts into-journal]
+  (when-let [[region layer] (sel/layer sel1)]
+    (let [{:keys [snapshot-id]} (:step sel1)
           response-c (async/chan)]
       (put! into-journal ["get-transitions-data"
                           snapshot-id region layer cell-sdr-counts
@@ -747,9 +748,9 @@
            (vals cell-sdr-fracs))))
 
 (defn update-cell-sdrs-plot-data!
-  [plot-data states sel into-journal]
-  (when-let [[region layer] (sel/layer sel)]
-    (let [snapshot-id (:snapshot-id sel)]
+  [plot-data states sel1 into-journal]
+  (when-let [[region layer] (sel/layer sel1)]
+    (let [snapshot-id (get-in sel1 [:step :snapshot-id])]
       (when-let [state* (get-in @states [snapshot-id [region layer]])]
         (let [state (assoc state* :title (str (name region) " " (name layer)))]
           (if-not (:sdr-transitions state)
@@ -758,7 +759,7 @@
              ;; immediate update from local state while waiting:
              (reset! plot-data state)
              ;; another update when receive server data
-             (let [x (<! (fetch-transitions-data sel (:cell-sdr-counts state)
+             (let [x (<! (fetch-transitions-data sel1 (:cell-sdr-counts state)
                                                  into-journal))]
                (swap! states assoc-in [snapshot-id [region layer] :sdr-transitions] x)
                (swap! plot-data assoc :sdr-transitions x)))
@@ -910,8 +911,8 @@
                  (update-cell-sdrs-plot-data! plot-data states sel
                                               into-journal)))
     ;; at build time, pull in existing steps starting from current selection
-    (let [[sel] @selection]
-      (when-let [snapshot-id (:snapshot-id sel)]
+    (let [[sel1] @selection]
+      (when-let [snapshot-id (get-in sel1 [:step :snapshot-id])]
         (let [to-ingest (->> (reverse @steps)
                              (drop-while #(not= snapshot-id (:snapshot-id %))))]
           (println "cell-sdrs ingesting from" (:snapshot-id (first to-ingest)) "to"
@@ -924,7 +925,7 @@
                 ;; await update processes before going on to next time step
                 (doseq [c procs] (<! c))))
             ;; finally, redraw
-            (update-cell-sdrs-plot-data! plot-data states sel into-journal)))))
+            (update-cell-sdrs-plot-data! plot-data states sel1 into-journal)))))
     {:content
      (let [size-invalidates-c (async/chan)]
        (fn []

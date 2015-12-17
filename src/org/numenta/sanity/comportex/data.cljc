@@ -317,6 +317,8 @@
                                 (assoc-in rt [rgn-id lyr-id]
                                           {"spec" (p/params lyr)
                                            "dimensions" (p/dims-of lyr)
+                                           "cells-per-column" (p/layer-depth
+                                                               lyr)
                                            "ordinal" (+ ordinal
                                                         (count sense-keys))})))
                             {}))}))
