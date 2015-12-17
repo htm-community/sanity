@@ -19,7 +19,7 @@ _(This page is currently a draft / dumping ground.)_
     - ["get-apical-synapses"](#get-apical-synapses)
     - ["get-distal-synapses"](#get-distal-synapses)
     - ["get-proximal-synapses"](#get-proximal-synapses)
-    - ["get-column-state-freqs"](#get-column-state-freqs)
+    - ["get-layer-stats"](#get-layer-stats)
     - ["get-column-cells"](#get-column-cells)
     - ["get-layer-bits"](#get-layer-bits)
     - ["get-sense-bits"](#get-sense-bits)
@@ -349,27 +349,27 @@ Synapses by state
 }
 ~~~
 
-#### <a name="get-column-state-freqs" />"get-column-state-freqs"
+#### <a name="get-layer-stats" />"get-layer-stats"
 
 **Parameters**:
 
 - `snapshot_id`
+- `region_id`
+- `layer_id`
+- `fetches` a set potentially containing each of the following values:
+  - `"n-unpredicted-active-columns"`
+  - `"n-predicted-inactive-columns"`
+  - `"n-predicted-active-columns"`
 - `response_channel_marshal`
 
-**Response**: Frequencies of each column state ("active", "predicted",
-"active-predicted"), by path. The column states are mutually exclusive.
-Anything labelled as "active" is not predicted, and vice versa.
+**Response**:
 
 ~~~python
 # Example response
 {
-    ('myRegion1', 'myLayer1'): {
-        'active': 10,
-        'predicted': 10,
-        'active-predicted': 30,
-        'timestep': 42,
-        'size': 2048,
-    },
+    'n-unpredicted-active-columns': 10,
+    'n-predicted-inactive-columns': 10,
+    'n-predicted-active-columns': 30,
 }
 ~~~
 

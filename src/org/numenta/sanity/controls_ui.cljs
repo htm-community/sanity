@@ -157,25 +157,35 @@
 
 (defn gather-col-state-history!
   [col-state-history step into-journal]
-  (let [response-c (async/chan)]
-    (put! into-journal ["get-column-state-freqs"
-                        (:snapshot-id step)
-                        (marshal/channel response-c true)])
-    (go
-      (let [r (keywordize-keys (<! response-c))]
-        (swap! col-state-history
-               #(reduce
-                 (fn [csh [layer-path col-state-freqs]]
-                   (update csh layer-path
-                           (fn [csf-log]
-                             (conj (or csf-log
-                                       (plots/empty-col-state-freqs-log))
-                                   col-state-freqs))))
-                 % r))))))
+  (let [{:keys [snapshot-id network-shape timestep]} step
+        fetches #{"n-unpredicted-active-columns"
+                  "n-predicted-inactive-columns"
+                  "n-predicted-active-columns"}]
+    (doseq [[rgn-id rgn] (:regions network-shape)
+            [lyr-id lyr] rgn
+            :let [response-c (async/chan)]]
+      (put! into-journal ["get-layer-stats" snapshot-id rgn-id lyr-id fetches
+                          (marshal/channel response-c true)])
+      (go
+        (let [r (<! response-c)
+              {active "n-unpredicted-active-columns"
+               predicted "n-predicted-inactive-columns"
+               active-predicted "n-predicted-active-columns"} r
+              size (reduce * (:dimensions lyr))]
+          (swap! col-state-history update-in [rgn-id lyr-id]
+                 (fn [csf-log]
+                   (conj (or csf-log
+                             (plots/empty-col-state-freqs-log))
+                         {:active active
+                          :predicted predicted
+                          :active-predicted active-predicted
+                          :timestep timestep
+                          :size size}))))))))
 
 (defn time-plots-tab-builder
   [steps into-journal]
-  (let [col-state-history (atom {})]
+  (let [;; rgn-id -> lyr-id -> sequence-compressor
+        col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
                  (gather-col-state-history! col-state-history (first xs)
@@ -184,11 +194,11 @@
       [:div
        [:p.text-muted "Time series of cortical column activity."]
        [:div
-        (for [[path csf-log] @col-state-history
-              :let [[region-key layer-id] path]]
-          ^{:key [region-key layer-id]}
+        (for [[rgn-id rgn] @col-state-history
+              [lyr-id csf-log] rgn]
+          ^{:key [rgn-id lyr-id]}
           [:fieldset
-           [:legend (str (name region-key) " " (name layer-id))]
+           [:legend (str (name rgn-id) " " (name lyr-id))]
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn sources-tab

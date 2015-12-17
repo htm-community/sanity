@@ -1,6 +1,7 @@
 (ns org.numenta.sanity.comportex.journal
   (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
                :cljs [cljs.core.async :as async :refer [put! <!]])
+            [clojure.set :as set]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.comportex.details]
@@ -323,17 +324,33 @@
                       as-str? pr-str)
                     (id-missing-response id steps-offset))))
 
-          "get-column-state-freqs"
-          (let [[id {response-c :ch}] xs]
+          "get-layer-stats"
+          (let [[id rgn-id lyr-id fetches {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (into {}
-                          (for [[region-key rgn] (:regions htm)
-                                layer-id (core/layers rgn)]
-                            [[region-key layer-id]
-                             (-> (get-in htm [:regions region-key])
-                                 (core/column-state-freqs layer-id)
-                                 stringify-keys)]))
+                    (let [lyr (get-in htm [:regions rgn-id lyr-id])
+                          a-cols (p/active-columns lyr)
+                          ppc (p/prior-predictive-cells lyr)
+                          pp-cols (into #{} (map first ppc))
+                          ap-cols (set/intersection pp-cols a-cols)
+                          col-states (merge
+                                      (zipmap pp-cols (repeat :predicted))
+                                      (zipmap a-cols (repeat :active))
+                                      (zipmap ap-cols
+                                              (repeat :active-predicted)))
+                          freqs (frequencies (vals col-states))]
+                      (cond-> {}
+                        (contains? fetches "n-unpredicted-active-columns")
+                        (assoc "n-unpredicted-active-columns"
+                               (get freqs :active 0))
+
+                        (contains? fetches "n-predicted-inactive-columns")
+                        (assoc "n-predicted-inactive-columns"
+                               (get freqs :predicted 0))
+
+                        (contains? fetches "n-predicted-active-columns")
+                        (assoc "n-predicted-active-columns"
+                               (get freqs :active-predicted 0))))
                     (id-missing-response id steps-offset))))
 
           "get-cell-excitation-data"
