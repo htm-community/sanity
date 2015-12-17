@@ -207,8 +207,8 @@
                             ;; (hardcoded)
                             [rgn-id :layer-4 i])))
         dt (case seg-type
-             :apical 1
-             :distal 1
+             :apical -1
+             :distal -1
              :proximal 0)]
     (for [[col cells] (expand-seg-selector seg-selector depth sg seg-type)]
       [col

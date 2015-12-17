@@ -406,7 +406,7 @@
                   :let [src-lay (or (get s-lays src-id)
                                     (get-in r-lays [src-id src-lyr]))
                         [src-x src-y] (element-xy src-lay src-col
-                                                  (+ dt src-dt))]]
+                                                  (+ dt (- src-dt)))]]
             (doto ctx
               (c/stroke-style (syn-colors syn-state))
               (c/alpha (if do-perm? perm 1))
@@ -775,7 +775,7 @@
                                                 [:regions src-id src-lyr]
                                                 [:senses src-id]))
                               [src-x src-y] (element-xy src-lay src-col
-                                                        (+ dt src-dt))]]
+                                                        (+ dt (- src-dt)))]]
                   (when draw-perm?
                     (c/alpha ctx perm))
                   (doto ctx
