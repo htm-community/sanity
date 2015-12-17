@@ -68,7 +68,7 @@
                        "active")
                      (if predictive-col?
                        "predicted"
-                       "inactive-syn"))
+                       "inactive"))
        "perm" perm})))
 
 
@@ -250,8 +250,8 @@
                                              (grouped-sourced-syns
                                               [:connected :active]))
 
-                                      (contains? syn-states "inactive-syn")
-                                      (assoc "inactive-syn"
+                                      (contains? syn-states "inactive")
+                                      (assoc "inactive"
                                              (concat (grouped-sourced-syns
                                                       [:connected :inactive])
                                                      (if (:disconnected syn-states)

@@ -52,15 +52,20 @@
 (def state-colors
   {:background "#eee"
    :inactive "white"
-   :inactive-syn "black"
-   :growing (hsl :green 1.0 0.5)
-   :disconnected (hsl :red 1.0 0.5)
    :active (hsl :red 1.0 0.5)
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.65 0.6)
    :temporal-pooling (hsl :green 1 0.5 0.4)
    })
+
+(def syn-colors
+  {:active (hsl :red 1.0 0.5)
+   :active-predicted (hsl :purple 1.0 0.4)
+   :disconnected (hsl :red 1.0 0.5)
+   :growing (hsl :green 1.0 0.5)
+   :inactive "black"
+   :predicted (hsl :blue 1.0 0.5 0.5)})
 
 (def default-viz-options
   {:inbits {:active true
@@ -403,7 +408,7 @@
                         [src-x src-y] (element-xy src-lay src-col
                                                   (+ dt src-dt))]]
             (doto ctx
-              (c/stroke-style (state-colors syn-state))
+              (c/stroke-style (syn-colors syn-state))
               (c/alpha (if do-perm? perm 1))
               (c/begin-path)
               (c/move-to (- target-x 1) target-y) ;; -1 avoid obscuring colour
@@ -432,7 +437,7 @@
                                                target-lay target-col
                                                (+ dt target-dt))]]
       (doto ctx
-        (c/stroke-style (state-colors (keyword syn-state)))
+        (c/stroke-style (syn-colors (keyword syn-state)))
         (c/alpha (if do-perm? perm 1))
         (c/begin-path)
         (c/move-to (- target-x 1) target-y) ;; -1 avoid obscuring colour
@@ -763,7 +768,7 @@
                       (= draw-to :all))
               (doseq [[syn-state syns] (get-in syns-by-model [snapshot-id path
                                                               col ci si])]
-                (c/stroke-style ctx (state-colors syn-state))
+                (c/stroke-style ctx (syn-colors syn-state))
                 (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts
                                               (if src-lyr
@@ -1175,7 +1180,7 @@
                  do-growing? :growing} (:ff-synapses opts)
                 syn-states (into #{"active" "active-predicted" "predicted"}
                                  (concat (when do-disconn? ["disconnected"])
-                                         (when do-inactive? ["inactive-syn"])
+                                         (when do-inactive? ["inactive"])
                                          (when do-growing? ["growing"])))]]
     (put! into-journal ["get-proximal-synapses-by-source-bit" snapshot-id
                         sense-id src-bit syn-states
@@ -1312,7 +1317,7 @@
                                                :distal :distal-synapses
                                                :proximal :ff-synapses))
         syn-states (cond-> #{"active"}
-                     get-inactive? (conj "inactive-syn")
+                     get-inactive? (conj "inactive")
                      get-disconnected? (conj "disconnected")
                      get-growing? (conj "growing"))
         ctf-seq (for [{:keys [snapshot-id bit path]} sel

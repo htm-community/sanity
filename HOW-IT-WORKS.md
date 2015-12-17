@@ -318,7 +318,7 @@ index.
     - `{1: {2: [3, 4]}}` = all synapses on the third and fourth segments on column 1, cell 2
 - `synapse_states` a set potentially containing:
   - `"active"`
-  - `"inactive-syn"`
+  - `"inactive"`
   - `"disconnected"`
 - `response_channel_marshal`
 
@@ -344,7 +344,7 @@ Synapses by state
             'src-dt' 1,
         }
     ],
-    'inactive-syn': {},
+    'inactive': {},
     'disconnected': {},
 }
 ~~~
