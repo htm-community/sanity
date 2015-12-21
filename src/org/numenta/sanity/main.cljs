@@ -36,7 +36,11 @@
     (put! into-journal ["get-capture-options"
                         (marshal/channel response-c true)])
     (go
-      (reset! capture-options (keywordize-keys (<! response-c)))))
+      (reset! capture-options (keywordize-keys (<! response-c)))
+      (add-watch capture-options ::push-to-server
+                 (fn [_ _ _ co]
+                   (put! into-journal ["set-capture-options"
+                                       (stringify-keys co)])))))
   (let [steps-c (async/chan)
         response-c (async/chan)]
     (put! into-journal ["get-network-shape" (marshal/channel response-c true)])
@@ -62,6 +66,7 @@
             (put! into-viz [:drop-steps-data dropped]))
           (recur))))
     steps-c))
+
 
 ;; not sure why this would be used, but for completeness...
 (def subscription-data (subscribe-to-steps!))

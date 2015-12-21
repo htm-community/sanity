@@ -332,14 +332,14 @@ Synapses by state
     'active': [
         {
             'src-id': 'mySense1',
-            'src-col': 48,
+            'src-i': 48,
             'perm': 0.4,
             'src-dt' -1,
         },
         {
             'src-id': 'myRegion1',
             'src-lyr': 'myLayer1',
-            'src-col': 23,
+            'src-i': 23,
             'perm': 0.3,
             'src-dt' -1,
         }

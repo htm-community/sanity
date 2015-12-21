@@ -379,33 +379,49 @@
                                                          [bit])
                                              :none nil)]
                                 col cols]
-                            [snapshot-id path col])]
+                            [step path col])]
       (when (not-empty rest-col-paths)
         (let [[col-path & rest-col-paths*] rest-col-paths
-              syns-by-cell (get-in p-syns col-path)
-              [target-snapshot-id [_ target-rgn-id target-lyr-id]
-               target-col] col-path
+              [step target-path target-col] col-path
+              [_ target-rgn-id target-lyr-id] target-path
+              {:keys [snapshot-id]} step
+              syns-by-cell (get-in p-syns [snapshot-id target-path target-col])
               new-col-paths (distinct
                              (for [[_ syns-by-seg] syns-by-cell
                                    [_ syns-by-state] syns-by-seg
                                    :let [active-syns (:active syns-by-state)]
-                                   {:keys [src-id src-lyr src-col]} active-syns
+                                   {:keys [src-id src-lyr src-i]} active-syns
                                    :when src-lyr
                                    :let [new-path [:regions src-id src-lyr]
-                                         new-col-path [target-snapshot-id
+                                         src-col (quot
+                                                  src-i
+                                                  (get-in step
+                                                          [:network-shape
+                                                           :regions
+                                                           target-rgn-id
+                                                           target-lyr-id
+                                                           :cells-per-column]))
+                                         new-col-path [snapshot-id
                                                        new-path src-col]]
                                    :when (not (contains? seen-col-paths
                                                          new-col-path))]
                                new-col-path))
               target-lay (get-in r-lays [target-rgn-id target-lyr-id])
-              dt (utilv/index-of steps #(= target-snapshot-id (:snapshot-id %)))
+              dt (utilv/index-of steps #(= snapshot-id (:snapshot-id %)))
               [target-x target-y] (element-xy target-lay target-col dt)]
           (doseq [[_ syns-by-seg] syns-by-cell
                   [_ syns-by-state] syns-by-seg
                   [syn-state syns] syns-by-state
-                  {:keys [src-id src-col src-lyr src-dt perm]} syns
-                  :let [src-lay (or (get s-lays src-id)
-                                    (get-in r-lays [src-id src-lyr]))
+                  {:keys [src-id src-i src-lyr src-dt perm]} syns
+                  :let [src-lay (if src-lyr
+                                  (get-in r-lays [src-id src-lyr])
+                                  (get s-lays src-id))
+                        src-col (if src-lyr
+                                  (quot src-i
+                                        (get-in step [:network-shape :regions
+                                                      src-id src-lyr
+                                                      :cells-per-column]))
+                                  src-i)
                         [src-x src-y] (element-xy src-lay src-col
                                                   (+ dt (- src-dt)))]]
             (doto ctx
@@ -773,11 +789,18 @@
               (doseq [[syn-state syns] (get-in syns-by-model [snapshot-id path
                                                               col ci si])]
                 (c/stroke-style ctx (syn-colors syn-state))
-                (doseq [{:keys [src-col src-id src-lyr src-dt perm]} syns
+                (doseq [{:keys [src-i src-id src-lyr src-dt perm]} syns
                         :let [src-lay (get-in layouts
                                               (if src-lyr
                                                 [:regions src-id src-lyr]
                                                 [:senses src-id]))
+                              src-col (if src-lyr
+                                        (quot src-i
+                                              (get-in step [:network-shape
+                                                            :regions
+                                                            src-id src-lyr
+                                                            :cells-per-column]))
+                                        src-i)
                               [src-x src-y] (element-xy src-lay src-col
                                                         (+ dt (- src-dt)))]]
                   (when draw-perm?
@@ -1256,14 +1279,15 @@
 (defn fetch-segs-traceback!
   [into-journal segs-atom syns-atom seen-cols cols-to-fetch seg-type syn-states
    segs-decider trace-back?]
-  (doseq [[snapshot-id cols-by-path] cols-to-fetch
+  (doseq [[step cols-by-path] cols-to-fetch
           [path cols] cols-by-path
-          :let [seen (get-in @seen-cols [snapshot-id path])
+          :let [seen (get-in @seen-cols [step path])
                 cols (remove #(contains? seen %) cols)]
           :when (not-empty cols)
           :let [[_ rgn-id lyr-id] path
+                {:keys [snapshot-id]} step
                 response-c (async/chan)]]
-    (swap! seen-cols update-in [snapshot-id path]
+    (swap! seen-cols update-in [step path]
            (fn [seen]
              (reduce conj (or seen #{}) cols)))
     (put! into-journal
@@ -1297,12 +1321,18 @@
                                 [ci syns-by-seg] syns-by-cell
                                 [si syns-by-state] syns-by-seg
                                 :let [syns (:active syns-by-state)]
-                                {:keys [src-id src-lyr src-col]} syns
+                                {:keys [src-id src-lyr src-i]} syns
                                 :when src-lyr
-                                :let [path [:regions src-id src-lyr]]]
-                            [snapshot-id path src-col])
-                  new-ctf (reduce (fn [ctf [snapshot-id path col]]
-                                    (update-in ctf [snapshot-id path]
+                                :let [path [:regions src-id src-lyr]
+                                      src-col (quot
+                                               src-i
+                                               (get-in step
+                                                       [:network-shape :regions
+                                                        src-id src-lyr
+                                                        :cells-per-column]))]]
+                            [step path src-col])
+                  new-ctf (reduce (fn [ctf [step path col]]
+                                    (update-in ctf [step path]
                                                conj col))
                                   {} ctf-seq)]
               (fetch-segs-traceback! into-journal segs-atom syns-atom
@@ -1343,9 +1373,9 @@
                                      :selected (when bit
                                                  [bit])
                                      :none nil))]]
-                  [snapshot-id path cols])
-        cols-to-fetch (reduce (fn [ctf [snapshot-id path cols]]
-                                (assoc-in ctf [snapshot-id path] cols))
+                  [step path cols])
+        cols-to-fetch (reduce (fn [ctf [step path cols]]
+                                (assoc-in ctf [step path] cols))
                               {} ctf-seq)
         segs-decider (cond (or (= seg-type :proximal)
                                (and (or (= seg-type :apical)

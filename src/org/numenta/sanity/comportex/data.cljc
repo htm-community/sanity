@@ -271,14 +271,7 @@
                (->> syn-sources
                     (util/remap (fn [source-info]
                                   (for [[i [src-id src-lyr src-i] p] source-info]
-                                    {"src-col"
-                                     (if src-lyr
-                                       (first (p/source-of-bit
-                                               (get-in regions
-                                                       [src-id src-lyr])
-                                               src-i))
-                                       src-i)
-
+                                    {"src-i" src-i
                                      "src-id" src-id
                                      "src-lyr" (when src-lyr src-lyr)
                                      "src-dt" dt
