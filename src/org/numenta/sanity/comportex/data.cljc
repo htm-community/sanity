@@ -216,10 +216,9 @@
         {}
         (for [[ci seg-indices] cells
               :let [cell-id [col ci]
-                    si->seg-updates (group-by (fn [{:keys [target-id]}]
-                                                (let [[_ _ si] target-id]
-                                                  target-id))
-                                              (get learning cell-id))
+                    si->seg-update (let [upd (get learning cell-id)
+                                         [_ _ si] (:target-id upd)]
+                                     {si upd})
                     p-segs (when prev-htm
                              (all-cell-segments prev-sg [col ci]))]]
           [ci
@@ -227,10 +226,7 @@
             {}
             (for [si seg-indices
                   :let [seg (nth p-segs si {}) ;; segment may have just grown
-                        seg-updates (si->seg-updates si)
-                        learn-seg? (pos? (count seg-updates))
-                        grow-sources (apply concat (map :grow-sources
-                                                        seg-updates))
+                        grow-sources (-> (si->seg-update si) :grow-sources)
                         grouped-syns (group-synapses seg on-bits pcon)
                         grouped-sourced-syns (util/remap
                                               (fn [syns]
@@ -241,9 +237,9 @@
                                                         p])
                                                      syns))
                                               (assoc grouped-syns
-                                                     :growing (when learn-seg?
-                                                                (map vector grow-sources
-                                                                     (repeat pinit)))))
+                                                     :growing
+                                                     (map vector grow-sources
+                                                          (repeat pinit))))
                         syn-sources (cond-> {}
                                       (contains? syn-states "active")
                                       (assoc "active"
