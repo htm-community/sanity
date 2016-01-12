@@ -189,11 +189,6 @@
                                                (float (/ % 16.0))))
                                     (zipmap cols-subset)))
 
-                        (contains? fetches "tp-columns")
-                        (assoc "tp-columns"
-                               (->> (p/temporal-pooling-cells lyr)
-                                    (map first)))
-
                         true
                         (assoc "break?"
                                (-> lyr

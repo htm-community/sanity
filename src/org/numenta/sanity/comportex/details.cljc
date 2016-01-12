@@ -53,8 +53,8 @@
       (for [seg-up (->> lyr :learn-state :punishments :distal (sort-by :target-id))]
         (str (:target-id seg-up)))
       ""
-      "__TP excitation__"
-      (str (sort (:temporal-pooling-exc (:state lyr))))
+      "__Stable cells buffer__"
+      (str (seq (:stable-cells-buffer (:state lyr))))
       ""
       (if (and col prior-htm)
         (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
