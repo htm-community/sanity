@@ -308,8 +308,8 @@
     (if-let [snapshot-id (get-in sel1 [:step :snapshot-id])]
       (let [response-c (async/chan)]
         (put! into-journal
-              ["get-cell-excitation-data" snapshot-id (name region-key)
-               (name layer-id) bit (marshal/channel response-c true)])
+              ["get-cell-excitation-data" snapshot-id region-key
+               layer-id bit (marshal/channel response-c true)])
         (go
           (reset! excitation-data (<! response-c))))
       (reset! excitation-data {}))))
