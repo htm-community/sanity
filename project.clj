@@ -1,4 +1,4 @@
-(defproject org.numenta/sanity "0.0.13-SNAPSHOT"
+(defproject org.numenta/sanity "0.0.14-SNAPSHOT"
   :description "Web visualisation of the HTM algorithm"
   :url "https://github.com/nupic-community/sanity"
 
@@ -6,7 +6,7 @@
                  [org.clojure/clojurescript "1.7.170"]
                  [org.clojure/core.async "0.2.374"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
-                 [org.nfrac/comportex "0.0.13-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.14-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
                  [reagent-forms "0.5.6"]
