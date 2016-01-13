@@ -24,10 +24,6 @@
       "__Input__"
       (str in)
       (str "(" (count in-bits) " bits, of which " (count in-sbits) " stable)")
-      (cond
-        (:newly-engaged? (:state lyr)) "= newly engaged"
-        (:engaged? (:state lyr)) "= continuing engaged"
-        :else "= not engaged")
       ""
       "__Input bits__"
       (str (sort in-bits))
