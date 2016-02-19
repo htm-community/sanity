@@ -102,9 +102,15 @@ Each HTML page loads the corresponding model defined
 in `examples/demos/sanity/demos/`.
 
 
+## Hello
+
+* [Gitter chat](https://gitter.im/nupic-community/sanity)
+* or email or github issues.
+
+
 ## License
 
-Copyright © 2015 Marcus Lewis and Felix Andrews
+Copyright © 2015-2016 Marcus Lewis and Felix Andrews
 
 Copyright © 2014 Felix Andrews
 
