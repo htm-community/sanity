@@ -227,8 +227,8 @@
                                (if (contains? cset src-cell-id)
                                  dt
                                  (recur (dec dt) (next csets)))
-                               ;; ran out of cell sets; should never get here
-                               dt))]
+                               ;; ran out of cell sets; must be inactive syn
+                               0))]
                 [src-id src-lyr-id src-i src-dt])
               [src-id src-lyr-id src-i dt])))]
     (for [[col cells] (expand-seg-selector seg-selector depth sg seg-type)]
