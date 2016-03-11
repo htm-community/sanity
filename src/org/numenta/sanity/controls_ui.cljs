@@ -561,7 +561,6 @@
               (chbox :columns.n-segments "N.segments")
               (chbox :columns.active "Active")
               (chbox :columns.predictive "Predictive")
-              (chbox :columns.temporal-pooling "Temporal Pooling")
               ])
       (group "Feed-forward synapses"
              [:div.panel-body
@@ -1002,7 +1001,7 @@
         [:li [:b {:style {:color "purple"}} "Purple"]
          ": active+predicted (i.e. recognised)"]
         [:li [:b {:style {:color "green"}} "Green"]
-         ": growing (new synapses) or temporal pooling"]]]
+         ": growing (new synapses)"]]]
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Segment diagrams"]
        (let [conn-act-px 115

@@ -192,6 +192,10 @@
         output-layer (into {} (map (fn [[rgn-id rgn]]
                                      [rgn-id (last (core/layers rgn))])
                                    regions))
+        dt (case seg-type
+             :apical -1
+             :distal -1
+             :proximal 0)
         source-of-bit (case seg-type
                         :apical core/source-of-apical-bit
                         :distal core/source-of-distal-bit
@@ -206,10 +210,27 @@
                             ;; input from another layer in same region
                             ;; (hardcoded)
                             [rgn-id :layer-4 i])))
-        dt (case seg-type
-             :apical -1
-             :distal -1
-             :proximal 0)]
+        source-id-and-dt-of-bit
+        (fn [htm rgn-id lyr-id i]
+          (let [[src-id src-lyr-id src-i] (source-of-bit htm rgn-id lyr-id i)]
+            (if (and (= :proximal seg-type)
+                     (contains? (:regions htm) src-id))
+              (let [src-state (get-in htm [:regions src-id src-lyr-id :state])
+                    src-depth (get-in htm [:regions src-id src-lyr-id :spec :depth])
+                    prev-ss (get-in prev-htm [:regions src-id src-lyr-id :state])
+                    src-cell-id [(quot src-i src-depth)
+                                 (rem src-i src-depth)]
+                    src-dt (loop [dt 0
+                                  csets (cons (:active-cells src-state)
+                                              (reverse (:stable-cells-buffer prev-ss)))]
+                             (if-let [cset (first csets)]
+                               (if (contains? cset src-cell-id)
+                                 dt
+                                 (recur (dec dt) (next csets)))
+                               ;; ran out of cell sets; must be inactive syn
+                               0))]
+                [src-id src-lyr-id src-i src-dt])
+              [src-id src-lyr-id src-i dt])))]
     (for [[col cells] (expand-seg-selector seg-selector depth sg seg-type)]
       [col
        (into
@@ -232,7 +253,7 @@
                                               (fn [syns]
                                                 (map (fn [[i p]]
                                                        [i
-                                                        (source-of-bit
+                                                        (source-id-and-dt-of-bit
                                                          htm rgn-id lyr-id i)
                                                         p])
                                                      syns))
@@ -266,11 +287,11 @@
               [si
                (->> syn-sources
                     (util/remap (fn [source-info]
-                                  (for [[i [src-id src-lyr src-i] p] source-info]
+                                  (for [[i [src-id src-lyr src-i src-dt] p] source-info]
                                     {"src-i" src-i
                                      "src-id" src-id
                                      "src-lyr" (when src-lyr src-lyr)
-                                     "src-dt" dt
+                                     "src-dt" src-dt
                                      "perm" p}))))]))]))])))
 
 (defn cell-excitation-data

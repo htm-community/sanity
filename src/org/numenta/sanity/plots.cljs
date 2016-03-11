@@ -201,7 +201,6 @@
   {:proximal-unstable :active
    :proximal-stable :active-predicted
    :boost :highlight
-   :temporal-pooling :temporal-pooling
    :distal :predicted
    })
 
@@ -209,7 +208,6 @@
   [:proximal-unstable
    :proximal-stable
    :boost
-   :temporal-pooling
    :distal])
 
 (defn viz-rgn-shades

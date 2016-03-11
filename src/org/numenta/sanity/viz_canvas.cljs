@@ -56,7 +56,6 @@
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
    :highlight (hsl :yellow 1 0.65 0.6)
-   :temporal-pooling (hsl :green 1 0.5 0.4)
    })
 
 (def syn-colors
@@ -77,7 +76,6 @@
              :active-freq nil
              :n-segments nil
              :predictive true
-             :temporal-pooling true
              :refresh-index 0}
    :ff-synapses {:to :selected ;; :selected, :all, :none
                  :trace-back? true
@@ -1013,7 +1011,6 @@
                             boost-columns-alpha
                             active-freq-columns-alpha
                             n-segments-columns-alpha
-                            tp-columns
                             break?]} (get path->bits path)
                     uniqix (str (name rgn-id) (name lyr-id))
                     lay (get-in layouts path)
@@ -1053,11 +1050,6 @@
           (->> pred-columns
                (fill-ids-image lay (:predicted state-colors))
                (with-cache sc [::pcols uniqix] opts #{:columns :drawing})
-               (draw-image-dt ctx lay dt)))
-        (when tp-columns
-          (->> tp-columns
-               (fill-ids-image lay (:temporal-pooling state-colors))
-               (with-cache sc [::tpcols uniqix] opts #{:columns :drawing})
                (draw-image-dt ctx lay dt)))
         (when (and break? (= :one-d (:display-mode d-opts)))
           (->> (break-image lay)
@@ -1240,10 +1232,7 @@
                                      (when (get-in opts [:columns :active-freq])
                                        "active-freq-columns-alpha")
                                      (when (get-in opts [:columns :n-segments])
-                                       "n-segments-columns-alpha")
-                                     (when (get-in opts [:columns
-                                                         :temporal-pooling])
-                                       "tp-columns")])]
+                                       "n-segments-columns-alpha")])]
           step steps
           :let [{:keys [senses regions]} (:network-shape step)
                 sense-ids (keys senses)

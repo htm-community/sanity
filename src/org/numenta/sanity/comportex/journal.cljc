@@ -189,11 +189,6 @@
                                                (float (/ % 16.0))))
                                     (zipmap cols-subset)))
 
-                        (contains? fetches "tp-columns")
-                        (assoc "tp-columns"
-                               (->> (p/temporal-pooling-cells lyr)
-                                    (map first)))
-
                         true
                         (assoc "break?"
                                (-> lyr
@@ -375,7 +370,7 @@
                       {:winner-cells (p/winner-cells layer)
                        :active-cells (p/active-cells layer)
                        :pred-cells (p/predictive-cells layer)
-                       :engaged? (get-in layer [:state :engaged?])})
+                       :engaged? true})
                     (id-missing-response id steps-offset))))
 
           "get-transitions-data"
