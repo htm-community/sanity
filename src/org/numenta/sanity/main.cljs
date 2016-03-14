@@ -81,9 +81,8 @@
 (add-watch steps ::recalculate-selection
            (fn [_ _ _ steps]
              (swap! selection #(mapv (fn [sel]
-                                       (assoc sel :snapshot-id
-                                              (:snapshot-id
-                                               (nth steps (:dt sel)))))
+                                       (assoc sel :step
+                                              (nth steps (:dt sel))))
                                      %))))
 
 ;;; ## Components
