@@ -55,23 +55,22 @@
                        (reset! selected-htm (<! out-c)))))))
 
     (fn []
-      (when-let [step (main/selected-step)]
-        (when-let [htm @selected-htm]
-          (let [inval (:input-value step)]
-           [:div
-            [:p.muted [:small "Input on selected timestep."]]
-            [:div {:style {:min-height "40vh"}}
-             (helpers/text-world-input-component inval htm max-shown
-                                                 scroll-every " ")]
-            [:div.checkbox
-             [:label [:input {:type :checkbox
-                              :checked (when @show-predictions true)
-                              :on-change (fn [e]
-                                           (swap! show-predictions not)
-                                           (.preventDefault e))}]
-              "Compute predictions"]]
-            (when @show-predictions
-              (helpers/text-world-predictions-component htm 8))]))))))
+      (when-let [htm @selected-htm]
+        (let [inval (:input-value htm)]
+          [:div
+           [:p.muted [:small "Input on selected timestep."]]
+           [:div {:style {:min-height "40vh"}}
+            (helpers/text-world-input-component inval htm max-shown
+                                                scroll-every " ")]
+           [:div.checkbox
+            [:label [:input {:type :checkbox
+                             :checked (when @show-predictions true)
+                             :on-change (fn [e]
+                                          (swap! show-predictions not)
+                                          (.preventDefault e))}]
+             "Compute predictions"]]
+           (when @show-predictions
+             (helpers/text-world-predictions-component htm 8))])))))
 
 (defn set-model!
   []

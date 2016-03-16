@@ -167,26 +167,25 @@ fox eat something.
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
-      (when-let [step (main/selected-step)]
-        (when-let [htm @selected-htm]
-          (let [inval (:input-value step)]
-            [:div
-             [:p.muted [:small "Input on selected timestep."]]
-             [:div {:style {:min-height "40vh"}}
-              (helpers/text-world-input-component inval htm max-shown
-                                                  scroll-every " ")]
-             [:div
-              [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
-                                                  :on-click (fn [e]
-                                                              (swap! show-predictions not)
-                                                              (.preventDefault e))}
-               "Compute predictions"]]
-             (when @show-predictions
-               (if-let [predictions (or (get @predictions-cache htm)
-                                        (load-predictions htm 8 predictions-cache))]
-                 (helpers/predictions-table predictions)
-                 ;; not cached and not returned immediately
-                 [:p.text-info "Loading predictions..."]))]))))))
+      (when-let [htm @selected-htm]
+        (let [inval (:input-value htm)]
+          [:div
+           [:p.muted [:small "Input on selected timestep."]]
+           [:div {:style {:min-height "40vh"}}
+            (helpers/text-world-input-component inval htm max-shown
+                                                scroll-every " ")]
+           [:div
+            [:button.btn.btn-default.btn-block {:class (if @show-predictions "active")
+                                                :on-click (fn [e]
+                                                            (swap! show-predictions not)
+                                                            (.preventDefault e))}
+             "Compute predictions"]]
+           (when @show-predictions
+             (if-let [predictions (or (get @predictions-cache htm)
+                                      (load-predictions htm 8 predictions-cache))]
+               (helpers/predictions-table predictions)
+               ;; not cached and not returned immediately
+               [:p.text-info "Loading predictions..."]))])))))
 
 (defn split-sentences
   [text]

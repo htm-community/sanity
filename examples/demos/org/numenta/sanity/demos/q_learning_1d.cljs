@@ -161,50 +161,49 @@
                      (go
                        (reset! selected-htm (<! out-c)))))))
     (fn []
-      (when-let [step (main/selected-step)]
-        (when-let [htm @selected-htm]
-          (let [inval (:input-value step)
-                DELTA (gstr/unescapeEntities "&Delta;")
-                TIMES (gstr/unescapeEntities "&times;")]
-            [:div
-             [:p.muted [:small "Input on selected timestep."]]
-             [:p.muted [:small "Reward " [:var "R"] " = " DELTA "y " TIMES " 0.5"]]
-             [:table.table.table-condensed
-              [:tr
-               [:th "x"]
-               [:td [:small "position"]]
-               [:td (:x inval)]]
-              [:tr
-               [:th (str DELTA "x")]
-               [:td [:small "action"]]
-               [:td (signed-str (:dx (:prev-action inval)))]]
-              [:tr
-               [:th (str DELTA "y")]
-               [:td [:small "~reward"]]
-               [:td (signed-str (:dy inval))]]
-              [:tr
-               [:th (str DELTA "x") [:sub "t+1"]]
-               [:td [:small "action"]]
-               [:td (signed-str (:dx (:action inval)))]]]
-             (q-learning-sub-pane htm)
-             ;; plot
-             [resizing-canvas {:style {:width "100%"
-                                       :height "240px"}}
-              [main/selection]
-              (fn [ctx]
-                (let [step (main/selected-step)
-                      inval (:input-value step)]
-                  (draw-world ctx inval)))
-              nil]
-             [:small
-              [:p [:b "top: "]
-               "Approx Q values for each position/action combination,
+      (when-let [htm @selected-htm]
+        (let [inval (:input-value htm)
+              DELTA (gstr/unescapeEntities "&Delta;")
+              TIMES (gstr/unescapeEntities "&times;")]
+          [:div
+           [:p.muted [:small "Input on selected timestep."]]
+           [:p.muted [:small "Reward " [:var "R"] " = " DELTA "y " TIMES " 0.5"]]
+           [:table.table.table-condensed
+            [:tr
+             [:th "x"]
+             [:td [:small "position"]]
+             [:td (:x inval)]]
+            [:tr
+             [:th (str DELTA "x")]
+             [:td [:small "action"]]
+             [:td (signed-str (:dx (:prev-action inval)))]]
+            [:tr
+             [:th (str DELTA "y")]
+             [:td [:small "~reward"]]
+             [:td (signed-str (:dy inval))]]
+            [:tr
+             [:th (str DELTA "x") [:sub "t+1"]]
+             [:td [:small "action"]]
+             [:td (signed-str (:dx (:action inval)))]]]
+           (q-learning-sub-pane htm)
+           ;; plot
+           [resizing-canvas {:style {:width "100%"
+                                     :height "240px"}}
+            [main/selection]
+            (fn [ctx]
+              (let [step (main/selected-step)
+                    inval (:input-value step)]
+                (draw-world ctx inval)))
+            nil]
+           [:small
+            [:p [:b "top: "]
+             "Approx Q values for each position/action combination,
             where green is positive and red is negative.
             These are the last seen Q values including last adjustments."]
-              [:p [:b "middle: "]
-               "Current position on the objective function surface."]
-              [:p [:b "bottom: "]
-               "Frequencies of being at each position."]]]))))))
+            [:p [:b "middle: "]
+             "Current position on the objective function surface."]
+            [:p [:b "bottom: "]
+             "Frequencies of being at each position."]]])))))
 
 (defn set-model!
   []
