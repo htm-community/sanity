@@ -381,14 +381,16 @@
     (case display-mode
       :one-d (grid-1d-layout (topology/one-d-topology n-elements)
                              top left opts inbits?)
-      :two-d (let [[width height] (if (= 2 (count dims))
-                                    dims ;; keep actual topology if possible
-                                    (let [w (-> (Math/sqrt n-elements)
-                                                Math/ceil
-                                                (min 20))]
-                                      [w (-> n-elements
-                                             (/ w)
-                                             Math/ceil)]))]
+      :two-d (let [[width height] (case (count dims)
+                                    2 dims ;; keep actual topology if possible
+                                    1 (let [w (-> (Math/sqrt n-elements)
+                                                  Math/ceil
+                                                  (min 20))]
+                                        [w (-> n-elements
+                                               (/ w)
+                                               Math/ceil)])
+                                    3 (let [[w h d] dims]
+                                        [w (* h d)]))]
                (grid-2d-layout n-elements (topology/two-d-topology width height)
                                top left opts inbits?)))))
 
