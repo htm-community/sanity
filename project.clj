@@ -48,7 +48,7 @@
   :cljsbuild {:builds
               {:demos {:source-paths ["src" "examples/demos"]
                        :compiler {:output-dir "public/demos/out"
-                                  :source-map true
+                                  :source-map "public/demos/out/sanity.js.map"
                                   :output-to "public/demos/out/sanity.js"}}
                ;; :inh {:source-paths ["src" "examples/local_inhibition"]
                ;;       :compiler {:optimizations :whitespace
