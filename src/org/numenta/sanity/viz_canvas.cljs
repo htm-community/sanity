@@ -308,10 +308,12 @@
            (reduce (fn [m path]
                      (update-in m path
                                 (fn [lay]
-                                  (lay/add-facet lay
-                                                 (sort (active-ids m-bits step
-                                                                   path))
-                                                 (:timestep step)))))
+                                  (let [bits (active-ids m-bits step path)
+                                        ;; record bits in current sort order
+                                        ord-bits (->> (select-keys (:order lay) bits)
+                                                      (sort-by second)
+                                                      (map first))]
+                                    (lay/add-facet lay ord-bits (:timestep step))))))
                    m
                    paths)))
   (invalidate! viz-options paths))
