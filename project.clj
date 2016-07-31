@@ -6,7 +6,7 @@
                  [org.clojure/clojurescript "1.7.228"]
                  [org.clojure/core.async "0.2.374"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
-                 [org.nfrac/comportex "0.0.14-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.15-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
                  [reagent-forms "0.5.6"]
