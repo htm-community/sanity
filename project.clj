@@ -6,7 +6,7 @@
                  [org.clojure/clojurescript "1.7.228"]
                  [org.clojure/core.async "0.2.374"]
                  [tailrecursion/cljs-priority-map "1.1.0"]
-                 [org.nfrac/comportex "0.0.14-SNAPSHOT"]
+                 [org.nfrac/comportex "0.0.15-SNAPSHOT"]
                  [rm-hull/monet "0.2.1"]
                  [reagent "0.5.0"]
                  [reagent-forms "0.5.6"]
@@ -34,12 +34,14 @@
                                   [org.clojure/data.codec "0.1.0"]]
                    :cljsbuild {:builds
                                {:demos {:compiler
-                                        {:optimizations :none}}}}}
+                                        {:optimizations :none
+                                         :source-map true}}}}}
              ;; Use: "lein with-profile +prod [your command]"
              :prod
              {:cljsbuild {:builds
                           {:demos {:compiler
-                                   {:optimizations :advanced}}}}}
+                                   {:optimizations :advanced
+                                    :source-map "public/demos/out/sanity.js.map"}}}}}
              :debug
              {;; for Cursive debugging
               :jvm-opts ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"]
@@ -48,7 +50,6 @@
   :cljsbuild {:builds
               {:demos {:source-paths ["src" "examples/demos"]
                        :compiler {:output-dir "public/demos/out"
-                                  :source-map "public/demos/out/sanity.js.map"
                                   :output-to "public/demos/out/sanity.js"}}
                ;; :inh {:source-paths ["src" "examples/local_inhibition"]
                ;;       :compiler {:optimizations :whitespace
