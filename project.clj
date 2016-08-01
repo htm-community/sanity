@@ -34,12 +34,14 @@
                                   [org.clojure/data.codec "0.1.0"]]
                    :cljsbuild {:builds
                                {:demos {:compiler
-                                        {:optimizations :none}}}}}
+                                        {:optimizations :none
+                                         :source-map true}}}}}
              ;; Use: "lein with-profile +prod [your command]"
              :prod
              {:cljsbuild {:builds
                           {:demos {:compiler
-                                   {:optimizations :advanced}}}}}
+                                   {:optimizations :advanced
+                                    :source-map "public/demos/out/sanity.js.map"}}}}}
              :debug
              {;; for Cursive debugging
               :jvm-opts ["-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"]
@@ -48,7 +50,6 @@
   :cljsbuild {:builds
               {:demos {:source-paths ["src" "examples/demos"]
                        :compiler {:output-dir "public/demos/out"
-                                  :source-map "public/demos/out/sanity.js.map"
                                   :output-to "public/demos/out/sanity.js"}}
                ;; :inh {:source-paths ["src" "examples/local_inhibition"]
                ;;       :compiler {:optimizations :whitespace
