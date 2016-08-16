@@ -101,26 +101,25 @@ fox eat something.
   {:column-dimensions [30 40]
    :ff-init-frac 0.20
    :ff-potential-radius 1.0
-   :ff-perm-inc 0.05
-   :ff-perm-dec 0.005
-   :ff-perm-connected 0.20
-   :ff-stimulus-threshold 1
-   :global-inhibition? true
+   :proximal {:perm-inc 0.05
+              :perm-dec 0.005
+              :perm-connected 0.20
+              :stimulus-threshold 1}
    :activation-level 0.02
    :duty-cycle-period 100000
    :max-boost 2.0
    ;; sequence memory:
    :depth 5
-   :max-segments 5
-   :seg-max-synapse-count 18
-   :seg-new-synapse-count 12
-   :seg-stimulus-threshold 9
-   :seg-learn-threshold 6
-   :distal-perm-connected 0.20
-   :distal-perm-inc 0.05
-   :distal-perm-dec 0.01
-   :distal-perm-init 0.16
-   :distal-punish? true
+   :distal {:max-segments 5
+            :max-synapse-count 18
+            :new-synapse-count 12
+            :stimulus-threshold 9
+            :learn-threshold 6
+            :perm-connected 0.20
+            :perm-init 0.16
+            :perm-inc 0.05
+            :perm-dec 0.01
+            :punish? true}
    :distal-vs-proximal-weight 0
    })
 
@@ -128,12 +127,11 @@ fox eat something.
   (assoc spec-global
     :ff-init-frac 0.30
     :ff-potential-radius 0.20
-    :global-inhibition? false
+    :spatial-pooling :local-inhibition
     :inhibition-base-distance 1))
 
 (def higher-level-spec-diff
-  {:column-dimensions [300]
-   :ff-max-segments 5})
+  {:column-dimensions [300]})
 
 (defn load-predictions
   [htm n-predictions predictions-cache]

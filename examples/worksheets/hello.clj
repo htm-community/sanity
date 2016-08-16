@@ -2,7 +2,7 @@
 
 ;; **
 ;;; # Comportex
-;;; 
+;;;
 ;; **
 
 ;; **
@@ -34,7 +34,7 @@
 ;; @@
 (def spec
   {:column-dimensions [800]
-   :global-inhibition? false
+   :spatial-pooling :local-inhibition
    :depth 5
    :distal {:max-segments 5
             :stimulus-threshold 5

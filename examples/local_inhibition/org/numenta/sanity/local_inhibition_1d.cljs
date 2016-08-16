@@ -23,10 +23,10 @@
 (def !act (atom #{}))
 (def !global-act (atom #{}))
 (def spec {:activation-level 0.03
-           :global-inhibition? false
+           :spatial-pooling :local-inhibition
            :inhibition-max-distance inh-radius
            :inhibition-base-distance 2
-           :ff-stimulus-threshold 2.0
+           :proximal {:stimulus-threshold 2}
            })
 
 (defn zapsmall
