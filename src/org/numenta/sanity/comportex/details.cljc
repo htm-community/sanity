@@ -100,7 +100,7 @@
 
 
       ""
-      "__spec__"
+      "__params__"
       (map str (sort (p/params rgn)))]
      (flatten)
      (interpose \newline)

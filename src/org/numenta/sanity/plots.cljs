@@ -809,7 +809,7 @@
             pc (:pred-cells cells-by-state)
             on? (:engaged? cells-by-state)
             threshold (get-in @network-shape [:regions region layer
-                                              :spec :distal :learn-threshold])
+                                              :params :distal :learn-threshold])
             ;; for each cell, represents its specificity to each SDR
             cell-sdr-fracs (->> (:cell-sdr-counts state)
                                 (util/remap freqs->fracs))

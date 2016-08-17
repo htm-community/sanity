@@ -108,7 +108,7 @@
   [htm]
   (let [alyr (get-in htm [:regions :action :layer-3])
         qinfo (:Q-info alyr)
-        {:keys [q-alpha q-discount]} (:spec alyr)
+        {:keys [q-alpha q-discount]} (:params alyr)
         Q_T [:var "Q" [:sub "t"]]
         Q_T-1 [:var.text-nowrap "Q" [:sub "t-1"]]
         R_T [:var.text-nowrap "R" [:sub "t"]]]

@@ -32,7 +32,7 @@
 ;; **
 
 ;; @@
-(def spec
+(def params
   {:column-dimensions [800]
    :spatial-pooling :local-inhibition
    :depth 5
@@ -44,7 +44,7 @@
 
 (def model (core/regions-in-series
             1 core/sensory-region
-            (repeat spec) {:input [[] encoder]}))
+            [params] {:input [[] encoder]}))
 
 (def inputs (flatten (repeat (range 0 12))))
 ;; @@

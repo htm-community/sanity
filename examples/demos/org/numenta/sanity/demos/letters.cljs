@@ -88,7 +88,7 @@ Chifung has a friend."))
   (with-ui-loading-message
     (let [n-regions (:n-regions @config)
           init? (nil? @model)]
-      (reset! model (demo/n-region-model n-regions demo/spec))
+      (reset! model (demo/n-region-model n-regions demo/params))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/network-shape (translate-network-shape

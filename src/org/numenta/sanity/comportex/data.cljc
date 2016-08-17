@@ -109,11 +109,11 @@
 (defn query-segs
   [htm prev-htm rgn-id lyr-id seg-selector seg-type]
   (let [lyr (get-in htm [:regions rgn-id lyr-id])
-        spec (p/params lyr)
-        dspec (get spec seg-type)
-        stimulus-th (:stimulus-threshold dspec)
-        learning-th (:learn-threshold dspec)
-        pcon (:perm-connected dspec)
+        params (p/params lyr)
+        dparams (get params seg-type)
+        stimulus-th (:stimulus-threshold dparams)
+        learning-th (:learn-threshold dparams)
+        pcon (:perm-connected dparams)
         on-bits (case seg-type
                   :apical (get-in lyr [:prior-apical-state :active-bits])
                   :distal (get-in lyr [:prior-distal-state :active-bits])
@@ -168,10 +168,10 @@
   [htm prev-htm rgn-id lyr-id seg-selector syn-states seg-type]
   (let [regions (:regions htm)
         lyr (get-in regions [rgn-id lyr-id])
-        spec (p/params lyr)
-        dspec (get spec seg-type)
-        pcon (:perm-connected dspec)
-        pinit (:perm-init dspec)
+        params (p/params lyr)
+        dparams (get params seg-type)
+        pcon (:perm-connected dparams)
+        pinit (:perm-init dparams)
         on-bits (case seg-type
                   :apical (get-in lyr [:prior-apical-state :active-bits])
                   :distal (get-in lyr [:prior-distal-state :active-bits])
@@ -216,7 +216,7 @@
             (if (and (= :proximal seg-type)
                      (contains? (:regions htm) src-id))
               (let [src-state (get-in htm [:regions src-id src-lyr-id :state])
-                    src-depth (get-in htm [:regions src-id src-lyr-id :spec :depth])
+                    src-depth (get-in htm [:regions src-id src-lyr-id :params :depth])
                     prev-ss (get-in prev-htm [:regions src-id src-lyr-id :state])
                     src-cell-id [(quot src-i src-depth)
                                  (rem src-i src-depth)]
@@ -325,7 +325,7 @@
                     (reduce (fn [rt [ordinal [rgn-id lyr-id]]]
                               (let [lyr (get-in htm [:regions rgn-id lyr-id])]
                                 (assoc-in rt [rgn-id lyr-id]
-                                          {"spec" (p/params lyr)
+                                          {"params" (p/params lyr)
                                            "dimensions" (p/dims-of lyr)
                                            "cells-per-column" (p/layer-depth
                                                                lyr)

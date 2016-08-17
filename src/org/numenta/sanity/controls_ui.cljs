@@ -37,15 +37,15 @@
     (vector? v) :vector
     :else :number))
 
-(defn- spec-form
-  [network-shape partypes spec spec-path skip-set]
-  (for [[k v] (sort spec)
+(defn- params-form
+  [network-shape partypes params params-path skip-set]
+  (for [[k v] (sort params)
         :when (not (skip-set k))
         :let [typ (or (get @partypes k)
                       (get (swap! partypes assoc k (param-type v))
                            k))
-              setv! #(swap! network-shape assoc-in spec-path
-                            (assoc spec k %))]]
+              setv! #(swap! network-shape assoc-in params-path
+                            (assoc params k %))]]
     [:div.row {:class (when (or (nil? v) (string? v))
                         "has-error")}
      [:div.col-sm-8
@@ -93,11 +93,11 @@
                (when-not (nil? prev-st) ;; don't push when getting initial template
                  (doseq [path (for [[r-id rgn] (:regions st)
                                     l-id (keys rgn)]
-                                [:regions r-id l-id :spec])
-                         :let [old-spec (get-in prev-st path)
-                               new-spec (get-in st path)]]
-                   (when (not= old-spec new-spec)
-                     (put! into-sim ["set-spec" path new-spec]))))))
+                                [:regions r-id l-id :params])
+                         :let [old-params (get-in prev-st path)
+                               new-params (get-in st path)]]
+                   (when (not= old-params new-params)
+                     (put! into-sim ["set-params" path new-params]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [network-shape selection into-sim]
@@ -111,10 +111,10 @@
          (into
           [:div.form-horizontal]
           (when @network-shape
-            (let [spec-path [:regions sel-region sel-layer :spec]
-                  spec (get-in @network-shape spec-path)]
+            (let [params-path [:regions sel-region sel-layer :params]
+                  params (get-in @network-shape params-path)]
               (concat
-               (spec-form network-shape partypes spec spec-path
+               (params-form network-shape partypes params params-path
                           #{:proximal :distal :apical})
                (for [[sub-k title] [[:proximal "Proximal dendrites"]
                                     [:distal "Distal (lateral) dendrites"]
@@ -124,8 +124,8 @@
                   [:div.panel-body
                    (into
                     [:div.form-horizontal]
-                    (spec-form network-shape partypes
-                               (get spec sub-k) (conj spec-path sub-k) #{}))]])
+                    (params-form network-shape partypes
+                               (get params sub-k) (conj params-path sub-k) #{}))]])
                [
                 [:div.panel.panel-default
                  [:div.panel-heading [:h4.panel-title "Note"]]
@@ -149,8 +149,8 @@
                    "Rebuild model"]
                   [:p.small "This will not reset, or otherwise alter, the input stream."]]]
 
-                [:h4 "Current spec value"]
-                [:pre (str spec)]]))))]))))
+                [:h4 "Current params value"]
+                [:pre (str params)]]))))]))))
 
 
 
