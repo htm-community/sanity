@@ -122,9 +122,9 @@
 
 (defn init
   [ws-url]
-  (let [to-network-c (async/chan)
+  (let [to-network-c (async/chan (async/sliding-buffer 1024))
         connection-id (atom nil)
-        on-connect-c (async/chan)
+        on-connect-c (async/chan (async/sliding-buffer 1024))
         connecting? (atom false)
         target->mchannel (atom {})]
     ;; Remote targets are often declared inside of messages, but you have to
