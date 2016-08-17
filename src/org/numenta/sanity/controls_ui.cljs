@@ -910,26 +910,24 @@
         ]])))
 
 (defn tabs
-  [tab-cmps]
-  (let [current-tab (atom (ffirst tab-cmps))]
-    (fn [tab-cmps]
-      [:div
-       [:nav
-        (into [:ul.nav.nav-tabs]
-              (for [[k _] tab-cmps]
-                [:li {:role "presentation"
-                      :class (if (= @current-tab k) "active")}
-                 [:a {:href "#"
-                      :on-click (fn [e]
-                                  (reset! current-tab k)
-                                  (.preventDefault e))}
-                  (name k)]]))]
-       [:div.tabs
-        (let [[_ cmp] (->> tab-cmps
-                           (filter (fn [[k _]]
-                                     (= @current-tab k)))
-                           first)]
-          cmp)]])))
+  [current-tab tab-cmps]
+  [:div
+   [:nav
+    (into [:ul.nav.nav-tabs]
+          (for [[k _] tab-cmps]
+            [:li {:role "presentation"
+                  :class (if (= @current-tab k) "active")}
+             [:a {:href "#"
+                  :on-click (fn [e]
+                              (reset! current-tab k)
+                              (.preventDefault e))}
+              (name k)]]))]
+   [:div.tabs
+    (let [[_ cmp] (->> tab-cmps
+                       (filter (fn [[k _]]
+                                 (= @current-tab k)))
+                       first)]
+      cmp)]])
 
 (defn help-block
   [show-help]
@@ -1062,7 +1060,7 @@
      [:hr]]))
 
 (defn sanity-app
-  [_ _ _ features _ _ selection steps network-shape _ _ _ into-journal _]
+  [_ _ _ features _ _ _ selection steps network-shape _ _ _ into-journal _]
   (let [show-help (atom false)
         viz-expanded (atom false)
         time-plots-tab (when (features :time-plots)
@@ -1070,8 +1068,9 @@
         cell-sdrs-tab (when (features :cell-SDRs)
                         (cell-sdrs-tab-builder steps network-shape selection
                                                into-journal))]
-    (fn [title model-tab main-pane _ capture-options viz-options selection steps
-         network-shape series-colors into-viz into-sim into-journal debug-data]
+    (fn [title model-tab main-pane _ capture-options viz-options current-tab
+         selection steps network-shape series-colors into-viz into-sim
+         into-journal debug-data]
       [:div
        [navbar title features steps show-help viz-options viz-expanded
         network-shape into-viz into-sim]
@@ -1082,6 +1081,7 @@
           main-pane]
          [:div.col-sm-3
           [tabs
+           current-tab
            (remove nil?
                    [(when model-tab
                       [:model model-tab])

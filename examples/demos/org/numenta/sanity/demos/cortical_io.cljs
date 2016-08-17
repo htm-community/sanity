@@ -358,7 +358,7 @@ fox eat something.
 (defn ^:export init
   []
   (reagent/render [main/sanity-app "Comportex" [model-tab] [world-pane]
-                   all-features into-sim]
+                   (atom :model) all-features into-sim]
                   (dom/getElement "sanity-app"))
   (swap! main/viz-options assoc-in [:drawing :display-mode] :two-d)
   (put! into-sim ["run"]))
