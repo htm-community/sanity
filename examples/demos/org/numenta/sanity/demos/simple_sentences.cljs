@@ -136,8 +136,8 @@
         :on-click (fn [e]
                     (send-text!)
                     (.preventDefault e))}
-       "Queue more text input"]]]
-    ]
+       "Queue more text input"]]]]
+
    [:h3 "HTM model"]
    [:div.form-horizontal
     [:div.form-group
@@ -152,8 +152,8 @@
                     (set-model!)
                     (.preventDefault e))}
        "Restart with new model"]
-      [:p.text-danger "This resets all parameters."]]]
-    ]])
+      [:p.text-danger "This resets all parameters."]]]]])
+
 
 (defn model-tab
   []
@@ -162,9 +162,9 @@
         with independent unique encodings. The text is split into
         sentences at each period (.) and each sentence into
         words."]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

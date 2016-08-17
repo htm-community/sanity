@@ -209,8 +209,8 @@
        {:on-click (fn [e]
                     (send-input-stream!)
                     (.preventDefault e))}
-       "Send input stream"]]]
-    ]
+       "Send input stream"]]]]
+
    [:h3 "HTM model"]
    [:div.form-horizontal
     [:div.form-group
@@ -225,16 +225,16 @@
                     (set-model!)
                     (.preventDefault e))}
        "Restart with new model"]
-      [:p.text-danger "This resets all parameters."]]]
-    ]])
+      [:p.text-danger "This resets all parameters."]]]]])
+
 
 (defn model-tab
   []
   [:div
    [:p "A simple example of sensorimotor input in 1D."]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

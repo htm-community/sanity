@@ -110,7 +110,7 @@
       </script>"
      (script-url "goog/base.js")
      (script-url "sanity.js")
-      ws-url)))
+     ws-url)))
 
 (defn start
   [comportex-port]

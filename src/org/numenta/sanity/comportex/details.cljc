@@ -61,8 +61,8 @@
               bits (:in-ff-bits (:state lyr))
               sig-bits (:in-stable-ff-bits (:state lyr))
               d-bits (:active-bits (:prior-distal-state lyr))
-              d-lbits (:learnable-bits (:prior-distal-state lyr))
-              ]
+              d-lbits (:learnable-bits (:prior-distal-state lyr))]
+
           ["__Column overlap__"
            (str (get (:col-overlaps (:state lyr)) [col 0]))
            ""
@@ -74,8 +74,8 @@
               (for [[id p] (sort syns)
                     :let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id :ff-deps)
                           src-rgn (get-in htm [:regions src-k])
-                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)
-                          ]]
+                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)]]
+
                 (str "  " src-k " " src-id
                      (if (>= p ff-pcon) " :=> " " :.: ")
                      (to-fixed p 2)
@@ -96,9 +96,9 @@
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (to-fixed p 2)
                         (if (contains? d-lbits id) " L"
-                            (if (contains? d-bits id) " A"))))])
-              ])
-           ]))
+                            (if (contains? d-bits id) " A"))))])])]))
+
+
       ""
       "__spec__"
       (map str (sort (p/params rgn)))]

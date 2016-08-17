@@ -111,8 +111,8 @@
         (c/alpha ctx 1)
         (c/alpha ctx (/ (inc i) (count history) 2)))
       (draw-arrow ctx {:x (x-scale x) :y (y-scale y)
-                       :angle (Math/atan2 vy vx)}))
-    ))
+                       :angle (Math/atan2 vy vx)}))))
+
 
 (defn world-pane
   []
@@ -161,8 +161,8 @@
                    (set-model!)
                    (.preventDefault e))}
       "Restart with new model"]
-     [:p.text-danger "This resets all parameters."]]]
-   ])
+     [:p.text-danger "This resets all parameters."]]]])
+
 
 (defn model-tab
   []
@@ -193,9 +193,9 @@
        {:on-click (fn [e]
                     (async/put! control-c #(update-in % [:ay] inc))
                     (.preventDefault e))}
-       "Turn down"]]]
-    ]
-   ])
+       "Turn down"]]]]])
+
+
 
 (defn ^:export init
   []

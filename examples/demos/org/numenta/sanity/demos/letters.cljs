@@ -37,7 +37,7 @@
 
 (def text-to-send
   (atom
-"Jane has eyes.
+   "Jane has eyes.
 Jane has a head.
 Jane has a mouth.
 Jane has a brain.
@@ -125,8 +125,8 @@ Chifung has a friend."))
                    (set-model!)
                    (.preventDefault e))}
       "Restart with new model"]
-     [:p.text-danger "This resets all parameters."]]]
-   ])
+     [:p.text-danger "This resets all parameters."]]]])
+
 
 (defn model-tab
   []
@@ -174,9 +174,9 @@ Chifung has a friend."))
        "Queue text input")]]
 
    [:h3 "HTM model"]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

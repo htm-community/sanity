@@ -119,16 +119,16 @@
 :run-6-10  [6 7 8 9 10]
 :jump-6-12 [6 7 8 11 12]
 :twos      [0 2 4 6 8 10 12 14]
-:saw-10-15 [10 12 11 13 12 14 13 15]"
-     ]]
-   ])
+:saw-10-15 [10 12 11 13 12 14 13 15]"]]])
+
+
 
 (defn model-tab
   []
   [:div
    [:p "Fixed integer patterns repeating in random order."]
-   [bind-fields config-template config]
-   ])
+   [bind-fields config-template config]])
+
 
 (defn ^:export init
   []
