@@ -31,13 +31,14 @@
               [key-value-display k v])))))
 
 (defn ^:export init
-  [title ws-url & feature-list]
+  [title ws-url selected-tab & feature-list]
   (let [into-sim-in (async/chan)
         into-sim-mult (async/mult into-sim-in)
         into-sim-eavesdrop (tap-c into-sim-mult)
         into-journal main/into-journal
         pipe-to-remote-target! (remote/init ws-url)
-        features (into #{} (map keyword) feature-list)]
+        features (into #{} (map keyword) feature-list)
+        current-tab (atom (keyword selected-tab))]
     (pipe-to-remote-target! "journal" into-journal)
     (pipe-to-remote-target! "simulation" (tap-c into-sim-mult))
 
@@ -48,6 +49,6 @@
         (recur)))
 
     (reagent/render [main/sanity-app title nil
-                     [world-pane main/steps main/selection] features
+                     [world-pane main/steps main/selection] current-tab features
                      into-sim-in]
                     (dom/getElement "sanity-app"))))

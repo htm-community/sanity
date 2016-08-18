@@ -109,10 +109,10 @@
           into-viz into-sim into-journal]]]])))
 
 (defn sanity-app
-  [title model-tab world-pane features into-sim]
+  [title model-tab world-pane current-tab features into-sim]
   [cui/sanity-app title model-tab [main-pane world-pane into-sim]
-   features capture-options viz-options selection steps network-shape
-   viz/state-colors into-viz into-sim into-journal debug-data])
+   features capture-options viz-options current-tab selection steps
+   network-shape viz/state-colors into-viz into-sim into-journal debug-data])
 
 ;;; ## Exported helpers
 

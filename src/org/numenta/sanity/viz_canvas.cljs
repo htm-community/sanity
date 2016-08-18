@@ -954,9 +954,7 @@
                                :ry (if sel? sel-ry ry)
                                :fill "black"
                                :fill-opacity (cond sel? 1.0 kept? 0.5 :else 0.1)}]
-                    (when (and (pos? (count steps))
-                               (or sel?
-                                   (and kept? (< keep-steps 100))))
+                    (when kept?
                       [:text {:x x-px :y y-px
                               :dy "0.35em"
                               :fill "white"}
