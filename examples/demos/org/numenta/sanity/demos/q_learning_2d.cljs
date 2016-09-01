@@ -57,8 +57,8 @@
             (plt/rect! plot x y 1 1))
         (<= v -10)
         (do (c/fill-style ctx "black")
-            (plt/rect! plot x y 1 1))
-        ))
+            (plt/rect! plot x y 1 1))))
+
     ;; show Q values for transitions as colour-coded edges
     (doseq [[state-action q] (:Q-map inval)
             :let [{:keys [x y action]} state-action
@@ -77,8 +77,8 @@
         (plt/rect! plot x (- y 0.25) 1 0.25)
         ;; from below
         (neg? dy)
-        (plt/rect! plot x (+ y 1) 1 0.25)
-        ))
+        (plt/rect! plot x (+ y 1) 1 0.25)))
+
     (c/alpha ctx 1)
     ;; draw position and action
     (let [x= (+ 0.5 (:x inval))
@@ -163,8 +163,8 @@
              "Current position on the objective function surface. "
              "Also shows approx Q values for each position/action combination,
             where green is positive and red is negative.
-            These are the last seen Q values including last adjustments."]
-            ]])))))
+            These are the last seen Q values including last adjustments."]]])))))
+
 
 (defn set-model!
   []
@@ -196,8 +196,8 @@
                    (set-model!)
                    (.preventDefault e))}
       "Restart with new model"]
-     [:p.text-danger "This resets all parameters."]]]
-   ])
+     [:p.text-danger "This resets all parameters."]]]])
+
 
 (defn model-tab
   []
@@ -237,9 +237,9 @@
         square."]
 
    [:h3 "HTM model"]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

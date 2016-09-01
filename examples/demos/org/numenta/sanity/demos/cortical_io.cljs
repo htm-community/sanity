@@ -71,7 +71,7 @@ fox eat something.
          :api-key nil
          :decode-locally? true
          :spatial-scramble? false
-         :spec-choice :a
+         :params-choice :a
          :repeats 3
          :text fox-eats-what
          :world-buffer-count 0
@@ -97,7 +97,7 @@ fox eat something.
            (fn [_ _ _ v]
              (swap! config assoc :cache-count (count v))))
 
-(def spec-global
+(def params-global
   {:column-dimensions [30 40]
    :ff-init-frac 0.20
    :ff-potential-radius 1.0
@@ -123,14 +123,14 @@ fox eat something.
    :distal-vs-proximal-weight 0})
 
 
-(def spec-local
-  (assoc spec-global
+(def params-local
+  (assoc params-global
     :ff-init-frac 0.30
     :ff-potential-radius 0.20
     :spatial-pooling :local-inhibition
     :inhibition-base-distance 1))
 
-(def higher-level-spec-diff
+(def higher-level-params-diff
   {:column-dimensions [300]})
 
 (defn load-predictions
@@ -228,9 +228,9 @@ fox eat something.
   []
   (with-ui-loading-message
     (let [n-regions (:n-regions @config)
-          spec (case (:spec-choice @config)
-                 :a spec-global
-                 :b spec-local)
+          params (case (:params-choice @config)
+                  :a params-global
+                  :b params-local)
           e (case (:encoder @config)
               :cortical-io
               (cortical-io-encoder (:api-key @config) fingerprint-cache
@@ -243,7 +243,7 @@ fox eat something.
           init? (nil? @model)]
       (reset! model (core/regions-in-series
                      n-regions core/sensory-region
-                     (list* spec (repeat (merge spec higher-level-spec-diff)))
+                     (list* params (repeat (merge params higher-level-params-diff)))
                      {:input sensor}))
       (if init?
         (server/init model world-c main/into-journal into-sim)
@@ -321,7 +321,7 @@ fox eat something.
      [:label.col-sm-5 "Starting parameter set:"]
      [:div.col-sm-7
       [:select.form-control {:field :list
-                             :id :spec-choice}
+                             :id :params-choice}
        [:option {:key :a} "20% potential, no topology"]
        [:option {:key :b} "30% * local 16% area = 5% potential"]]]]
     [:div.form-group

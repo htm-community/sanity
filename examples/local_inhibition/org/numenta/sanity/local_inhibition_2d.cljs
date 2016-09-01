@@ -8,7 +8,7 @@
             [goog.dom :as dom]
             [org.numenta.sanity.viz-layouts :as lay
              :refer [layout-bounds
-                     fill-element-group
+                     group-and-fill-elements
                      fill-elements]]
             [reagent.core :as reagent :refer [atom]]))
 
@@ -27,11 +27,11 @@
 (def !exc (atom {}))
 (def !act (atom ()))
 (def !global-act (atom #{}))
-(def spec {:activation-level 0.02
-           :spatial-pooling :local-inhibition
-           :inhibition-base-distance 1
-           :proximal {:stimulus-threshold 2}
-           })
+(def params {:activation-level 0.02
+             :spatial-pooling :local-inhibition
+             :inhibition-base-distance 1
+             :proximal {:stimulus-threshold 2}})
+
 
 (def drawing-opts
   {:col-d-px 5
@@ -49,7 +49,7 @@
   (if (< x d) 0.0 x))
 
 (defn gen-exc
-  [spec]
+  [params]
   (let [focus-r 20
         focus-1-x (* focus-r 2)
         focus-1-y 20
@@ -71,18 +71,18 @@
          (zipmap (range size)))))
 
 (defn local-active-columns
-  [exc-raw topo inh-radius spec]
-  (let [threshold (:ff-stimulus-threshold spec)
+  [exc-raw topo inh-radius params]
+  (let [threshold (:stimulus-threshold (:proximal params))
         exc (into {} (filter #(>= (val %) threshold) exc-raw))]
    (set
     (inh/inhibit-locally exc topo inh-radius
-                         (:inhibition-base-distance spec)
-                         (* (p/size topo) (:activation-level spec))))))
+                         (:inhibition-base-distance params)
+                         (* (p/size topo) (:activation-level params))))))
 
 (defn global-active-columns
-  [exc topo spec]
+  [exc topo params]
   (set
-   (inh/inhibit-globally exc (* (p/size topo) (:activation-level spec)))))
+   (inh/inhibit-globally exc (* (p/size topo) (:activation-level params)))))
 
 (defn excitation-image
   [lay exc]
@@ -94,7 +94,7 @@
                              (min 1.0 (/ % maxval))
                              2)))]
     (c/fill-style ctx "black")
-    (fill-elements ctx lay m c/alpha)
+    (group-and-fill-elements ctx lay m c/alpha)
     el))
 
 (defn activation-image
@@ -102,11 +102,11 @@
   (let [el (image-buffer (layout-bounds lay))
         ctx (c/get-context el "2d")]
     (c/fill-style ctx "red")
-    (fill-element-group ctx lay act)
+    (fill-elements ctx lay act)
     el))
 
 (defn draw!
-  [exc act global-act spec]
+  [exc act global-act params]
   (let [el (dom/getElement "inh2d-viz")
         ctx (c/get-context el "2d")
         lay (lay/grid-2d-layout topo 0 0 plot-height-px drawing-opts false)
@@ -128,12 +128,12 @@
 (defn do-step!
   []
   (let [prev-actual-level (/ (count @!act) size)
-        exc (reset! !exc (gen-exc spec))
-        act (reset! !act (local-active-columns exc topo inh-radius spec))
+        exc (reset! !exc (gen-exc params))
+        act (reset! !act (local-active-columns exc topo inh-radius params))
         actual-level (/ (count act) size)
         global-act (reset! !global-act
-                           (global-active-columns exc topo spec))]
-    (draw! exc act global-act spec)))
+                           (global-active-columns exc topo params))]
+    (draw! exc act global-act params)))
 
 (defn app-ui
   []
@@ -143,11 +143,11 @@
       "Step (generate new input excitation)"]
      [:br]
      [:p#inh-info
-      "Target activation level is " (:activation-level spec) ". "
+      "Target activation level is " (:activation-level params) ". "
       [:br]
       "Actual activation level is " (util/round actual-level 2) ":"]
-     [:code "stimulus-threshold: "] (util/round (:ff-stimulus-threshold spec) 2) [:br]
-     [:code "inhibition-base-distance: "] (:inhibition-base-distance spec) [:br]
+     [:code "stimulus-threshold: "] (util/round (:stimulus-threshold (:proximal params)) 2) [:br]
+     [:code "inhibition-base-distance: "] (:inhibition-base-distance params) [:br]
      [:code "inhibition-radius: "] (util/round inh-radius 2)]))
 
 (defn ^:export init
