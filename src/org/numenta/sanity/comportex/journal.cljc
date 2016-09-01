@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.comportex.journal
-  (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
-               :cljs [cljs.core.async :as async :refer [put! <!]])
+  (:require [clojure.core.async :as async :refer [put! <! #?(:clj go-loop)]]
             [clojure.set :as set]
             [clojure.walk :refer [keywordize-keys stringify-keys]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
@@ -9,7 +8,7 @@
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util])
-  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go-loop]])))
 
 #?(:clj
    (defn random-uuid []

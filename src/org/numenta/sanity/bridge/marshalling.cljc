@@ -1,12 +1,8 @@
 (ns org.numenta.sanity.bridge.marshalling
-  (:require #?(:clj [clojure.core.async :as async :refer [<! put! go go-loop]]
-                    :cljs [cljs.core.async :as async :refer [<! put!]])
-            #?(:clj
-               [clojure.core.async.impl.protocols :as p]
-               :cljs
-               [cljs.core.async.impl.protocols :as p])
+  (:require [clojure.core.async :as async :refer [<! put! #?(:clj go)]]
+            [clojure.core.async.impl.protocols :as p]
             [cognitect.transit :as transit])
-  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 
 #?(:clj
    (defn random-uuid []

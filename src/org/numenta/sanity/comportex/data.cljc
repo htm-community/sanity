@@ -1,10 +1,7 @@
 (ns org.numenta.sanity.comportex.data
-  (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
-               :cljs [cljs.core.async :as async :refer [put! <!]])
-            [org.nfrac.comportex.core :as core]
+  (:require [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.util :as util])
-  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
+            [org.nfrac.comportex.util :as util]))
 
 (defn all-cell-segments
   [sg cell-id]

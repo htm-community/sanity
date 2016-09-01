@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.comportex.simulation
-  (:require #?(:clj [clojure.core.async :as async :refer [put! <! go go-loop]]
-               :cljs [cljs.core.async :as async :refer [put! <!]])
+  (:require [clojure.core.async :as async :refer [put! <! #?@(:clj [go go-loop])]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.protocols :as p]

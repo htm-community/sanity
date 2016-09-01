@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.util
-  (:require #?(:clj [clojure.core.async :as async]
-               :cljs [cljs.core.async :as async])
+  (:require [clojure.core.async :as async]
             [clojure.walk :refer [keywordize-keys]]))
 
 (defn tap-c
