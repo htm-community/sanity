@@ -76,8 +76,8 @@ fox eat something.
          :text fox-eats-what
          :world-buffer-count 0
          :cache-count 0
-         :have-model? false
-         }))
+         :have-model? false}))
+
 
 (def world-buffer (async/buffer 5000))
 (def world-c
@@ -120,8 +120,8 @@ fox eat something.
             :perm-inc 0.05
             :perm-dec 0.01
             :punish? true}
-   :distal-vs-proximal-weight 0
-   })
+   :distal-vs-proximal-weight 0})
+
 
 (def spec-local
   (assoc spec-global
@@ -220,7 +220,7 @@ fox eat something.
         (cio-start-requests! (:api-key @config)
                              (:text @config))
           ;; allow some time for the first fingerprint request to cortical.io
-          (<! (timeout 2500)))
+        (<! (timeout 2500)))
       (async/onto-chan world-c xs false)
       (swap! config assoc :world-buffer-count (count world-buffer)))))
 
@@ -280,17 +280,17 @@ fox eat something.
         {:on-click (fn [e]
                      (send-text!)
                      (.preventDefault e))}
-        "Send text block input"]
-       ]
+        "Send text block input"]]
+
       ;; disabled state
       [:div {:field :container
              :visible? #(not (:have-model? %))}
        [:button.btn.btn-primary.disabled
         "Send text block input"]
        [:p.text-info
-        "Create a model first (below)."]
-       ]]]
-    ]
+        "Create a model first (below)."]]]]]
+
+
    [:h3 "HTM model"]
    [:div.form-horizontal
     [:div.form-group
@@ -336,8 +336,8 @@ fox eat something.
                     (set-model!)
                     (.preventDefault e))}
        "Restart with new model"]
-      [:p.text-danger "This resets all parameters."]]]
-    ]])
+      [:p.text-danger "This resets all parameters."]]]]])
+
 
 (defn model-tab
   []
@@ -351,9 +351,9 @@ fox eat something.
     " but you can enter whatever text you like. Words that are not
       found in the cortical.io 'associative_en' retina are assigned a
       random SDR."]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []
