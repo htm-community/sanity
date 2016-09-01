@@ -12,6 +12,7 @@
   [htm prior-htm rgn-id lyr-id col]
   (let [rgn (get-in htm [:regions rgn-id])
         lyr (get rgn lyr-id)
+        info (p/layer-state lyr)
         depth (p/layer-depth lyr)
         in (:input-value htm)
         in-bits (:in-ff-bits (:state lyr))
@@ -29,13 +30,13 @@
       (str (sort in-bits))
       ""
       "__Active columns__"
-      (str (sort (p/active-columns lyr)))
+      (str (sort (:active-columns info)))
       ""
       "__Bursting columns__"
-      (str (sort (p/bursting-columns lyr)))
+      (str (sort (:bursting-columns info)))
       ""
       "__Winner cells__"
-      (str (sort (p/winner-cells lyr)))
+      (str (sort (:winner-cells info)))
       ""
       "__Proximal learning__"
       (for [seg-up (->> lyr :learn-state :learning :proximal vals (sort-by :target-id))]

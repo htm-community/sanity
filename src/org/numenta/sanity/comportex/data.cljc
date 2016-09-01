@@ -48,7 +48,8 @@
                 adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
                                 bit)
                 to-segs (p/targets-connected-from sg adjusted-bit)
-                predictive-columns (->> (p/prior-predictive-cells lyr)
+                predictive-columns (->> (p/layer-state lyr)
+                                        (:prior-predictive-cells)
                                         (map first)
                                         (into #{}))]
           [col _ _ :as seg-path] to-segs
@@ -296,9 +297,9 @@
 
 (defn cell-excitation-data
   [htm prior-htm rgn-id lyr-id sel-col]
-  (let [wc (p/winner-cells (get-in htm [:regions rgn-id lyr-id]))
+  (let [wc (-> (get-in htm [:regions rgn-id lyr-id]) (p/layer-state) :winner-cells)
         wc+ (if sel-col
-              (let [prior-wc (p/winner-cells (get-in prior-htm [:regions rgn-id lyr-id]))
+              (let [prior-wc (-> (get-in prior-htm [:regions rgn-id lyr-id]) (p/layer-state) :winner-cells)
                     sel-cell (or (first (filter (fn [[col _]]
                                                   (= col sel-col))
                                                 (concat prior-wc wc)))
