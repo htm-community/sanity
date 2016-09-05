@@ -4,17 +4,17 @@ A web-based visualization layer for HTMs.
 
 It works with:
 
-- [Comportex](http://github.com/nupic-community/comportex/)
-- [NuPIC](https://github.com/numenta/nupic) via [sanity-nupic](https://github.com/nupic-community/sanity-nupic)
+- [Comportex](http://github.com/htm-community/comportex/)
+- [NuPIC](https://github.com/numenta/nupic) via [sanity-nupic](https://github.com/htm-community/sanity-nupic)
 
 For original motivation see [this blog
 post](http://floybix.github.io/2014/07/11/visualization-driven-development-of-the-cortical-learning-algorithm/).
 
 ## The Runner
 
-See it in action in [the online demos](https://nupic-community.github.io/sanity/).
+See it in action in [the online demos](https://htm-community.github.io/sanity/).
 
-<a href="https://nupic-community.github.io/sanity/"><img src="runner.png" style="width:100%;max-width:800px;" /></a>
+<a href="https://htm-community.github.io/sanity/"><img src="runner.png" style="width:100%;max-width:800px;" /></a>
 
 Sanity runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
@@ -47,7 +47,7 @@ The notebook:
 
 - Is a fun-filled way to drive and present HTM models
 - Is a launchpad for Sanity runners
-- Is [built for blogging](https://github.com/nupic-community/sanity/wiki/Putting-notebooks-on-the-web).
+- Is [built for blogging](https://github.com/htm-community/sanity/wiki/Putting-notebooks-on-the-web).
   Interactive graphics are saved as images in the state that you left them.
 
 Some cool examples:
@@ -61,7 +61,7 @@ Some cool examples:
 
 Get [Leiningen](http://leiningen.org/) first.
 
-Clone [Comportex](http://github.com/nupic-community/comportex/), and
+Clone [Comportex](http://github.com/htm-community/comportex/), and
 install (this command installs to your local Maven repository,
 `~/.m2`. Once we make a release this step will not be needed.):
 
@@ -94,7 +94,7 @@ to launch your own Sanity runner.
 
 ## Online demos
 
-To host [the online demos](https://nupic-community.github.io/sanity/) locally,
+To host [the online demos](https://htm-community.github.io/sanity/) locally,
 do a `cljsbuild`, as above.
 
 Now open `public/demos/*.html` in a web browser.
@@ -104,7 +104,7 @@ in `examples/demos/sanity/demos/`.
 
 ## Hello
 
-* [Gitter chat](https://gitter.im/nupic-community/sanity)
+* [Gitter chat](https://gitter.im/htm-community/sanity)
 * or email or github issues.
 
 

@@ -72,10 +72,10 @@ process needs to be jumpstarted somehow. The client needs to know about at least
 one server target a priori. This is sometimes hardcoded (the Sanity runner knows
 to expect a `journal` and a `simulation` target) and other times is injected
 into a webpage (the Sanity notebook hosts an arbitrary number of journals in one
-webpage, so it generates a uniquely named equivelent to `journal` on every
+webpage, so it generates a uniquely named equivalent to `journal` on every
 `viz`). New targets are generated all the time and are sent inside of `msg`s.
 
-The `msg` is arbitrary large. It is often a vector containing a command and
+The `msg` is arbitrarily large. It is often a vector containing a command and
 arguments, and other times it's a response to a specific request or
 subscription.
 

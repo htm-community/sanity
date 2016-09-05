@@ -19,3 +19,5 @@ sanity*.js
 .lein-repl-history
 .nrepl-port
 sanity.iml
+/data
+/log
