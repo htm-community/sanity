@@ -66,7 +66,7 @@
         "step"
         (swap! options update :force-n-steps inc)
 
-        "set-spec"
+        "set-params"
         (let [[path v] xs]
           (swap! model assoc-in path v))
 

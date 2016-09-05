@@ -143,10 +143,11 @@
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])]
                       (cond-> {}
                         (contains? fetches "active-columns")
-                        (assoc "active-columns" (p/active-columns lyr))
+                        (assoc "active-columns" (:active-columns (p/layer-state lyr)))
 
                         (contains? fetches "pred-columns")
-                        (assoc "pred-columns" (->> (p/prior-predictive-cells lyr)
+                        (assoc "pred-columns" (->> (p/layer-state lyr)
+                                                   (:prior-predictive-cells)
                                                    (map first)
                                                    (distinct)))
 
@@ -241,6 +242,7 @@
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])
+                          info (p/layer-state lyr)
                           extract-cells #(->> %
                                               (keep (fn [[column ci]]
                                                       (when (= col column)
@@ -249,15 +251,15 @@
                       (cond-> {}
                         (contains? fetches "active-cells")
                         (assoc "active-cells"
-                               (extract-cells (p/active-cells lyr)))
+                               (extract-cells (:active-cells info)))
 
                         (contains? fetches "prior-predicted-cells")
                         (assoc "prior-predicted-cells"
-                               (extract-cells (p/prior-predictive-cells lyr)))
+                               (extract-cells (:prior-predictive-cells info)))
 
                         (contains? fetches "winner-cells")
                         (assoc "winner-cells"
-                               (extract-cells (p/winner-cells lyr)))))
+                               (extract-cells (:winner-cells info)))))
                     (id-missing-response id steps-offset))))
 
           "get-apical-segments"
@@ -329,8 +331,9 @@
             (put! response-c
                   (if-let [htm (find-model id)]
                     (let [lyr (get-in htm [:regions rgn-id lyr-id])
-                          a-cols (p/active-columns lyr)
-                          ppc (p/prior-predictive-cells lyr)
+                          info (p/layer-state lyr)
+                          a-cols (:active-columns info)
+                          ppc (:prior-predictive-cells info)
                           pp-cols (into #{} (map first ppc))
                           ap-cols (set/intersection pp-cols a-cols)
                           col-states (merge
@@ -366,10 +369,11 @@
           (let [[id rgn-id lyr-id {response-c :ch}] xs]
             (put! response-c
                   (if-let [htm (find-model id)]
-                    (let [layer (get-in htm [:regions rgn-id lyr-id])]
-                      {:winner-cells (p/winner-cells layer)
-                       :active-cells (p/active-cells layer)
-                       :pred-cells (p/predictive-cells layer)
+                    (let [layer (get-in htm [:regions rgn-id lyr-id])
+                          info (p/layer-state layer)]
+                      {:winner-cells (:winner-cells info)
+                       :active-cells (:active-cells info)
+                       :pred-cells (:predictive-cells info)
                        :engaged? true})
                     (id-missing-response id steps-offset))))
 

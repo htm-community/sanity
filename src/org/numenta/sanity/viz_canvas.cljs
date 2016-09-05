@@ -55,8 +55,8 @@
    :active (hsl :red 1.0 0.5)
    :predicted (hsl :blue 1.0 0.5 0.5)
    :active-predicted (hsl :purple 1.0 0.4)
-   :highlight (hsl :yellow 1 0.65 0.6)
-   })
+   :highlight (hsl :yellow 1 0.65 0.6)})
+
 
 (def syn-colors
   {:active (hsl :red 1.0 0.5)
@@ -298,8 +298,8 @@
   (let [[lyr-type & _] path
         {:keys [snapshot-id]} step]
     (get-in m-bits [snapshot-id path (case lyr-type
-                                    :regions :active-columns
-                                    :senses :active-bits)])))
+                                      :regions :active-columns
+                                      :senses :active-bits)])))
 
 (defn add-facets!
   [viz-layouts viz-options paths step m-bits]
@@ -679,8 +679,8 @@
               (doto ctx
                 (c/stroke-style (:active state-colors))
                 (c/stroke-width 2))
-              (col-cell-line cslay ctx ci sel-lay col dt))
-            ))
+              (col-cell-line cslay ctx ci sel-lay col dt))))
+
         ;; foreground pass
         (doseq [layout-key [:cells-segments :apical-segments]
                 :let [cslay (get layouts layout-key)]
@@ -1093,8 +1093,8 @@
    187 :equals
    45 :minus
    173 :minus
-   189 :minus
-   })
+   189 :minus})
+
 
 (defn viz-key-down
   [e commands-in]
@@ -1112,8 +1112,8 @@
               :slash [:sort (.-shiftKey e)]
               :backslash [:clear-sort (.-shiftKey e)]
               :equals [:add-facet (.-shiftKey e)]
-              :minus [:clear-facets (.-shiftKey e)]
-              ))
+              :minus [:clear-facets (.-shiftKey e)]))
+
       (.preventDefault e))
     true))
 

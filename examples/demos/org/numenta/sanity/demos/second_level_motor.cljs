@@ -179,8 +179,8 @@
         :on-click (fn [e]
                     (set-text!)
                     (.preventDefault e))}
-       "Set sentences"]]]
-    ]
+       "Set sentences"]]]]
+
    [:h3 "HTM model"]
    [:div.form-horizontal
     [:div.form-group
@@ -190,8 +190,8 @@
                     (set-model!)
                     (.preventDefault e))}
        "Restart with new model"]
-      [:p.text-danger "This resets all parameters."]]]
-    ]])
+      [:p.text-danger "This resets all parameters."]]]]])
+
 
 (defn model-tab
   []
@@ -216,9 +216,9 @@
    the sentence's word sequence). If it is bursting, a word saccade
    moves back to the start of the same sentence."]
    [:p "And similarly for sentence saccades."]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

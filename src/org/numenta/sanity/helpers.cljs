@@ -47,9 +47,9 @@
            :let [t (+ i (- time (dec (count history))))
                  curr? (== time t)]]
        ^{:key (str word t)}
-       [(if curr? :ins :span) (str word separator)]
-       )]
-    ))
+       [(if curr? :ins :span) (str word separator)])]))
+
+
 
 (defn predictions-table
   [predictions]
@@ -60,16 +60,16 @@
       [:th "prediction"]
       [:th "votes %"]
       [:th "votes per bit"]]
-     (for [[j {:keys [value votes-frac votes-per-bit]
-               }] (map-indexed vector predictions)]
+     (for [[j {:keys [value votes-frac votes-per-bit]}]
+           (map-indexed vector predictions)]
        (let [txt value]
          ^{:key (str txt j)}
          [:tr
           [:td txt]
           [:td.text-right (str (round (* votes-frac 100)))]
-          [:td.text-right (str (round votes-per-bit))]]
-         ))
-     ]]])
+          [:td.text-right (str (round votes-per-bit))]]))]]])
+
+
 
 (defn text-world-predictions-component
   [htm n-predictions]

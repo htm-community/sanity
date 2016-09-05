@@ -71,13 +71,13 @@ fox eat something.
          :api-key nil
          :decode-locally? true
          :spatial-scramble? false
-         :spec-choice :a
+         :params-choice :a
          :repeats 3
          :text fox-eats-what
          :world-buffer-count 0
          :cache-count 0
-         :have-model? false
-         }))
+         :have-model? false}))
+
 
 (def world-buffer (async/buffer 5000))
 (def world-c
@@ -97,7 +97,7 @@ fox eat something.
            (fn [_ _ _ v]
              (swap! config assoc :cache-count (count v))))
 
-(def spec-global
+(def params-global
   {:column-dimensions [30 40]
    :ff-init-frac 0.20
    :ff-potential-radius 1.0
@@ -120,17 +120,17 @@ fox eat something.
             :perm-inc 0.05
             :perm-dec 0.01
             :punish? true}
-   :distal-vs-proximal-weight 0
-   })
+   :distal-vs-proximal-weight 0})
 
-(def spec-local
-  (assoc spec-global
+
+(def params-local
+  (assoc params-global
     :ff-init-frac 0.30
     :ff-potential-radius 0.20
     :spatial-pooling :local-inhibition
     :inhibition-base-distance 1))
 
-(def higher-level-spec-diff
+(def higher-level-params-diff
   {:column-dimensions [300]})
 
 (defn load-predictions
@@ -220,7 +220,7 @@ fox eat something.
         (cio-start-requests! (:api-key @config)
                              (:text @config))
           ;; allow some time for the first fingerprint request to cortical.io
-          (<! (timeout 2500)))
+        (<! (timeout 2500)))
       (async/onto-chan world-c xs false)
       (swap! config assoc :world-buffer-count (count world-buffer)))))
 
@@ -228,9 +228,9 @@ fox eat something.
   []
   (with-ui-loading-message
     (let [n-regions (:n-regions @config)
-          spec (case (:spec-choice @config)
-                 :a spec-global
-                 :b spec-local)
+          params (case (:params-choice @config)
+                  :a params-global
+                  :b params-local)
           e (case (:encoder @config)
               :cortical-io
               (cortical-io-encoder (:api-key @config) fingerprint-cache
@@ -243,7 +243,7 @@ fox eat something.
           init? (nil? @model)]
       (reset! model (core/regions-in-series
                      n-regions core/sensory-region
-                     (list* spec (repeat (merge spec higher-level-spec-diff)))
+                     (list* params (repeat (merge params higher-level-params-diff)))
                      {:input sensor}))
       (if init?
         (server/init model world-c main/into-journal into-sim)
@@ -280,17 +280,17 @@ fox eat something.
         {:on-click (fn [e]
                      (send-text!)
                      (.preventDefault e))}
-        "Send text block input"]
-       ]
+        "Send text block input"]]
+
       ;; disabled state
       [:div {:field :container
              :visible? #(not (:have-model? %))}
        [:button.btn.btn-primary.disabled
         "Send text block input"]
        [:p.text-info
-        "Create a model first (below)."]
-       ]]]
-    ]
+        "Create a model first (below)."]]]]]
+
+
    [:h3 "HTM model"]
    [:div.form-horizontal
     [:div.form-group
@@ -321,7 +321,7 @@ fox eat something.
      [:label.col-sm-5 "Starting parameter set:"]
      [:div.col-sm-7
       [:select.form-control {:field :list
-                             :id :spec-choice}
+                             :id :params-choice}
        [:option {:key :a} "20% potential, no topology"]
        [:option {:key :b} "30% * local 16% area = 5% potential"]]]]
     [:div.form-group
@@ -336,8 +336,8 @@ fox eat something.
                     (set-model!)
                     (.preventDefault e))}
        "Restart with new model"]
-      [:p.text-danger "This resets all parameters."]]]
-    ]])
+      [:p.text-danger "This resets all parameters."]]]]])
+
 
 (defn model-tab
   []
@@ -351,9 +351,9 @@ fox eat something.
     " but you can enter whatever text you like. Words that are not
       found in the cortical.io 'associative_en' retina are assigned a
       random SDR."]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []

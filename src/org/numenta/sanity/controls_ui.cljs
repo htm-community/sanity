@@ -37,15 +37,15 @@
     (vector? v) :vector
     :else :number))
 
-(defn- spec-form
-  [network-shape partypes spec spec-path skip-set]
-  (for [[k v] (sort spec)
+(defn- params-form
+  [network-shape partypes params params-path skip-set]
+  (for [[k v] (sort params)
         :when (not (skip-set k))
         :let [typ (or (get @partypes k)
                       (get (swap! partypes assoc k (param-type v))
                            k))
-              setv! #(swap! network-shape assoc-in spec-path
-                            (assoc spec k %))]]
+              setv! #(swap! network-shape assoc-in params-path
+                            (assoc params k %))]]
     [:div.row {:class (when (or (nil? v) (string? v))
                         "has-error")}
      [:div.col-sm-8
@@ -93,11 +93,11 @@
                (when-not (nil? prev-st) ;; don't push when getting initial template
                  (doseq [path (for [[r-id rgn] (:regions st)
                                     l-id (keys rgn)]
-                                [:regions r-id l-id :spec])
-                         :let [old-spec (get-in prev-st path)
-                               new-spec (get-in st path)]]
-                   (when (not= old-spec new-spec)
-                     (put! into-sim ["set-spec" path new-spec]))))))
+                                [:regions r-id l-id :params])
+                         :let [old-params (get-in prev-st path)
+                               new-params (get-in st path)]]
+                   (when (not= old-params new-params)
+                     (put! into-sim ["set-params" path new-params]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [network-shape selection into-sim]
@@ -109,51 +109,51 @@
           (when sel-layer
             (str (name sel-region) " " (name sel-layer)))]
          (into
-         [:div.form-horizontal]
-         (when @network-shape
-           (let [spec-path [:regions sel-region sel-layer :spec]
-                 spec (get-in @network-shape spec-path)]
-             (concat
-              (spec-form network-shape partypes spec spec-path
-                         #{:proximal :distal :apical})
-              (for [[sub-k title] [[:proximal "Proximal dendrites"]
-                                   [:distal "Distal (lateral) dendrites"]
-                                   [:apical "Apical dendrites"]]]
+          [:div.form-horizontal]
+          (when @network-shape
+            (let [params-path [:regions sel-region sel-layer :params]
+                  params (get-in @network-shape params-path)]
+              (concat
+               (params-form network-shape partypes params params-path
+                          #{:proximal :distal :apical})
+               (for [[sub-k title] [[:proximal "Proximal dendrites"]
+                                    [:distal "Distal (lateral) dendrites"]
+                                    [:apical "Apical dendrites"]]]
+                 [:div.panel.panel-default
+                  [:div.panel-heading [:h4.panel-title title]]
+                  [:div.panel-body
+                   (into
+                    [:div.form-horizontal]
+                    (params-form network-shape partypes
+                               (get params sub-k) (conj params-path sub-k) #{}))]])
+               [
                 [:div.panel.panel-default
-                 [:div.panel-heading [:h4.panel-title title]]
+                 [:div.panel-heading [:h4.panel-title "Note"]]
                  [:div.panel-body
-                  (into
-                   [:div.form-horizontal]
-                   (spec-form network-shape partypes
-                              (get spec sub-k) (conj spec-path sub-k) #{}))]])
-              [
-               [:div.panel.panel-default
-                [:div.panel-heading [:h4.panel-title "Note"]]
-                [:div.panel-body
-                 [:p "Parameter values can be altered above, but some parameters
+                  [:p "Parameter values can be altered above, but some parameters
                      must be in effect when the HTM regions are created.
                      Notable examples are "
-                  [:code "column-dimensions"] " and " [:code "depth"]
-                  ". After setting such parameter values, rebuild all regions
-                 (obviously losing any learned connections in the process):"
-                  ]
-                 [:button.btn.btn-warning.btn-block
-                  {:on-click #(helpers/ui-loading-message-until
-                               (go
-                                 (<! (async/timeout 100))
-                                 (let [finished (async/chan)]
-                                   (put! into-sim
-                                         ["restart" (marshal/channel finished
-                                                                     true)])
-                                   (<! finished))))}
-                  "Rebuild model"]
-                 [:p.small "This will not reset, or otherwise alter, the input stream."]]
-                ]
-               [:h4 "Current spec value"]
-               [:pre (str spec)]
-               ])
-             )))])))
-  )
+                   [:code "column-dimensions"] " and " [:code "depth"]
+                   ". After setting such parameter values, rebuild all regions
+                 (obviously losing any learned connections in the process):"]
+
+                  [:button.btn.btn-warning.btn-block
+                   {:on-click #(helpers/ui-loading-message-until
+                                (go
+                                  (<! (async/timeout 100))
+                                  (let [finished (async/chan)]
+                                    (put! into-sim
+                                          ["restart" (marshal/channel finished
+                                                                      true)])
+                                    (<! finished))))}
+                   "Rebuild model"]
+                  [:p.small "This will not reset, or otherwise alter, the input stream."]]]
+
+                [:h4 "Current params value"]
+                [:pre (str params)]]))))]))))
+
+
+
 
 (defn gather-col-state-history!
   [col-state-history step into-journal]
@@ -233,8 +233,8 @@
     [:div.col-sm-6
      [:input {:field :checkbox
               :id :group-contexts?}]
-     [:small " (column-level SDRs)"]]
-    ]
+     [:small " (column-level SDRs)"]]]
+
    [:div.row
     [:div.col-sm-6
      [:label.small "Order by"]]
@@ -242,8 +242,8 @@
      [:select.form-control.input-sm {:field :list
                                      :id :ordering}
       [:option {:key :first-appearance} "first appearance"]
-      [:option {:key :last-appearance} "last appearance"]]]
-    ]
+      [:option {:key :last-appearance} "last appearance"]]]]
+
    [:div.row
     [:div.col-sm-6
      [:label.small {:field :label
@@ -255,8 +255,8 @@
               :min 5
               :max cell-sdrs-plot-dt-limit
               :step 5
-              :id :hide-states-older}]]
-    ]
+              :id :hide-states-older}]]]
+
    [:div.row
     [:div.col-sm-6
      [:label.small {:field :label
@@ -267,35 +267,35 @@
      [:input {:field :range
               :min 1
               :max 16
-              :id :hide-states-rarer}]]
-    ]
+              :id :hide-states-rarer}]]]
+
    [:div.row
     [:div.col-sm-6
      [:label.small {:field :label
                     :id :hide-conns-smaller
                     :preamble (gstr/unescapeEntities "&ge; ")
-                    :postamble "-cell connections"}]
-     ]
+                    :postamble "-cell connections"}]]
+
     [:div.col-sm-6
      [:input {:field :range
               :min 1
               :max 16
-              :id :hide-conns-smaller}]]
-    ]
+              :id :hide-conns-smaller}]]]
+
    [:div.row
     [:div.col-sm-6
      [:label.small {:field :label
                     :id :spreading-activation-steps
                     :preamble "spreading "
-                    :postamble " steps"}]
-     ]
+                    :postamble " steps"}]]
+
     [:div.col-sm-6
      [:input {:field :range
               :min 0
               :max 12
-              :id :spreading-activation-steps}]]
-    ]
-   ])
+              :id :spreading-activation-steps}]]]])
+
+
 
 (defn cell-sdrs-tab-builder
   [steps network-shape selection into-journal]
@@ -310,8 +310,8 @@
         disable! (fn []
                    (let [teardown! (:teardown @component)]
                      (teardown!))
-                   (reset! component nil))
-        ]
+                   (reset! component nil))]
+
     (fn cell-sdrs-tab []
       [:div
        (if-not @component
@@ -376,8 +376,8 @@
          number of cells it represents."]
         [:li "The width of a state corresponds to the number of times
          it has matched."]
-        [:li "Labels are drawn with horizonal spacing by frequency."]]
-       ])))
+        [:li "Labels are drawn with horizonal spacing by frequency."]]])))
+
 
 (defn fetch-details-text!
   [into-journal text-response sel]
@@ -429,8 +429,8 @@
                                      (println (<! response-c))))
                                  (.preventDefault e))}
               (not snapshot-id) (assoc :disabled "disabled"))
-            "Dump entire model to console"])
-         ])})))
+            "Dump entire model to console"])])})))
+
 
 (defn t-chbox
   [id label]
@@ -545,14 +545,14 @@
          [:input {:field :radio
                   :name :drawing.display-mode
                   :value :two-d}]
-         " Draw one step in 2D"]]
-       ]]
+         " Draw one step in 2D"]]]]
+
      [:div.row
       (group "Inbits"
              [:div.panel-body
               (chbox :inbits.active "Active bits")
-              (chbox :inbits.predicted "Predicted bits")
-              ])
+              (chbox :inbits.predicted "Predicted bits")])
+
       (group "Columns"
              [:div.panel-body
               (chbox :columns.overlaps "Overlaps")
@@ -560,8 +560,8 @@
               (chbox :columns.boosts "Boosts")
               (chbox :columns.n-segments "N.segments")
               (chbox :columns.active "Active")
-              (chbox :columns.predictive "Predictive")
-              ])
+              (chbox :columns.predictive "Predictive")])
+
       (group "Feed-forward synapses"
              [:div.panel-body
               [:div "To "
@@ -569,14 +569,14 @@
                          :id :ff-synapses.to}
                 [:option {:key :all} "all active columns"]
                 [:option {:key :selected} "selected column"]
-                [:option {:key :none} "none"]
-                ]]
+                [:option {:key :none} "none"]]]
+
               (chbox :ff-synapses.trace-back? "Trace back")
               (chbox :ff-synapses.disconnected "Disconnected")
               (chbox :ff-synapses.inactive "Inactive")
               (chbox :ff-synapses.predicted "Predictive")
-              (chbox :ff-synapses.permanences "Permanences")
-              ])
+              (chbox :ff-synapses.permanences "Permanences")])
+
       (group "Distal synapses"
              [:div.panel-body
               [:div "(selected column) "
@@ -584,13 +584,13 @@
                          :id :distal-synapses.to}
                 [:option {:key :all} "all cell segments"]
                 [:option {:key :selected} "selected segment"]
-                [:option {:key :none} "none"]
-                ]]
+                [:option {:key :none} "none"]]]
+
               (chbox :distal-synapses.disconnected "Disconnected")
               (chbox :distal-synapses.inactive "Inactive")
-              (chbox :distal-synapses.permanences "Permanences")
-              ])]
-     ]))
+              (chbox :distal-synapses.permanences "Permanences")])]]))
+
+
 
 (defn drawing-tab
   [features viz-options capture-options]
@@ -747,8 +747,8 @@
             [:li [:a {:href "#"
                       :on-click #(swap! viz-options assoc-in [:drawing :display-mode]
                                         :two-d)}
-                  "column states over space (2D)"]]
-            ]]
+                  "column states over space (2D)"]]]]
+
           ;; expand canvas
           (when-not @viz-expanded
             [:li.hidden-xs
@@ -849,8 +849,8 @@
                  :on-change (fn [e]
                               (swap! apply-to-all? not)
                               (.preventDefault e))}]
-               " all layers"]]]]]
-          ]
+               " all layers"]]]]]]
+
          ;; right-aligned items
          [:ul.nav.navbar-nav.navbar-right
           ;; sim rate
@@ -904,10 +904,10 @@
                      :title "Help"}
               @show-help (assoc :class "active"))
             [:span.glyphicon.glyphicon-question-sign {:aria-hidden "true"}]
-            [:span.visible-xs-inline " Help"]]]
-          ]
-         ]
-        ]])))
+            [:span.visible-xs-inline " Help"]]]]]]])))
+
+
+
 
 (defn tabs
   [current-tab tab-cmps]
@@ -987,8 +987,8 @@
          [:li
           [:kbd "+"] " adds a facet (Shift for all);"]
          [:li
-          [:kbd "-"] " clears facets (Shift for all);"]]
-        ]]
+          [:kbd "-"] " clears facets (Shift for all);"]]]]
+
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Colour legend"]
        [:ul

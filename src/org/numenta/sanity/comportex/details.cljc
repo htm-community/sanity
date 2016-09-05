@@ -12,6 +12,7 @@
   [htm prior-htm rgn-id lyr-id col]
   (let [rgn (get-in htm [:regions rgn-id])
         lyr (get rgn lyr-id)
+        info (p/layer-state lyr)
         depth (p/layer-depth lyr)
         in (:input-value htm)
         in-bits (:in-ff-bits (:state lyr))
@@ -29,13 +30,13 @@
       (str (sort in-bits))
       ""
       "__Active columns__"
-      (str (sort (p/active-columns lyr)))
+      (str (sort (:active-columns info)))
       ""
       "__Bursting columns__"
-      (str (sort (p/bursting-columns lyr)))
+      (str (sort (:bursting-columns info)))
       ""
       "__Winner cells__"
-      (str (sort (p/winner-cells lyr)))
+      (str (sort (:winner-cells info)))
       ""
       "__Proximal learning__"
       (for [seg-up (->> lyr :learn-state :learning :proximal vals (sort-by :target-id))]
@@ -61,8 +62,8 @@
               bits (:in-ff-bits (:state lyr))
               sig-bits (:in-stable-ff-bits (:state lyr))
               d-bits (:active-bits (:prior-distal-state lyr))
-              d-lbits (:learnable-bits (:prior-distal-state lyr))
-              ]
+              d-lbits (:learnable-bits (:prior-distal-state lyr))]
+
           ["__Column overlap__"
            (str (get (:col-overlaps (:state lyr)) [col 0]))
            ""
@@ -74,8 +75,8 @@
               (for [[id p] (sort syns)
                     :let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id :ff-deps)
                           src-rgn (get-in htm [:regions src-k])
-                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)
-                          ]]
+                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)]]
+
                 (str "  " src-k " " src-id
                      (if (>= p ff-pcon) " :=> " " :.: ")
                      (to-fixed p 2)
@@ -96,11 +97,11 @@
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (to-fixed p 2)
                         (if (contains? d-lbits id) " L"
-                            (if (contains? d-bits id) " A"))))])
-              ])
-           ]))
+                            (if (contains? d-bits id) " A"))))])])]))
+
+
       ""
-      "__spec__"
+      "__params__"
       (map str (sort (p/params rgn)))]
      (flatten)
      (interpose \newline)

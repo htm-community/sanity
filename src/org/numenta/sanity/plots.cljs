@@ -4,7 +4,7 @@
             [org.numenta.sanity.bridge.marshalling :as marshal]
             [org.numenta.sanity.plots-canvas :as plt]
             [org.numenta.sanity.helpers :refer [canvas resizing-canvas
-                                          window-resize-listener]]
+                                                window-resize-listener]]
             [org.numenta.sanity.selection :as sel]
             [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round]]
@@ -129,8 +129,8 @@
                    :h (- (.-height cnv) 18)}
         plot (plt/xy-plot ctx plot-size
                           [0 n-timesteps]
-                          [v-max 0])
-        ]
+                          [v-max 0])]
+
 
     (c/clear-rect ctx {:x 0 :y 0 :w (.-width cnv) :h (.-height cnv)})
     (c/stroke-width ctx 0)
@@ -172,8 +172,8 @@
           (c/stroke))
         (c/text ctx {:x (+ xpx 10)
                      :y ypx
-                     :text y})))
-    ))
+                     :text y})))))
+
 
 (defn empty-col-state-freqs-log
   []
@@ -201,8 +201,8 @@
   {:proximal-unstable :active
    :proximal-stable :active-predicted
    :boost :highlight
-   :distal :predicted
-   })
+   :distal :predicted})
+
 
 (def excitation-order
   [:proximal-unstable
@@ -344,8 +344,8 @@
                     bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
                 (draw-cell-excitation-plot! ctx @excitation-data network-shape
                                             bit series-colors)))
-            size-invalidates-c]]))
-      })))
+            size-invalidates-c]]))})))
+
 
 (defn draw-cell-sdrs-plot!*
   [ctx
@@ -520,8 +520,8 @@
 (defn cell-sdrs-plot-data-group-contexts
   [{:as plot-data
     :keys [sdr-transitions sdr-label-counts sdr-votes sdr-sizes sdr-growth
-           sdr->gid gid-sizes gid-growth kept-sdrs current-sdrs
-           ]}]
+           sdr->gid gid-sizes gid-growth kept-sdrs current-sdrs]}]
+
   (let [kept-gids (-> (map sdr->gid kept-sdrs) ;; keep order by last appearance:
                       (reverse) (distinct) (reverse))]
     ;; TODO an abstraction for this kind of aggregation
@@ -570,8 +570,8 @@
                                                            vote))))
                                            {}
                                            m))
-                              vm)))
-        )))
+                              vm))))))
+
 
 (defn cell-sdrs-plot-spread-activation
   [{:as plot-data
@@ -809,7 +809,7 @@
             pc (:pred-cells cells-by-state)
             on? (:engaged? cells-by-state)
             threshold (get-in @network-shape [:regions region layer
-                                              :spec :distal :learn-threshold])
+                                              :params :distal :learn-threshold])
             ;; for each cell, represents its specificity to each SDR
             cell-sdr-fracs (->> (:cell-sdr-counts state)
                                 (util/remap freqs->fracs))

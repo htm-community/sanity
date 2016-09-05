@@ -62,14 +62,14 @@
           (plt/rect! qplot (- x 0.6) 0 0.6 1)
           ;; from right
           (neg? dx)
-          (plt/rect! qplot x 1 0.6 1))
-        )
+          (plt/rect! qplot x 1 0.6 1)))
+
       ;; draw ticks to separate left/right indicators
       (c/alpha ctx 0.25)
       (c/fill-style ctx "black")
       (doseq [x (range (inc (count surface)))]
-        (plt/line! qplot [[x 0] [x 2]]))
-      )
+        (plt/line! qplot [[x 0] [x 2]])))
+
     (c/alpha ctx 1)
     ;; draw surface
     (c/translate ctx 0 40)
@@ -108,11 +108,11 @@
   [htm]
   (let [alyr (get-in htm [:regions :action :layer-3])
         qinfo (:Q-info alyr)
-        {:keys [q-alpha q-discount]} (:spec alyr)
+        {:keys [q-alpha q-discount]} (:params alyr)
         Q_T [:var "Q" [:sub "t"]]
         Q_T-1 [:var.text-nowrap "Q" [:sub "t-1"]]
-        R_T [:var.text-nowrap "R" [:sub "t"]]
-        ]
+        R_T [:var.text-nowrap "R" [:sub "t"]]]
+
     [:div
      [:h4 "Q learning"]
      [:table.table.table-condensed
@@ -131,8 +131,8 @@
       [:tr
        [:th [:var "n"]]
        [:td [:small "active synapses"]]
-       [:td (:perms qinfo 0)]]
-      ]
+       [:td (:perms qinfo 0)]]]
+
      [:p.text-right
       [:b "adjustment: "] [:br]
       [:abbr {:title (str "learning rate, alpha")} q-alpha]
@@ -146,8 +146,8 @@
       ") = "
       [:mark
        (->> (:adj qinfo 0)
-            (gstr/format "%+.3f"))]
-      ]]))
+            (gstr/format "%+.3f"))]]]))
+
 
 (defn world-pane
   []
@@ -236,8 +236,8 @@
                    (set-model!)
                    (.preventDefault e))}
       "Restart with new model"]
-     [:p.text-danger "This resets all parameters."]]]
-   ])
+     [:p.text-danger "This resets all parameters."]]]])
+
 
 (defn model-tab
   []
@@ -275,9 +275,9 @@
         and staying there."]
 
    [:h3 "HTM model"]
-   [bind-fields config-template config]
-   ]
-  )
+   [bind-fields config-template config]])
+
+
 
 (defn ^:export init
   []
