@@ -2,9 +2,9 @@
   :description "Web visualisation of the HTM algorithm"
   :url "https://github.com/htm-community/sanity"
 
-  :dependencies [[org.clojure/clojure "1.9.0-alpha10"]
-                 [org.clojure/clojurescript "1.9.227"]
-                 [org.clojure/core.async "0.2.385"]
+  :dependencies [[org.clojure/clojure "1.9.0-alpha12"]
+                 [org.clojure/clojurescript "1.9.229"]
+                 [org.clojure/core.async "0.2.391"]
                  [tailrecursion/cljs-priority-map "1.2.0"]
                  [org.nfrac/comportex "0.0.16-SNAPSHOT"]
                  [rm-hull/monet "0.3.0"]
@@ -19,7 +19,7 @@
                   :exclusions [javax.servlet/servlet-api
                                org.slf4j/slf4j-api]]]
 
-  :plugins [[lein-cljsbuild "1.1.3"]
+  :plugins [[lein-cljsbuild "1.1.4"]
             [com.cemerick/austin "0.1.6"]
             [org.clojure/tools.nrepl "0.2.10"]]
   :repl-options {:nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]

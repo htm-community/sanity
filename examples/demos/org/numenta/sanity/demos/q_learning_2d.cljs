@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.demos.q-learning-2d
   (:require [org.nfrac.comportex.demos.q-learning-2d :as demo]
-            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [org.numenta.sanity.demos.q-learning-1d :refer [q-learning-sub-pane]]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
@@ -22,7 +21,7 @@
                    [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
-  (atom {:n-regions 1}))
+  (atom {:n-layers 1}))
 
 (def world-c
   (async/chan (async/buffer 1)
@@ -174,7 +173,7 @@
         (when-not init?
           ;; break cycle to reset input
           (<! world-c))
-        (reset! model (demo/make-model))
+        (reset! model (demo/build))
         (if init?
           (server/init model world-c main/into-journal into-sim
                        (demo/htm-step-with-action-selection world-c))
@@ -184,11 +183,12 @@
 
 (def config-template
   [:div.form-horizontal
+   #_
    [:div.form-group
-    [:label.col-sm-5 "Number of regions:"]
+    [:label.col-sm-5 "Number of layers:"]
     [:div.col-sm-7
      [:input.form-control {:field :numeric
-                           :id :n-regions}]]]
+                           :id :n-layers}]]]
    [:div.form-group
     [:div.col-sm-offset-5.col-sm-7
      [:button.btn.btn-default
@@ -210,8 +210,8 @@
         state. We represent a Q value by the average permanence of
         synapses activating the action from that state, minus the
         initial permanence value."]
-   [:p "The action region columns are activated just like any other
-        region, but are then interpreted to produce an action."]
+   [:p "The action layer columns are activated just like any other
+        layer, but are then interpreted to produce an action."]
    [:p "Adjustments to a Q value, based on reward and expected future
         reward, are applied to the permanence of synapses which
         directly activated the action (columns). This adjustment

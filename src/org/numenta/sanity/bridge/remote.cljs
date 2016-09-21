@@ -2,10 +2,7 @@
   (:require [cljs.core.async :as async :refer [put! close!]]
             [cljs.pprint :refer [pprint]]
             [cognitect.transit :as transit]
-            [org.numenta.sanity.bridge.marshalling :as marshal]
-            [org.nfrac.comportex.topology :refer [map->OneDTopology
-                                                  map->TwoDTopology
-                                                  map->ThreeDTopology]])
+            [org.numenta.sanity.bridge.marshalling :as marshal])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]))
 
 ;; Jetty's maxTextMessageBufferSize

@@ -3,12 +3,12 @@
             [org.numenta.sanity.comportex.simulation :as simulation]
             [org.numenta.sanity.comportex.journal :as journal]
             [org.numenta.sanity.util :as utilv]
-            [org.nfrac.comportex.protocols :as p]))
+            [org.nfrac.comportex.core :as cx]))
 
 (defn init
   ([model world-c into-journal into-sim]
    (init
-    model world-c into-journal into-sim p/htm-step))
+    model world-c into-journal into-sim cx/htm-step))
   ([model world-c into-journal into-sim htm-step]
    (init
     model world-c into-journal into-sim htm-step nil))

@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.demos.simple-sentences
   (:require [org.nfrac.comportex.demos.simple-sentences :as demo]
-            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
@@ -18,7 +17,7 @@
                    [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
-  (atom {:n-regions 1
+  (atom {:n-layers 1
          :repeats 1
          :text demo/input-text
          :world-buffer-count 0}))
@@ -75,9 +74,8 @@
 (defn set-model!
   []
   (with-ui-loading-message
-    (let [n-regions (:n-regions @config)
-          init? (nil? @model)]
-      (reset! model (demo/n-region-model n-regions demo/params))
+    (let [init? (nil? @model)]
+      (reset! model (demo/build))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/network-shape (translate-network-shape
@@ -140,11 +138,12 @@
 
    [:h3 "HTM model"]
    [:div.form-horizontal
+    #_
     [:div.form-group
-     [:label.col-sm-5 "Number of regions:"]
+     [:label.col-sm-5 "Number of layers:"]
      [:div.col-sm-7
       [:input.form-control {:field :numeric
-                            :id :n-regions}]]]
+                            :id :n-layers}]]]
     [:div.form-group
      [:div.col-sm-offset-5.col-sm-7
       [:button.btn.btn-default

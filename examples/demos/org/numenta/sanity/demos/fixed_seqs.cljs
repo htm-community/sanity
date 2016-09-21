@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.demos.fixed-seqs
   (:require [org.nfrac.comportex.demos.isolated-1d :as demo]
-            [org.nfrac.comportex.core :as core]
             [org.nfrac.comportex.util :as util]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
@@ -18,7 +17,7 @@
                    [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
-  (atom {:n-regions 1}))
+  (atom {:n-layers 1}))
 
 (def world-c (async/chan (async/buffer 1)
                          (map #(assoc % :label (:id %)))))
@@ -77,7 +76,7 @@
   []
   (with-ui-loading-message
     (let [init? (nil? @model)]
-      (reset! model (demo/n-region-model (:n-regions @config)))
+      (reset! model (demo/build))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/network-shape (translate-network-shape
@@ -95,11 +94,12 @@
                             :disabled "disabled"}
       [:option {:key :block} "block"]
       [:option {:key :random} "random"]]]]
+   #_
    [:div.form-group
-    [:label.col-sm-5 "Number of regions:"]
+    [:label.col-sm-5 "Number of layers:"]
     [:div.col-sm-7
      [:input.form-control {:field :numeric
-                           :id :n-regions}]]]
+                           :id :n-layers}]]]
    [:div.form-group
     [:div.col-sm-offset-5.col-sm-7
      [:button.btn.btn-default

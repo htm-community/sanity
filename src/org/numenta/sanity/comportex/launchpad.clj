@@ -4,7 +4,7 @@
             [org.numenta.sanity.comportex.runner :as runner]
             [org.numenta.sanity.comportex.notebook :as notebook]
             [org.numenta.sanity.comportex.websocket :as server-ws]
-            [org.nfrac.comportex.protocols :as p]))
+            [org.nfrac.comportex.core :as cx]))
 
 (defonce runners (atom {}))
 
@@ -30,7 +30,7 @@
    (let [input-c (async/chan)]
      (async/onto-chan input-c inputs)
      (start-runner
-      model input-c p/htm-step nil opts)))
+      model input-c cx/htm-step nil opts)))
   ([model input-c htm-step models-out-c {:keys [port]}]
    (let [model-atom (if (instance? clojure.lang.Ref model)
                       model

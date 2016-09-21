@@ -13,8 +13,7 @@
             [org.numenta.sanity.helpers :as helpers]
             [org.numenta.sanity.plots :as plots]
             [org.numenta.sanity.bridge.marshalling :as marshal]
-            [org.numenta.sanity.selection :as sel]
-            [org.nfrac.comportex.protocols :as p])
+            [org.numenta.sanity.selection :as sel])
   (:require-macros [cljs.core.async.macros :refer [go go-loop]]))
 
 (defn now [] (.getTime (js/Date.)))
@@ -91,31 +90,30 @@
   (add-watch network-shape ::push-to-server
              (fn [_ _ prev-st st]
                (when-not (nil? prev-st) ;; don't push when getting initial template
-                 (doseq [path (for [[r-id rgn] (:regions st)
-                                    l-id (keys rgn)]
-                                [:regions r-id l-id :params])
-                         :let [old-params (get-in prev-st path)
+                 (doseq [lyr-id (keys (:layers st))
+                         :let [path [:layers lyr-id :params]
+                               old-params (get-in prev-st path)
                                new-params (get-in st path)]]
                    (when (not= old-params new-params)
-                     (put! into-sim ["set-params" path new-params]))))))
+                     (put! into-sim ["set-params" lyr-id new-params]))))))
 
   (let [partypes (cljs.core/atom {})] ;; write-once cache
     (fn [network-shape selection into-sim]
-      (let [[sel-region sel-layer] (some sel/layer @selection)]
+      (let [lyr-id (some sel/layer @selection)]
         [:div
-         [:p.text-muted "Read/write model parameters of the selected region layer,
+         [:p.text-muted "Read/write model parameters of the selected layer,
                     with immediate effect. Click a layer to select it."]
          [:p.text-info.text-center
-          (when sel-layer
-            (str (name sel-region) " " (name sel-layer)))]
+          (when lyr-id
+            (str (name lyr-id)))]
          (into
           [:div.form-horizontal]
           (when @network-shape
-            (let [params-path [:regions sel-region sel-layer :params]
+            (let [params-path [:layers lyr-id :params]
                   params (get-in @network-shape params-path)]
               (concat
                (params-form network-shape partypes params params-path
-                          #{:proximal :distal :apical})
+                            #{:proximal :distal :apical})
                (for [[sub-k title] [[:proximal "Proximal dendrites"]
                                     [:distal "Distal (lateral) dendrites"]
                                     [:apical "Apical dendrites"]]]
@@ -131,11 +129,11 @@
                  [:div.panel-heading [:h4.panel-title "Note"]]
                  [:div.panel-body
                   [:p "Parameter values can be altered above, but some parameters
-                     must be in effect when the HTM regions are created.
+                     must be in effect when the HTM layers are created.
                      Notable examples are "
                    [:code "column-dimensions"] " and " [:code "depth"]
-                   ". After setting such parameter values, rebuild all regions
-                 (obviously losing any learned connections in the process):"]
+                   ". After setting such parameter values, rebuild all layers
+                 (losing any learned connections in the process):"]
 
                   [:button.btn.btn-warning.btn-block
                    {:on-click #(helpers/ui-loading-message-until
@@ -161,10 +159,9 @@
         fetches #{"n-unpredicted-active-columns"
                   "n-predicted-inactive-columns"
                   "n-predicted-active-columns"}]
-    (doseq [[rgn-id rgn] (:regions network-shape)
-            [lyr-id lyr] rgn
+    (doseq [[lyr-id lyr] (:layers network-shape)
             :let [response-c (async/chan)]]
-      (put! into-journal ["get-layer-stats" snapshot-id rgn-id lyr-id fetches
+      (put! into-journal ["get-layer-stats" snapshot-id lyr-id fetches
                           (marshal/channel response-c true)])
       (go
         (let [r (<! response-c)
@@ -172,7 +169,7 @@
                predicted "n-predicted-inactive-columns"
                active-predicted "n-predicted-active-columns"} r
               size (reduce * (:dimensions lyr))]
-          (swap! col-state-history update-in [rgn-id lyr-id]
+          (swap! col-state-history update lyr-id
                  (fn [csf-log]
                    (conj (or csf-log
                              (plots/empty-col-state-freqs-log))
@@ -184,7 +181,7 @@
 
 (defn time-plots-tab-builder
   [steps into-journal]
-  (let [;; rgn-id -> lyr-id -> sequence-compressor
+  (let [;; lyr-id -> sequence-compressor
         col-state-history (atom {})]
     (add-watch steps ::ts-plot-data
                (fn [_ _ _ xs]
@@ -194,11 +191,10 @@
       [:div
        [:p.text-muted "Time series of cortical column activity."]
        [:div
-        (for [[rgn-id rgn] @col-state-history
-              [lyr-id csf-log] rgn]
-          ^{:key [rgn-id lyr-id]}
+        (for [[lyr-id csf-log] @col-state-history]
+          ^{:key lyr-id}
           [:fieldset
-           [:legend (str (name rgn-id) " " (name lyr-id))]
+           [:legend (str (name lyr-id))]
            [plots/ts-freqs-plot-cmp csf-log series-colors]])]])))
 
 (defn sources-tab
@@ -207,13 +203,12 @@
    [:p.text-muted "Plots of cell excitation broken down by source."]
    [:div
     (when @network-shape
-      (for [[region-key rgn] (:regions @network-shape)
-            layer-id (keys rgn)]
-        ^{:key [region-key layer-id]}
+      (for [lyr-id (keys (:layers @network-shape))]
+        ^{:key lyr-id}
         [:fieldset
-         [:legend (str (name region-key) " " (name layer-id))]
+         [:legend (str (name lyr-id))]
          [plots/cell-excitation-plot-cmp network-shape selection series-colors
-          region-key layer-id into-journal]]))]])
+          lyr-id into-journal]]))]])
 
 (def default-cell-sdrs-plot-options
   {:group-contexts? false
@@ -383,10 +378,10 @@
   [into-journal text-response sel]
   (let [{:keys [step bit] :as sel1} (first (filter sel/layer sel))
         {:keys [snapshot-id]} step
-        [rgn-id lyr-id] (sel/layer sel1)]
+        lyr-id (sel/layer sel1)]
     (when lyr-id
       (let [response-c (async/chan)]
-        (put! into-journal ["get-details-text" snapshot-id rgn-id lyr-id bit
+        (put! into-journal ["get-details-text" snapshot-id lyr-id bit
                             (marshal/channel response-c true)])
         (go
           (reset! text-response (<! response-c)))))))
@@ -941,7 +936,7 @@
         " runs HTM models in the browser with interactive
        controls. The model state from recent timesteps is kept, so you can step
        back in time. You can inspect input values, encoded sense bits, and the
-       columns that make up cortical region layers. Within a column you can inspect
+       columns that make up cortical layers. Within a column you can inspect
        cells and their distal dendrite segments. Feed-forward and distal synapses
        can be shown."]]
       [:div.col-lg-3.col-md-4.col-sm-6
@@ -957,7 +952,7 @@
       [:div.col-lg-3.col-md-4.col-sm-6
        [:h4 "Selection"]
        [:p "Click on the main canvas to select one column of cells,
-      within some region layer. The individual cells
+      within some layer. The individual cells
       and their distal dendrite segments will be shown.
       If you click off the layer, the column will be de-selected, but
       the layer will remain selected. Its parameters can be seen and edited in

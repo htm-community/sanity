@@ -17,9 +17,9 @@
                                                             stop-all-runners]]
             [org.numenta.sanity.comportex.notebook :refer [viz]]
             [gorilla-plot.core :as plot]
-            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.core :as cx]
+            [org.nfrac.comportex.layer :as layer]
             [org.nfrac.comportex.encoders :as e]
-            [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.repl])
   (:use [clojure.pprint]
         [clojure.stacktrace]))
@@ -42,9 +42,8 @@
 
 (def encoder (e/linear-encoder [200] 10 [0 24]))
 
-(def model (core/regions-in-series
-            1 core/sensory-region
-            [params] {:input [[] encoder]}))
+(def model (cx/network {:layer-a (layer/layer-of-cells params)}
+                       {:input [[] encoder]}))
 
 (def inputs (flatten (repeat (range 0 12))))
 ;; @@
@@ -75,7 +74,7 @@
 
 ;; @@
 (def timeline
-  (reductions p/htm-step model inputs))
+  (reductions cx/htm-step model inputs))
 ;; @@
 
 ;; @@
@@ -97,7 +96,7 @@
 (defn t->prediction [t]
   (when (> t 0)
     (-> (nth timeline (dec t))
-        (core/predictions :input 1)
+        (cx/predictions :input 1)
         first
         :value)))
 

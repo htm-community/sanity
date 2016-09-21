@@ -198,13 +198,11 @@ disconnects.
             'dimensions': (200,),
         },
     }
-    'regions': {
-        'myRegion1': {
-            'myLayer1': {
-                'ordinal': 1, # Display order
-                'cells-per-column': 32,
-                'dimensions': (20,),
-            }
+    'layers': {
+        'myLayer1': {
+            'ordinal': 1, # Display order
+            'cells-per-column': 32,
+            'dimensions': (20,),
         }
     }
 }
@@ -261,7 +259,6 @@ disconnects.
 **Parameters:**
 
 - `snapshot_id`
-- `region_id`
 - `layer_id`
 - `segment_selector`
   - Examples:
@@ -308,7 +305,6 @@ index.
 **Parameters:**
 
 - `snapshot_id`
-- `region_id`
 - `layer_id`
 - `segment_selector`
   - Examples:
@@ -337,8 +333,7 @@ Synapses by state
             'src-dt' -1,
         },
         {
-            'src-id': 'myRegion1',
-            'src-lyr': 'myLayer1',
+            'src-id': 'myLayer1',
             'src-i': 23,
             'perm': 0.3,
             'src-dt' -1,
@@ -354,7 +349,6 @@ Synapses by state
 **Parameters**:
 
 - `snapshot_id`
-- `region_id`
 - `layer_id`
 - `fetches` a set potentially containing each of the following values:
   - `"n-unpredicted-active-columns"`
@@ -378,7 +372,6 @@ Synapses by state
 **Parameters:**
 
 - `snapshot_id`
-- `region_id`
 - `layer_id`
 - `column`
 - `fetches` a set potentially containing each of the following values. Servers
@@ -403,7 +396,6 @@ Synapses by state
 **Parameters:**
 
 - `snapshot_id`
-- `region_id`
 - `layer_id`
 - `fetches` a set potentially containing each of the following values. Servers
   might only implement some of these values. Feel free to ignore some.

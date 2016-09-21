@@ -1,11 +1,13 @@
 (ns org.numenta.sanity.comportex.data
-  (:require [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]
+  (:require [org.nfrac.comportex.core :as cx]
+            [org.nfrac.comportex.synapses :as syn]
+            [org.nfrac.comportex.layer :as layer]
+            [org.nfrac.comportex.layer.tools :as layertools]
             [org.nfrac.comportex.util :as util]))
 
 (defn all-cell-segments
   [sg cell-id]
-  (->> (p/cell-segments sg cell-id)
+  (->> (syn/cell-segments sg cell-id)
        (reverse)
        (drop-while empty?)
        (reverse)))
@@ -19,33 +21,27 @@
                  :active :inactive)])
             syns))
 
-(defn active-bits
-  [sense-node]
-  (or (seq (p/bits-value sense-node))
-      (p/motor-bits-value sense-node)))
-
 (defn count-segs-in-column
   [distal-sg depth col]
   (reduce (fn [n ci]
             (+ n (util/count-filter seq
-                                    (p/cell-segments distal-sg [col ci]))))
+                                    (syn/cell-segments distal-sg [col ci]))))
           0
           (range depth)))
 
 (defn syns-from-source-bit
   [htm sense-id bit syn-states]
-  (let [active-bit? (->> (active-bits (get-in htm [:senses sense-id]))
+  (let [active-bit? (->> (:bits (get-in htm [:senses sense-id]))
                          (some (partial = bit))
-                         boolean)]
-    (for [rgn-id (get-in htm [:fb-deps sense-id])
-          :let [rgn (get-in htm [:regions rgn-id])
-                [lyr-id] (core/layers rgn)
-                lyr (get rgn lyr-id)
+                         boolean)
+        {:keys [fb-deps]} (cx/add-feedback-deps htm)]
+    (for [lyr-id (get fb-deps sense-id)
+          :let [lyr (get-in htm [:layers lyr-id])
                 sg (:proximal-sg lyr)
-                adjusted-bit (+ (core/ff-base htm rgn-id sense-id)
+                adjusted-bit (+ (cx/ff-base htm lyr-id sense-id)
                                 bit)
-                to-segs (p/targets-connected-from sg adjusted-bit)
-                predictive-columns (->> (p/layer-state lyr)
+                to-segs (syn/targets-connected-from sg adjusted-bit)
+                predictive-columns (->> (cx/layer-state lyr)
                                         (:prior-predictive-cells)
                                         (map first)
                                         (into #{}))]
@@ -55,9 +51,8 @@
                     (and (contains? syn-states "predicted")
                          predictive-col?)
                     active-bit?)
-          :let [perm (get (p/in-synapses sg seg-path) adjusted-bit)]]
-      {"target-id" rgn-id
-       "target-lyr" lyr-id
+          :let [perm (get (syn/in-synapses sg seg-path) adjusted-bit)]]
+      {"target-lyr" lyr-id
        "target-col" col
        "target-dt" 0
        "syn-state" (if active-bit?
@@ -105,25 +100,26 @@
             si)])])))
 
 (defn query-segs
-  [htm prev-htm rgn-id lyr-id seg-selector seg-type]
-  (let [lyr (get-in htm [:regions rgn-id lyr-id])
-        params (p/params lyr)
+  [htm prev-htm lyr-id seg-selector seg-type]
+  (let [lyr (get-in htm [:layers lyr-id])
+        params (cx/params lyr)
         dparams (get params seg-type)
         stimulus-th (:stimulus-threshold dparams)
         learning-th (:learn-threshold dparams)
         pcon (:perm-connected dparams)
-        on-bits (case seg-type
+        on-bits (set
+                 (case seg-type
                   :apical (get-in lyr [:prior-apical-state :active-bits])
                   :distal (get-in lyr [:prior-distal-state :active-bits])
-                  :proximal (get-in lyr [:state :in-ff-bits]))
+                  :proximal (get-in lyr [:active-state :in-ff-signal :bits])))
         learning (get-in lyr [:learn-state :learning seg-type])
         sg-key (case seg-type
                  :apical :apical-sg
                  :distal :distal-sg
                  :proximal :proximal-sg)
         sg (get lyr sg-key)
-        prev-sg (get-in prev-htm [:regions rgn-id lyr-id sg-key])
-        depth (p/layer-depth lyr)]
+        prev-sg (get-in prev-htm [:layers lyr-id sg-key])
+        depth (:depth params)]
     (into
      {}
      (for [[col cells] (expand-seg-selector seg-selector depth sg seg-type)]
@@ -163,61 +159,42 @@
                  "learning-th" learning-th}]))]))]))))
 
 (defn query-syns
-  [htm prev-htm rgn-id lyr-id seg-selector syn-states seg-type]
-  (let [regions (:regions htm)
-        lyr (get-in regions [rgn-id lyr-id])
-        params (p/params lyr)
+  [htm prev-htm lyr-id seg-selector syn-states seg-type]
+  (let [lyr (get-in htm [:layers lyr-id])
+        params (cx/params lyr)
         dparams (get params seg-type)
         pcon (:perm-connected dparams)
         pinit (:perm-init dparams)
-        on-bits (case seg-type
+        on-bits (set
+                 (case seg-type
                   :apical (get-in lyr [:prior-apical-state :active-bits])
                   :distal (get-in lyr [:prior-distal-state :active-bits])
-                  :proximal (get-in lyr [:state :in-ff-bits]))
-        depth (p/layer-depth lyr)
+                  :proximal (get-in lyr [:active-state :in-ff-signal :bits])))
+
         learning (get-in lyr [:learn-state :learning seg-type])
         sg-key (case seg-type
                  :apical :apical-sg
                  :distal :distal-sg
                  :proximal :proximal-sg)
         sg (get lyr sg-key)
-        prev-sg (get-in prev-htm [:regions rgn-id lyr-id sg-key])
-        ;; need to know which layers have input across regions
-        input-layer? (into #{} (map (fn [[rgn-id rgn]]
-                                      [rgn-id (first (core/layers rgn))])
-                                    regions))
-        ;; need to know the output layer of each region
-        output-layer (into {} (map (fn [[rgn-id rgn]]
-                                     [rgn-id (last (core/layers rgn))])
-                                   regions))
+        prev-sg (get-in prev-htm [:layers lyr-id sg-key])
         dt (case seg-type
              :apical -1
              :distal -1
              :proximal 0)
         source-of-bit (case seg-type
-                        :apical core/source-of-apical-bit
-                        :distal core/source-of-distal-bit
-                        :proximal
-                        (fn [htm rgn-id lyr-id i]
-                          (if (input-layer? [rgn-id lyr-id])
-                            ;; input from another region
-                            (let [[src-id src-i]
-                                  (core/source-of-incoming-bit htm rgn-id i
-                                                               :ff-deps)]
-                              [src-id (output-layer src-id) src-i])
-                            ;; input from another layer in same region
-                            ;; (hardcoded)
-                            [rgn-id :layer-4 i])))
+                        :distal #(layertools/source-of-distal-bit htm lyr-id %)
+                        :apical #(cx/source-of-incoming-bit htm lyr-id % :fb-deps)
+                        :proximal #(cx/source-of-incoming-bit htm lyr-id % :ff-deps))
         source-id-and-dt-of-bit
-        (fn [htm rgn-id lyr-id i]
-          (let [[src-id src-lyr-id src-i] (source-of-bit htm rgn-id lyr-id i)]
+        (fn [i]
+          (let [[src-id src-i] (source-of-bit i)]
             (if (and (= :proximal seg-type)
-                     (contains? (:regions htm) src-id))
-              (let [src-state (get-in htm [:regions src-id src-lyr-id :state])
-                    src-depth (get-in htm [:regions src-id src-lyr-id :params :depth])
-                    prev-ss (get-in prev-htm [:regions src-id src-lyr-id :state])
-                    src-cell-id [(quot src-i src-depth)
-                                 (rem src-i src-depth)]
+                     (contains? (:layers htm) src-id))
+              (let [src-state (get-in htm [:layers src-id :active-state])
+                    src-depth (get-in htm [:layers src-id :params :depth])
+                    prev-ss (get-in prev-htm [:layers src-id :active-state])
+                    src-cell-id (layer/id->cell src-depth src-i)
                     src-dt (loop [dt 0
                                   csets (cons (:active-cells src-state)
                                               (reverse (:stable-cells-buffer prev-ss)))]
@@ -227,8 +204,9 @@
                                  (recur (dec dt) (next csets)))
                                ;; ran out of cell sets; must be inactive syn
                                0))]
-                [src-id src-lyr-id src-i src-dt])
-              [src-id src-lyr-id src-i dt])))]
+                [src-id src-i src-dt])
+              [src-id src-i dt])))
+        depth (:depth params)]
     (for [[col cells] (expand-seg-selector seg-selector depth sg seg-type)]
       [col
        (into
@@ -251,8 +229,7 @@
                                               (fn [syns]
                                                 (map (fn [[i p]]
                                                        [i
-                                                        (source-id-and-dt-of-bit
-                                                         htm rgn-id lyr-id i)
+                                                        (source-id-and-dt-of-bit i)
                                                         p])
                                                      syns))
                                               (assoc grouped-syns
@@ -285,55 +262,45 @@
               [si
                (->> syn-sources
                     (util/remap (fn [source-info]
-                                  (for [[i [src-id src-lyr src-i src-dt] p] source-info]
+                                  (for [[i [src-id src-i src-dt] p] source-info]
                                     {"src-i" src-i
                                      "src-id" src-id
-                                     "src-lyr" (when src-lyr src-lyr)
                                      "src-dt" src-dt
                                      "perm" p}))))]))]))])))
 
 (defn cell-excitation-data
-  [htm prior-htm rgn-id lyr-id sel-col]
-  (let [wc (-> (get-in htm [:regions rgn-id lyr-id]) (p/layer-state) :winner-cells)
+  [htm prior-htm lyr-id sel-col]
+  (let [wc (-> (get-in htm [:layers lyr-id]) (cx/layer-state) :winner-cells)
         wc+ (if sel-col
-              (let [prior-wc (-> (get-in prior-htm [:regions rgn-id lyr-id]) (p/layer-state) :winner-cells)
+              (let [prior-wc (-> (get-in prior-htm [:layers lyr-id]) (cx/layer-state) :winner-cells)
                     sel-cell (or (first (filter (fn [[col _]]
                                                   (= col sel-col))
                                                 (concat prior-wc wc)))
                                  [sel-col 0])]
                 (conj wc sel-cell))
               wc)]
-    (core/cell-excitation-breakdowns htm prior-htm rgn-id lyr-id wc+)))
+    (layertools/cell-excitation-breakdowns htm prior-htm lyr-id wc+)))
 
 (defn network-shape
   [htm]
-  (let [sense-keys (core/sense-keys htm)]
+  (let [sense-keys (cx/sense-keys htm)]
     {"senses" (->> (map vector (range) sense-keys)
-                   (reduce (fn [st [ordinal sense-id]]
+                   (reduce (fn [m [ordinal sense-id]]
                              (let [sense (get-in htm [:senses sense-id])]
-                               (assoc st sense-id
-                                      {"dimensions" (p/dims-of sense)
+                               (assoc m sense-id
+                                      {"dimensions" (cx/dims-of sense)
                                        "ordinal" ordinal})))
                            {}))
-     "regions" (->> (map vector (range)
-                         (for [rgn-id (core/region-keys htm)
-                               :let [rgn (get-in htm [:regions rgn-id])]
-                               lyr-id (core/layers rgn)]
-                           [rgn-id lyr-id]))
-                    (reduce (fn [rt [ordinal [rgn-id lyr-id]]]
-                              (let [lyr (get-in htm [:regions rgn-id lyr-id])]
-                                (assoc-in rt [rgn-id lyr-id]
-                                          {"params" (p/params lyr)
-                                           "dimensions" (p/dims-of lyr)
-                                           "cells-per-column" (p/layer-depth
-                                                               lyr)
-                                           "ordinal" (+ ordinal
-                                                        (count sense-keys))})))
-                            {}))}))
-
-(defn- cell->id
-  [depth [col ci]]
-  (+ (* col depth) ci))
+     "layers" (->> (map vector (range) (cx/layer-keys htm))
+                   (reduce (fn [m [ordinal lyr-id]]
+                             (let [lyr (get-in htm [:layers lyr-id])]
+                               (assoc m lyr-id
+                                      {"params" (cx/params lyr)
+                                       "dimensions" (pop (cx/dims-of lyr))
+                                       "cells-per-column" (peek (cx/dims-of lyr))
+                                       "ordinal" (+ ordinal
+                                                    (count sense-keys))})))
+                           {}))}))
 
 (defn cell-cells-transitions
   [distal-sg depth n-cols]
@@ -342,8 +309,8 @@
                        [col ci])]
     (->> all-cell-ids
          (reduce (fn [m from-cell]
-                   (let [source-id (cell->id depth from-cell)
-                         to-segs (p/targets-connected-from distal-sg source-id)
+                   (let [source-id (layer/cell->id depth from-cell)
+                         to-segs (syn/targets-connected-from distal-sg source-id)
                          to-cells (map pop to-segs)]
                      (if (seq to-cells)
                        (assoc! m from-cell
@@ -398,11 +365,12 @@
   graph. It is a map from an SDR id to any subsequent SDRs, each
   mapped to the number of connected synapses, weighted by the
   specificity of both the source and target cells to those SDRs."
-  [htm rgn-id lyr-id cell-sdr-counts]
-  (let [lyr (get-in htm [:regions rgn-id lyr-id])
-        depth (p/layer-depth lyr)
+  [htm lyr-id cell-sdr-counts]
+  (let [lyr (get-in htm [:layers lyr-id])
+        params (cx/params lyr)
+        depth (:depth params)
         distal-sg (:distal-sg lyr)
         cell-sdr-fracs (util/remap freqs->fracs cell-sdr-counts)]
-    (-> (cell-cells-transitions distal-sg depth (p/size-of lyr))
+    (-> (cell-cells-transitions distal-sg depth (:n-columns lyr))
         (cell-sdr-transitions cell-sdr-fracs)
         (sdr-sdr-transitions cell-sdr-fracs))))

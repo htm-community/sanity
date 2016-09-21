@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.demos.sensorimotor-1d
   (:require [org.nfrac.comportex.demos.sensorimotor-1d :as demo]
-            [org.nfrac.comportex.core :as core]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.helpers :as helpers :refer [resizing-canvas]]
@@ -18,7 +17,7 @@
                    [org.numenta.sanity.macros :refer [with-ui-loading-message]]))
 
 (def config
-  (atom {:n-regions 1
+  (atom {:n-layers 1
          :field :abcdefghij
          :n-steps 100
          :world-buffer-count 0}))
@@ -165,7 +164,7 @@
   []
   (with-ui-loading-message
     (let [init? (nil? @model)]
-      (reset! model (demo/n-region-model (:n-regions @config)))
+      (reset! model (demo/build))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/network-shape (translate-network-shape
@@ -213,11 +212,12 @@
 
    [:h3 "HTM model"]
    [:div.form-horizontal
+    #_
     [:div.form-group
-     [:label.col-sm-5 "Number of regions:"]
+     [:label.col-sm-5 "Number of layers:"]
      [:div.col-sm-7
       [:input.form-control {:field :numeric
-                            :id :n-regions}]]]
+                            :id :n-layers}]]]
     [:div.form-group
      [:div.col-sm-offset-5.col-sm-7
       [:button.btn.btn-default

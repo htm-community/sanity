@@ -1,8 +1,7 @@
 (ns org.numenta.sanity.comportex.simulation
   (:require [clojure.core.async :as async :refer [put! <! #?@(:clj [go go-loop])]]
             [org.numenta.sanity.bridge.marshalling :as marshal]
-            [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.core :as cx]
             [org.nfrac.comportex.util :as util])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go go-loop]])))
 
@@ -66,27 +65,27 @@
         (swap! options update :force-n-steps inc)
 
         "set-params"
-        (let [[path v] xs]
-          (swap! model assoc-in path v))
+        (let [[lyr-id v] xs]
+          (swap! model assoc-in [:layers lyr-id :params] v))
 
         "restart"
         (let [[{response-c :ch}] xs]
-          (swap! model p/restart)
+          (swap! model cx/restart)
           (put! response-c :done))
 
         "toggle"
         (->> (swap! options update :go? not)
              (println "SIMULATION TOGGLE. Current timestep:"
-                      (p/timestep @model)))
+                      (cx/timestep @model)))
 
         "pause"
         (do
-          (println "SIMULATION PAUSE. Current timestep:" (p/timestep @model))
+          (println "SIMULATION PAUSE. Current timestep:" (cx/timestep @model))
           (swap! options assoc :go? false))
 
         "run"
         (do
-          (println "SIMULATION RUN. Current timestep:" (p/timestep @model))
+          (println "SIMULATION RUN. Current timestep:" (cx/timestep @model))
           (swap! options assoc :go? true))
 
         "set-step-ms"

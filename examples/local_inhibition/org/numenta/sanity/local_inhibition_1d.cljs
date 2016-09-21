@@ -1,8 +1,7 @@
 (ns org.numenta.sanity.local-inhibition-1d
   (:require [org.nfrac.comportex.inhibition :as inh]
-            [org.nfrac.comportex.topology :as topology]
-            [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.cells :as cells]
+            [org.nfrac.comportex.topography :as topo]
+            [org.nfrac.comportex.layer :as layer]
             [org.nfrac.comportex.util :as util :refer [abs]]
             [monet.canvas :as c]
             [goog.dom :as dom]
@@ -14,7 +13,7 @@
 
 (def nx 200)
 (def dim [nx])
-(def topo (topology/make-topology dim))
+(def topo (topo/make-topography dim))
 (def size nx)
 (def inh-radius 15)
 
@@ -39,7 +38,7 @@
         focus-1 focus-r
         focus-2 (+ nx (* inh-radius 0.7))]
     (->> (for [i (range size)]
-           (let [x (p/coordinates-of-index topo i)]
+           (let [x (topo/coordinates-of-index topo i)]
              ;; triangular peaks at focus-1 and focus-2
              (-> (max 0
                       (- focus-r (abs (- x focus-1)))
@@ -65,12 +64,12 @@
    (set
     (inh/inhibit-locally exc topo inh-radius
                          (:inhibition-base-distance params)
-                         (* (p/size topo) (:activation-level params))))))
+                         (* (topo/size topo) (:activation-level params))))))
 
 (defn global-active-columns
   [exc topo params]
   (set
-   (inh/inhibit-globally exc (* (p/size topo) (:activation-level params)))))
+   (inh/inhibit-globally exc (* (topo/size topo) (:activation-level params)))))
 
 (defn draw-exc-bars
   [ctx exc act ->x ->y ->h]
