@@ -47,11 +47,10 @@
     (go
       (reset! network-shape (translate-network-shape (<! response-c)))
       (put! into-journal ["subscribe" (marshal/channel steps-c)])
-      (let [[region-key rgn] (-> @network-shape :regions seq first)
-            layer-id (-> rgn keys first)]
+      (let [lyr-id (-> @network-shape :layers keys first)]
         (reset! selection
                 [{:dt 0
-                  :path [:regions region-key layer-id]}]))
+                  :path [:layers lyr-id]}]))
       (loop []
         (when-let [step (<! steps-c)]
           (let [step* (-> step

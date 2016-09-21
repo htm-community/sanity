@@ -6,7 +6,6 @@
             [org.numenta.sanity.selection :as sel]
             [org.numenta.sanity.util :refer [translate-network-shape]]
             [org.numenta.sanity.viz-canvas :as viz]
-            [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.util :as util]
             [reagent.core :as reagent :refer [atom]]
             [cljs.core.async :as async :refer [chan put! <!]]
@@ -77,16 +76,12 @@
                                   (last xs))))
                             base-opts
                             opts))
-              [region-key rgn] (-> @network-shape :regions seq first)
-              layer-id (-> rgn keys first)]
-          (let [[region-key rgn] (-> @network-shape :regions seq first)
-                layer-id (-> rgn keys first)]
-            (swap! selection
-                   #(conj (empty %)
-                          {:dt 0
-                           :region region-key
-                           :layer layer-id
-                           :snapshot-id (:snapshot-id (first @steps))})))
+              layer-id (-> @network-shape :layers keys first)]
+          (swap! selection
+                 #(conj (empty %)
+                        {:dt 0
+                         :layer layer-id
+                         :snapshot-id (:snapshot-id (first @steps))}))
           (reagent/render [:div
                            {:on-click #(put! into-viz [:background-clicked])
                             :on-key-down #(viz/viz-key-down % into-viz)

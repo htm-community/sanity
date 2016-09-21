@@ -1,7 +1,9 @@
 (ns org.numenta.sanity.comportex.details
   (:require [clojure.string :as str]
-            [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]))
+            [org.nfrac.comportex.core :as cx]
+            [org.nfrac.comportex.synapses :as syn]
+            [org.nfrac.comportex.layer :as layer]
+            [org.nfrac.comportex.layer.tools :as layertools]))
 
 (defn to-fixed
   [n digits]
@@ -9,17 +11,15 @@
      :clj (format (str "%." digits "f") n)))
 
 (defn detail-text
-  [htm prior-htm rgn-id lyr-id col]
-  (let [rgn (get-in htm [:regions rgn-id])
-        lyr (get rgn lyr-id)
-        info (p/layer-state lyr)
-        depth (p/layer-depth lyr)
+  [htm prior-htm lyr-id col]
+  (let [lyr (get-in htm [:layers lyr-id])
+        info (cx/layer-state lyr)
         in (:input-value htm)
-        in-bits (:in-ff-bits (:state lyr))
-        in-sbits (:in-stable-ff-bits (:state lyr))]
+        in-bits (-> lyr :active-state :in-ff-signal :bits set)
+        in-sbits (-> lyr :active-state :in-ff-signal ::layer/stable-bits set)]
     (->>
      ["__Selection__"
-      (str "* timestep " (p/timestep rgn))
+      (str "* timestep " (cx/timestep lyr))
       (str "* column " (or col "nil"))
       ""
       "__Input__"
@@ -51,58 +51,52 @@
         (str (:target-id seg-up)))
       ""
       "__Stable cells buffer__"
-      (str (seq (:stable-cells-buffer (:state lyr))))
+      (str (seq (:stable-cells-buffer (:active-state lyr))))
       ""
       (if (and col prior-htm)
-        (let [p-lyr (get-in prior-htm [:regions rgn-id lyr-id])
+        (let [p-lyr (get-in prior-htm [:layers lyr-id])
               p-prox-sg (:proximal-sg p-lyr)
               p-distal-sg (:distal-sg p-lyr)
-              d-pcon (:perm-connected (:distal (p/params p-lyr)))
-              ff-pcon (:perm-connected (:proximal (p/params p-lyr)))
-              bits (:in-ff-bits (:state lyr))
-              sig-bits (:in-stable-ff-bits (:state lyr))
+              d-pcon (:perm-connected (:distal (cx/params p-lyr)))
+              ff-pcon (:perm-connected (:proximal (cx/params p-lyr)))
               d-bits (:active-bits (:prior-distal-state lyr))
               d-lbits (:learnable-bits (:prior-distal-state lyr))]
 
           ["__Column overlap__"
-           (str (get (:col-overlaps (:state lyr)) [col 0]))
+           (str (get (:col-overlaps (:active-state lyr)) [col 0]))
            ""
            "__Selected column__"
            "__Connected ff-synapses__"
-           (for [[si syns] (map-indexed vector (p/cell-segments p-prox-sg [col 0]))
+           (for [[si syns] (map-indexed vector (syn/cell-segments p-prox-sg [col 0]))
                  :when (seq syns)]
              [(str "FF segment " si)
-              (for [[id p] (sort syns)
-                    :let [[src-k src-i] (core/source-of-incoming-bit htm rgn-id id :ff-deps)
-                          src-rgn (get-in htm [:regions src-k])
-                          src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)]]
-
-                (str "  " src-k " " src-id
+              (for [[i p] (sort syns)
+                    :let [[src-k src-i] (cx/source-of-incoming-bit
+                                         htm lyr-id i :ff-deps)]]
+                (str "  " src-k " " src-i
                      (if (>= p ff-pcon) " :=> " " :.: ")
                      (to-fixed p 2)
-                     (if (contains? sig-bits id) " S"
-                         (if (contains? bits id) " A"))))])
+                     (if (contains? in-sbits i) " S"
+                         (if (contains? in-bits i) " A"))))])
            "__Cells and their distal dendrite segments__"
-           (for [ci (range (p/layer-depth lyr))
-                 :let [segs (p/cell-segments p-distal-sg [col ci])]]
+           (for [ci (range (:depth (cx/params lyr)))
+                 :let [segs (syn/cell-segments p-distal-sg [col ci])]]
              [(str "CELL " ci)
               (str (count segs) " = " (map count segs))
               (for [[si syns] (map-indexed vector segs)]
                 [(str "  SEGMENT " si)
-                 (for [[id p] (sort syns)
-                       :let [[src-k _ src-i] (core/source-of-distal-bit htm rgn-id lyr-id id)
-                             src-rgn (get-in htm [:regions src-k])
-                             src-id (if src-rgn (p/source-of-bit src-rgn src-i) src-i)]]
-                   (str "    " src-k " " src-id
+                 (for [[i p] (sort syns)
+                       :let [[src-k src-i] (layertools/source-of-distal-bit
+                                            htm lyr-id i)]]
+                   (str "    " src-k " " src-i
                         (if (>= p d-pcon) " :=> " " :.: ")
                         (to-fixed p 2)
-                        (if (contains? d-lbits id) " L"
-                            (if (contains? d-bits id) " A"))))])])]))
-
+                        (if (contains? d-lbits i) " L"
+                            (if (contains? d-bits i) " A"))))])])]))
 
       ""
       "__params__"
-      (map str (sort (p/params rgn)))]
+      (map str (sort (cx/params lyr)))]
      (flatten)
      (interpose \newline)
      (apply str))))

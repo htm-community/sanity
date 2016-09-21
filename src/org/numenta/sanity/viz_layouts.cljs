@@ -1,8 +1,9 @@
 (ns org.numenta.sanity.viz-layouts
   (:require [monet.canvas :as c]
             [tailrecursion.priority-map :refer [priority-map]]
-            [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.topology :as topology]))
+            [org.nfrac.comportex.topography :as topo]))
+
+;; Layouts all have a key :topo
 
 (defprotocol PBox
   (layout-bounds [this]
@@ -54,7 +55,7 @@
   possible). For efficiency, skips any ids which are currently
   offscreen."
   [lay ctx ids]
-  (let [one-d? (== 1 (count (p/dims-of lay)))]
+  (let [one-d? (== 1 (count (topo/dimensions (:topo lay))))]
     (c/begin-path ctx)
     (doseq [id ids
             :when (id-onscreen? lay id)]
@@ -157,14 +158,11 @@
      top-px
      max-bottom-px
      circles?]
-  p/PTopological
-  (topology [_]
-    topo)
   PBox
   (layout-bounds [_]
     {:x left-px :y top-px
      :w (* draw-steps element-w)
-     :h (cond-> (* (p/size topo) element-h)
+     :h (cond-> (* (topo/size topo) element-h)
           max-bottom-px (min (- max-bottom-px top-px)))})
   PArrayLayout
   (origin-px-topleft [_ dt]
@@ -189,7 +187,7 @@
 
   (scroll [this down?]
     (let [page-n (ids-onscreen-count this)
-          n-ids (p/size topo)]
+          n-ids (topo/size topo)]
       (assoc this :scroll-top
              (if down?
                (if (< scroll-top (- n-ids page-n))
@@ -198,10 +196,10 @@
                (max 0 (- scroll-top page-n))))))
 
   (ids-count [_]
-    (p/size topo))
+    (topo/size topo))
 
   (ids-onscreen-count [_]
-    (cond-> (p/size topo)
+    (cond-> (topo/size topo)
       max-bottom-px (min (quot (- max-bottom-px top-px)
                                element-h))))
 
@@ -238,7 +236,7 @@
                (* element-h shrink))))))
 
 (defn grid-1d-layout
-  [topo top left opts inbits?]
+  [topography top left opts inbits?]
   (let [{:keys [draw-steps
                 max-height-px
                 col-d-px
@@ -247,7 +245,7 @@
                 bit-h-px
                 bit-shrink]} opts]
     (map->Grid1dLayout
-     {:topo topo
+     {:topo topography
       :scroll-top 0
       :dt-offset 0
       :draw-steps draw-steps
@@ -264,6 +262,7 @@
     [n-elements
      topo
      scroll-top
+     dt-offset
      element-w
      element-h
      shrink
@@ -271,12 +270,9 @@
      top-px
      max-bottom-px
      circles?]
-  p/PTopological
-  (topology [_]
-    topo)
   PBox
   (layout-bounds [_]
-    (let [[w h] (p/dimensions topo)]
+    (let [[w h] (topo/dimensions topo)]
       {:x left-px :y top-px
        :w (* w element-w)
        :h (cond-> (* h element-h)
@@ -290,7 +286,7 @@
            :x 0 :y 0))
 
   (local-px-topleft [_ id]
-    (let [[x y] (p/coordinates-of-index topo (+ id scroll-top))]
+    (let [[x y] (topo/coordinates-of-index topo (+ id scroll-top))]
       [(* x element-w)
        (* y element-h)]))
 
@@ -302,7 +298,7 @@
 
   (scroll [this down?]
     (let [page-n (ids-onscreen-count this)
-          n-ids (p/size topo)]
+          n-ids (topo/size topo)]
       (assoc this :scroll-top
              (if down?
                (if (< scroll-top (- n-ids page-n))
@@ -315,7 +311,7 @@
     n-elements)
 
   (ids-onscreen-count [_]
-    (let [[w h] (p/dimensions topo)]
+    (let [[w h] (topo/dimensions topo)]
       (min n-elements
            (* w
               (cond-> h
@@ -332,18 +328,18 @@
            (< id (+ n0 (ids-onscreen-count this))))))
 
   (clicked-id [_ x y]
-    (let [[w h] (p/dimensions topo)
+    (let [[w h] (topo/dimensions topo)
           xi (Math/floor (/ (- x left-px) element-w))
           yi (Math/floor (/ (- y top-px) element-h))]
       (when (and (<= 0 xi (dec w))
                  (<= yi (dec h)))
         (if (>= y 0)
-          (let [id* (p/index-of-coordinates topo [xi yi])
+          (let [id* (topo/index-of-coordinates topo [xi yi])
                 id (- id* scroll-top)]
             (when (< id n-elements)
-              [0 id]))
+              [dt-offset id]))
           ;; check for click on header
-          [0 nil]))))
+          [dt-offset nil]))))
 
   (draw-element [this ctx id]
     (let [[x y] (local-px-topleft this id)]
@@ -355,7 +351,7 @@
                (* element-h shrink))))))
 
 (defn grid-2d-layout
-  [n-elements topo top left opts inbits?]
+  [n-elements topography top left opts inbits?]
   (let [{:keys [max-height-px
                 col-d-px
                 col-shrink
@@ -364,8 +360,9 @@
                 bit-shrink]} opts]
     (map->Grid2dLayout
      {:n-elements n-elements
-      :topo topo
+      :topo topography
       :scroll-top 0
+      :dt-offset 0
       :element-w (if inbits? bit-w-px col-d-px)
       :element-h (if inbits? bit-h-px col-d-px)
       :shrink (if inbits? bit-shrink col-shrink)
@@ -379,10 +376,10 @@
   [dims top left opts inbits? display-mode]
   (let [n-elements (reduce * dims)]
     (case display-mode
-      :one-d (grid-1d-layout (topology/one-d-topology n-elements)
+      :one-d (grid-1d-layout (topo/make-topography [n-elements])
                              top left opts inbits?)
       :two-d (let [[width height] (case (count dims)
-                                    2 dims ;; keep actual topology if possible
+                                    2 dims ;; keep actual topography if possible
                                     1 (let [w (-> (Math/sqrt n-elements)
                                                   Math/ceil
                                                   (min 20))]
@@ -391,7 +388,7 @@
                                                Math/ceil)])
                                     3 (let [[w h d] dims]
                                         [w (* h d)]))]
-               (grid-2d-layout n-elements (topology/two-d-topology width height)
+               (grid-2d-layout n-elements (topo/make-topography [width height])
                                top left opts inbits?)))))
 
 
@@ -410,10 +407,7 @@
 (defrecord OrderableLayout
     ;; `order` is a priority-map. keys are column ids, vals are layout indices.
     ;; `facets` is a vector of [label length] tuples.
-    [layout order facets]
-  p/PTopological
-  (topology [_]
-    (p/topology layout))
+    [layout topo order facets]
   PBox
   (layout-bounds [_]
     (layout-bounds layout))
@@ -540,5 +534,6 @@
   (let [order (apply priority-map (interleave (range n-ids) (range)))]
     (map->OrderableLayout
      {:layout lay
+      :topo (:topo lay)
       :order order
       :facets []})))

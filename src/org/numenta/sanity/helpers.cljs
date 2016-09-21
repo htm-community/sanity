@@ -5,8 +5,7 @@
             [goog.style :as style]
             [goog.events :as events]
             [reagent.core :as reagent :refer [atom]]
-            [org.nfrac.comportex.core :as core]
-            [org.nfrac.comportex.protocols :as p]
+            [org.nfrac.comportex.core :as cx]
             [org.nfrac.comportex.util :as util :refer [round]]
             [cljs.core.async :as async :refer [put! <!]])
   (:require-macros [cljs.core.async.macros :refer [go go-loop alt!]]))
@@ -38,7 +37,7 @@
 
 (defn text-world-input-component
   [inval htm max-shown scroll-every separator]
-  (let [time (p/timestep htm)
+  (let [time (cx/timestep htm)
         show-n (- max-shown (mod (- max-shown time) scroll-every))
         history (->> (:history (meta inval))
                      (take-last show-n))]
@@ -73,10 +72,8 @@
 
 (defn text-world-predictions-component
   [htm n-predictions]
-  (let [[_ e] (first (vals (:sensors htm)))
-        rgn (first (core/region-seq htm))
-        pr-votes (core/predicted-bit-votes rgn)
-        predictions (p/decode e pr-votes n-predictions)]
+  (let [predictions (cx/predictions htm (first (cx/sense-keys htm))
+                                    n-predictions {})]
     (predictions-table predictions)))
 
 ;;; canvas

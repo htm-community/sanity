@@ -1,6 +1,5 @@
 (ns org.numenta.sanity.demos.second-level-motor
   (:require [org.nfrac.comportex.demos.second-level-motor :as demo]
-            [org.nfrac.comportex.core :as core]
             [org.numenta.sanity.demos.comportex-common :refer [all-features]]
             [org.numenta.sanity.main :as main]
             [org.numenta.sanity.helpers :as helpers :refer [resizing-canvas]]
@@ -144,7 +143,7 @@
         (when-not init?
           ;; break cycle to reset input
           (<! world-c))
-        (reset! model (demo/two-region-model))
+        (reset! model (demo/build))
         (if init?
           (server/init model world-c main/into-journal into-sim
                        (demo/htm-step-with-action-selection world-c
@@ -196,23 +195,23 @@
 (defn model-tab
   []
   [:div
-   [:p "A two-region example of temporal pooling over sensorimotor input."]
+   [:p "A two-layer example of temporal pooling over sensorimotor input."]
    [:p "The world is a string of letters divided into words and
    sentences. Only one letter is received as direct sensory input at
    any one time. Motor actions (saccades) shift the focus to a new
    letter. These motor actions are encoded in two separate senses: "
     [:code "letter-motor"] " and " [:code "word-motor"]
-    ". The former is distal input to the first level region, while the
-    latter is distal input to the second-level region."]
+    ". The former is distal input to the first layer, while the
+    latter is distal input to the second layer."]
    [:p "Within a word, letter saccades always move forward one
-   letter. At the end of a word, we check whether the first region's
+   letter. At the end of a word, we check whether the first layer's
    columns are bursting (indicating it has not yet learned the word's
    letter sequence). If it is bursting, a letter saccade moves back to
    the start of the same word. Otherwise, a word saccade is
    generated."]
    [:p "Within a sentence, word saccades always move forward one
    word. At the end of a sentence, we check whether the second
-   region's columns are bursting (indicating it has not yet learned
+   layer's columns are bursting (indicating it has not yet learned
    the sentence's word sequence). If it is bursting, a word saccade
    moves back to the start of the same sentence."]
    [:p "And similarly for sentence saccades."]

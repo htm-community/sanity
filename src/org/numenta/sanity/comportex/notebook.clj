@@ -7,7 +7,7 @@
             [org.numenta.sanity.comportex.runner :as runner]
             [gorilla-renderable.core :as renderable]
             [gorilla-repl.core :as g]
-            [org.nfrac.comportex.protocols :as p])
+            [org.nfrac.comportex.core :as cx])
   (:import [java.io ByteArrayOutputStream ByteArrayInputStream]))
 
 ;; If there are multiple notebooks these are used for all of them.
@@ -25,10 +25,10 @@
 
 (defmulti viz
   (fn [arg1 & xs]
-    (cond (satisfies? p/PHTM arg1) p/PHTM
+    (cond (satisfies? cx/PHTM arg1) cx/PHTM
           (and (sequential? arg1)
-               (satisfies? p/PHTM (first arg1))) p/PHTM
-          (satisfies? p/PEncoder arg1) p/PEncoder
+               (satisfies? cx/PHTM (first arg1))) cx/PHTM
+          (satisfies? cx/PEncoder arg1) cx/PEncoder
           (empty? arg1) :empty)))
 
 (defmethod viz :empty
@@ -43,7 +43,7 @@
      };
    })")
 
-(defmethod viz p/PHTM
+(defmethod viz cx/PHTM
   [models & [viz-options]]
   (reify
     renderable/Renderable
@@ -72,13 +72,13 @@
                        (pr-str (transit-str journal-target)))
          :saveHook save-canvases}))))
 
-(defmethod viz p/PEncoder
+(defmethod viz cx/PEncoder
   [enc & [input d-opts]]
   (reify
     renderable/Renderable
     (render [_]
-      (let [dims (p/dims-of enc)
-            state->bits {:active (p/encode enc input)}
+      (let [dims (cx/dims-of enc)
+            state->bits {:active (cx/encode enc input)}
             d-opts (merge {:display-mode :two-d}
                           d-opts)]
         {:type :html

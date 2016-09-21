@@ -10,9 +10,9 @@
 
 (defn layer
   [sel1]
-  (let [[t a1 a2] (:path sel1)]
-    (when (= t :regions)
-      [a1 a2])))
+  (let [[t a1] (:path sel1)]
+    (when (= t :layers)
+      a1)))
 
 (defn clear
   [sel]

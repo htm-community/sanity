@@ -19,7 +19,7 @@ See it in action in [the online demos](https://htm-community.github.io/sanity/).
 Sanity runs HTM models from the browser with interactive
 controls. The model state from recent timesteps is kept, so you can step
 back in time. You can inspect input values, encoded input bits, and the
-columns that make up cortical region layers. Within a column you can inspect
+columns that make up cortical layers. Within a column you can inspect
 cells and their distal dendrite segments. Feed-forward and distal synapses
 can be shown.
 

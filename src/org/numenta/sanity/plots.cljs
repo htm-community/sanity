@@ -6,7 +6,7 @@
             [org.numenta.sanity.helpers :refer [canvas resizing-canvas
                                                 window-resize-listener]]
             [org.numenta.sanity.selection :as sel]
-            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.layer.tools :as layertools]
             [org.nfrac.comportex.util :as util :refer [round]]
             [tailrecursion.priority-map :refer [priority-map]]
             [clojure.string :as str]
@@ -122,7 +122,7 @@
   (let [bucket-size (bucket-size col-state-freqs-log)
         buckets (buckets col-state-freqs-log)
         n-timesteps (* bucket-size (max-count col-state-freqs-log))
-        ncol (:size (peek buckets))
+        ncol (:n-columns (peek buckets))
         v-max (* ncol 0.06)
         cnv (.-canvas ctx)
         plot-size {:w (- (.-width cnv) 25)
@@ -210,10 +210,10 @@
    :boost
    :distal])
 
-(defn viz-rgn-shades
+(defn viz-layer-shades
   [network-shape]
   (let [srcs (concat (keys (:senses @network-shape))
-                     (keys (:regions @network-shape)))]
+                     (keys (:layers @network-shape)))]
     (zipmap srcs (range -0.3 0.31 (/ 1.0 (count srcs))))))
 
 (defn- abs [x] (if (neg? x) (- x) x))
@@ -225,7 +225,7 @@
         plot-size {:w width-px
                    :h 200}
 
-        src-shades (viz-rgn-shades network-shape)
+        src-shades (viz-layer-shades network-shape)
         y-max (* 1.1 (apply max (map :total (vals breakdowns))))
         x-lim [-0.5 (+ (count breakdowns) 3)] ;; space for legend
         y-lim [y-max 0]
@@ -285,8 +285,9 @@
             leg-x (inc sep-x)
             key-bd* (->
                      (apply util/deep-merge-with + (vals breakdowns))
-                     (core/update-excitation-breakdown #(if (pos? %) 1.0 0.0)))
-            key-bd (core/update-excitation-breakdown key-bd* #(* % (/ y-max (:total key-bd*))))]
+                     (layertools/update-excitation-breakdown #(if (pos? %) 1.0 0.0)))
+            key-bd (layertools/update-excitation-breakdown
+                    key-bd* #(* % (/ y-max (:total key-bd*))))]
         (c/fill-style ctx (:background series-colors))
         (plt/rect! plot sep-x 0 (- (second x-lim) sep-x) y-max)
         (c/text-align ctx :center)
@@ -299,40 +300,40 @@
     (c/restore ctx)))
 
 (defn fetch-excitation-data!
-  [excitation-data region-key layer-id sels into-journal]
+  [excitation-data lyr-id sels into-journal]
   (let [sel1 (first (filter sel/layer sels))
-        bit (when (= (sel/layer sel1) [region-key layer-id])
+        bit (when (= (sel/layer sel1) lyr-id)
               (:bit sel1))]
     (if-let [snapshot-id (get-in sel1 [:step :snapshot-id])]
       (let [response-c (async/chan)]
         (put! into-journal
-              ["get-cell-excitation-data" snapshot-id region-key
-               layer-id bit (marshal/channel response-c true)])
+              ["get-cell-excitation-data" snapshot-id lyr-id
+               bit (marshal/channel response-c true)])
         (go
           (reset! excitation-data (<! response-c))))
       (reset! excitation-data {}))))
 
 (defn cell-excitation-plot-cmp
-  [_ selection _ region-key layer-id into-journal]
+  [_ selection _ lyr-id into-journal]
   (let [excitation-data (atom {})]
     (reagent/create-class
      {:component-will-mount
       (fn [_]
-        (add-watch selection [::fetch-excitation-data region-key layer-id]
+        (add-watch selection [::fetch-excitation-data lyr-id]
                    (fn [_ _ _ sels]
-                     (fetch-excitation-data! excitation-data region-key layer-id
+                     (fetch-excitation-data! excitation-data lyr-id
                                              sels into-journal)))
 
-        (fetch-excitation-data! excitation-data region-key layer-id @selection
+        (fetch-excitation-data! excitation-data lyr-id @selection
                                 into-journal))
 
       :component-will-unmount
       (fn [_]
-        (remove-watch selection [::fetch-excitation-data region-key layer-id]))
+        (remove-watch selection [::fetch-excitation-data lyr-id]))
 
       :reagent-render
       (let [size-invalidates-c (async/chan)]
-        (fn [network-shape _ series-colors region-key layer-id _ _]
+        (fn [network-shape _ series-colors lyr-id _ _]
           [:div nil
            [window-resize-listener size-invalidates-c]
            [resizing-canvas
@@ -341,7 +342,7 @@
             [excitation-data]
             (fn [ctx]
               (let [sel (first (filter sel/layer @selection))
-                    bit (when (= (sel/layer sel) [region-key layer-id]) (:bit sel))]
+                    bit (when (= (sel/layer sel) lyr-id) (:bit sel))]
                 (draw-cell-excitation-plot! ctx @excitation-data network-shape
                                             bit series-colors)))
             size-invalidates-c]]))})))
@@ -724,11 +725,11 @@
 
 (defn fetch-transitions-data
   [sel1 cell-sdr-counts into-journal]
-  (when-let [[region layer] (sel/layer sel1)]
+  (when-let [lyr-id (sel/layer sel1)]
     (let [{:keys [snapshot-id]} (:step sel1)
           response-c (async/chan)]
       (put! into-journal ["get-transitions-data"
-                          snapshot-id region layer cell-sdr-counts
+                          snapshot-id lyr-id cell-sdr-counts
                           (marshal/channel response-c true)])
       response-c)))
 
@@ -747,10 +748,10 @@
 
 (defn update-cell-sdrs-plot-data!
   [plot-data states sel1 into-journal]
-  (when-let [[region layer] (sel/layer sel1)]
+  (when-let [lyr-id (sel/layer sel1)]
     (let [snapshot-id (get-in sel1 [:step :snapshot-id])]
-      (when-let [state* (get-in @states [snapshot-id [region layer]])]
-        (let [state (assoc state* :title (str (name region) " " (name layer)))]
+      (when-let [state* (get-in @states [snapshot-id lyr-id])]
+        (let [state (assoc state* :title (str (name lyr-id)))]
           (if-not (:sdr-transitions state)
            ;; request transitions new data
            (go
@@ -759,7 +760,7 @@
              ;; another update when receive server data
              (let [x (<! (fetch-transitions-data sel1 (:cell-sdr-counts state)
                                                  into-journal))]
-               (swap! states assoc-in [snapshot-id [region layer] :sdr-transitions] x)
+               (swap! states assoc-in [snapshot-id lyr-id :sdr-transitions] x)
                (swap! plot-data assoc :sdr-transitions x)))
            ;; otherwise - we have the data
            (reset! plot-data state)))))))
@@ -793,22 +794,20 @@
 
 (defn update-cell-sdrs-states!
   [states network-shape step prev-step into-journal]
-  (for [[region layer-map] (:regions @network-shape)
-        layer (keys layer-map)
+  (for [lyr-id (keys (:layers @network-shape))
         :let [response-c (async/chan)
               snapshot-id (:snapshot-id step)]]
     (go
-      (put! into-journal ["get-cells-by-state" snapshot-id
-                          region layer
+      (put! into-journal ["get-cells-by-state" snapshot-id lyr-id
                           (marshal/channel response-c true)])
       (let [cells-by-state (<! response-c)
-            state (or (get-in @states [(:snapshot-id prev-step) [region layer]])
+            state (or (get-in @states [(:snapshot-id prev-step) lyr-id])
                       empty-cell-sdrs-state)
             wc (:winner-cells cells-by-state)
             ac (:active-cells cells-by-state)
             pc (:pred-cells cells-by-state)
             on? (:engaged? cells-by-state)
-            threshold (get-in @network-shape [:regions region layer
+            threshold (get-in @network-shape [:layers lyr-id
                                               :params :distal :learn-threshold])
             ;; for each cell, represents its specificity to each SDR
             cell-sdr-fracs (->> (:cell-sdr-counts state)
@@ -885,7 +884,7 @@
                                    :gid-growth gid-growth)
                         (and on? new-sdr) (assoc-in [:sdr-votes :winners new-sdr]
                                                     (sdr-growth new-sdr)))]
-        (swap! states assoc-in [snapshot-id [region layer]] new-state)))))
+        (swap! states assoc-in [snapshot-id lyr-id] new-state)))))
 
 (defn cell-sdrs-plot-builder
   [steps network-shape selection into-journal plot-opts]

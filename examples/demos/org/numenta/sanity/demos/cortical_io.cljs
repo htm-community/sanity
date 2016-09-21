@@ -1,8 +1,8 @@
 (ns org.numenta.sanity.demos.cortical-io
-  (:require [org.nfrac.comportex.core :as core]
+  (:require [org.nfrac.comportex.core :as cx]
+            [org.nfrac.comportex.layer :as layer]
             [org.nfrac.comportex.util :as util]
             [org.nfrac.comportex.encoders :as enc]
-            [org.nfrac.comportex.protocols :as p]
             [org.nfrac.comportex.cortical-io :as cio
              :refer [cortical-io-encoder
                      cache-fingerprint!]]
@@ -66,7 +66,7 @@ fox eat something.
 (def fingerprint-cache (atom {}))
 
 (def config
-  (atom {:n-regions 1
+  (atom {:n-layers 1
          :encoder :cortical-io
          :api-key nil
          :decode-locally? true
@@ -136,9 +136,9 @@ fox eat something.
 (defn load-predictions
   [htm n-predictions predictions-cache]
   (let [[_ e] (first (vals (:sensors htm)))
-        rgn (first (core/region-seq htm))
-        pr-votes (core/predicted-bit-votes rgn)
-        predictions (p/decode e pr-votes n-predictions)]
+        lyr (first (cx/layer-seq htm))
+        pr-votes (cx/layer-decode-to-ff-bits lyr {})
+        predictions (cx/decode e pr-votes n-predictions)]
     (if-let [c (:channel predictions)]
       ;; async call, return nil and await cache (like a promise)
       (do
@@ -227,8 +227,7 @@ fox eat something.
 (defn set-model!
   []
   (with-ui-loading-message
-    (let [n-regions (:n-regions @config)
-          params (case (:params-choice @config)
+    (let [params (case (:params-choice @config)
                   :a params-global
                   :b params-local)
           e (case (:encoder @config)
@@ -241,10 +240,8 @@ fox eat something.
                                   (apply * 0.02 cio/retina-dim)))
           sensor [:word e]
           init? (nil? @model)]
-      (reset! model (core/regions-in-series
-                     n-regions core/sensory-region
-                     (list* params (repeat (merge params higher-level-params-diff)))
-                     {:input sensor}))
+      (reset! model (cx/network {:layer-a (layer/layer-of-cells params)}
+                                {:input sensor}))
       (if init?
         (server/init model world-c main/into-journal into-sim)
         (reset! main/network-shape (translate-network-shape
@@ -322,13 +319,14 @@ fox eat something.
      [:div.col-sm-7
       [:select.form-control {:field :list
                              :id :params-choice}
-       [:option {:key :a} "20% potential, no topology"]
+       [:option {:key :a} "20% potential, no topography"]
        [:option {:key :b} "30% * local 16% area = 5% potential"]]]]
+    #_
     [:div.form-group
-     [:label.col-sm-5 "Number of regions:"]
+     [:label.col-sm-5 "Number of layers:"]
      [:div.col-sm-7
       [:input.form-control {:field :numeric
-                            :id :n-regions}]]]
+                            :id :n-layers}]]]
     [:div.form-group
      [:div.col-sm-offset-5.col-sm-7
       [:button.btn.btn-primary

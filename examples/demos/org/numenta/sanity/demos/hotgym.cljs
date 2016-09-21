@@ -10,11 +10,10 @@
             [org.numenta.sanity.viz-canvas :as viz]
             [goog.dom :as dom]
             [goog.net.XhrIo :as XhrIo]
-            [org.nfrac.comportex.cells :as cells]
-            [org.nfrac.comportex.core :as core]
+            [org.nfrac.comportex.layer :as layer]
+            [org.nfrac.comportex.layer.params :as params]
+            [org.nfrac.comportex.core :as cx]
             [org.nfrac.comportex.encoders :as e]
-            [org.nfrac.comportex.protocols :as p]
-            [org.nfrac.comportex.topology :as topology]
             [org.nfrac.comportex.util :as util :refer [round abs]]
             [reagent-forms.core :refer [bind-fields]]
             [reagent.core :as reagent :refer [atom]])
@@ -395,23 +394,25 @@
 (defn set-model!
   []
   (with-ui-loading-message
-    (let [init? (nil? @model)]
+    (let [init? (nil? @model)
+          params (util/deep-merge
+                   params/better-parameter-defaults
+                   {:depth 1
+                    :distal {:max-segments 128
+                             :perm-connected 0.20
+                             :perm-init 0.20}})]
       (reset! model
-              (core/region-network
-               {:rgn-0 [:power-consumption :is-weekend? :hour-of-day]}
-               (constantly core/sensory-region)
-               {:rgn-0 (assoc cells/better-parameter-defaults
-                              :depth 1
-                              :max-segments 128
-                              :distal-perm-connected 0.20
-                              :distal-perm-init 0.20)}
+              (cx/network
+               {:layer-a (layer/layer-of-cells params)}
                {:power-consumption [:consumption
                                     (e/sampling-linear-encoder
-                                     [(+ 1024 256)] 17 [-12.8 112.8] 12.8)]}
-               {:is-weekend? [:is-weekend?
+                                     [(+ 1024 256)] 17 [-12.8 112.8] 12.8)]
+                :is-weekend? [:is-weekend?
                               (e/category-encoder [10] [true false])]
                 :hour-of-day [:hour-of-day
-                              (e/category-encoder [(* 40 24)] (range 24))]}))
+                              (e/category-encoder [(* 40 24)] (range 24))]}
+               {:ff-deps {:layer-a [:power-consumption]}
+                :lat-deps {:layer-a [:is-weekend? :hour-of-day]}}))
       (if init?
         (do
           (XhrIo/send "../data/hotgym.consumption_weekend_hour.edn"
