@@ -54,7 +54,7 @@ Some cool examples:
 
 - [Predicting power consumptions with HTM](http://mrcslws.com/gorilla/?path=hotgym.clj)
   by Marcus Lewis
-- [Sequence replay in HTM](http://viewer.gorilla-repl.org/view.html?source=gist&id=95da4401dc7293e02df3&filename=seq-replay.clj)
+- [Sequence replay in HTM](http://viewer.gorilla-repl.org/view.html?source=github&user=htm-community&repo=sanity&path=examples/worksheets/seq-replay.clj)
   by Felix Andrews
 
 ## Usage
