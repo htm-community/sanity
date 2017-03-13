@@ -122,7 +122,7 @@
   (let [bucket-size (bucket-size col-state-freqs-log)
         buckets (buckets col-state-freqs-log)
         n-timesteps (* bucket-size (max-count col-state-freqs-log))
-        ncol (:n-columns (peek buckets))
+        ncol (:size (peek buckets))
         v-max (* ncol 0.06)
         cnv (.-canvas ctx)
         plot-size {:w (- (.-width cnv) 25)
